@@ -2,41 +2,47 @@
  * Copyright (c) Microsoft Corporation and contributors. All rights reserved.
  * Licensed under the MIT License.
  */
+
 import { strict as assert } from "assert";
+
+import { TypedEventEmitter } from "@fluid-internal/client-utils";
 import {
 	AsyncGenerator,
 	combineReducersAsync,
 	takeAsync,
 } from "@fluid-private/stochastic-test-utils";
 import {
+	DDSFuzzHarnessEvents,
 	DDSFuzzModel,
 	DDSFuzzTestState,
 	createDDSFuzzSuite,
-	DDSFuzzHarnessEvents,
 } from "@fluid-private/test-dds-utils";
-import { TypedEventEmitter } from "@fluid-internal/client-utils";
+
 import { SharedTreeTestFactory, toJsonableTree, validateTree } from "../../utils.js";
-import { ITreeViewFork, FlexTreeView } from "../../../shared-tree/index.js";
+
 import {
-	makeOpGenerator,
 	EditGeneratorOpWeights,
 	FuzzTestState,
+	FuzzTransactionView,
+	FuzzView,
+	makeOpGenerator,
 	viewFromState,
 } from "./fuzzEditGenerators.js";
-import { applyFieldEdit, applySynchronizationOp, applyUndoRedoEdit } from "./fuzzEditReducers.js";
 import {
-	deterministicIdCompressorFactory,
-	fuzzSchema,
-	isRevertibleSharedTreeView,
-} from "./fuzzUtils.js";
+	applyFieldEdit,
+	applySchemaOp,
+	applySynchronizationOp,
+	applyUndoRedoEdit,
+} from "./fuzzEditReducers.js";
+import { deterministicIdCompressorFactory, isRevertibleSharedTreeView } from "./fuzzUtils.js";
 import { Operation } from "./operationTypes.js";
 
 /**
  * This interface is meant to be used for tests that require you to store a branch of a tree
  */
 interface BranchedTreeFuzzTestState extends FuzzTestState {
-	main?: FlexTreeView<typeof fuzzSchema.rootFieldSchema>;
-	branch?: ITreeViewFork<typeof fuzzSchema.rootFieldSchema>;
+	main?: FuzzView;
+	branch?: FuzzTransactionView;
 }
 
 const fuzzComposedVsIndividualReducer = combineReducersAsync<Operation, BranchedTreeFuzzTestState>({
@@ -70,6 +76,9 @@ const fuzzComposedVsIndividualReducer = combineReducersAsync<Operation, Branched
 		applySynchronizationOp(state);
 		return state;
 	},
+	schema: async (state, operation) => {
+		applySchemaOp(state, operation);
+	},
 });
 
 /**
@@ -84,6 +93,8 @@ describe("Fuzz - composed vs individual changes", () => {
 	const runsPerBatch = 50;
 
 	// "start" and "commit" opWeights set to 0 in case there are changes to the default weights.
+	// AB#7593: schema weight is currently set to 0, as most tests are failing with various branch related asserts,
+	// assert 0x675, "Expected branch to be tracked"
 	const composeVsIndividualWeights: Partial<EditGeneratorOpWeights> = {
 		insert: 1,
 		remove: 2,
@@ -96,6 +107,7 @@ describe("Fuzz - composed vs individual changes", () => {
 		},
 		start: 0,
 		commit: 0,
+		schema: 0,
 	};
 
 	describe("converges to the same tree", () => {
@@ -116,7 +128,8 @@ describe("Fuzz - composed vs individual changes", () => {
 		const emitter = new TypedEventEmitter<DDSFuzzHarnessEvents>();
 		emitter.on("testStart", (initialState: BranchedTreeFuzzTestState) => {
 			initialState.main = viewFromState(initialState, initialState.clients[0]);
-			initialState.branch = initialState.main.fork();
+			initialState.branch = initialState.main.fork() as FuzzTransactionView;
+			initialState.branch.currentSchema = initialState.main.currentSchema;
 			initialState.branch.checkout.transaction.start();
 		});
 		emitter.on("testEnd", (finalState: BranchedTreeFuzzTestState) => {
@@ -132,6 +145,12 @@ describe("Fuzz - composed vs individual changes", () => {
 			numberOfClients: 1,
 			emitter,
 			idCompressorFactory: deterministicIdCompressorFactory(0xdeadbeef),
+			detachedStartOptions: {
+				numOpsBeforeAttach: 5,
+				// This test can't use rehydrate as it holds on to the original client instance.
+				// to hook into.
+				rehydrateDisabled: true,
+			},
 		});
 	});
 });

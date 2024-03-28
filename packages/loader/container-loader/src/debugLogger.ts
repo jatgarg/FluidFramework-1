@@ -3,13 +3,12 @@
  * Licensed under the MIT License.
  */
 
+import { performance } from "@fluid-internal/client-utils";
 import {
 	ITelemetryBaseEvent,
 	ITelemetryBaseLogger,
-	ITelemetryProperties,
+	ITelemetryBaseProperties,
 } from "@fluidframework/core-interfaces";
-import { performance } from "@fluid-internal/client-utils";
-
 import {
 	ITelemetryLoggerExt,
 	ITelemetryLoggerPropertyBags,
@@ -77,7 +76,7 @@ export class DebugLogger implements ITelemetryBaseLogger {
 	 * @param event - the event to send
 	 */
 	public send(event: ITelemetryBaseEvent): void {
-		const newEvent: ITelemetryProperties = { ...event };
+		const newEvent: ITelemetryBaseProperties = { ...event };
 		const isError = newEvent.category === "error";
 		let logger = isError ? this.debugErr : this.debug;
 

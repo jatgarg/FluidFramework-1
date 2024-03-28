@@ -4,6 +4,17 @@
  */
 
 import { strict as assert } from "assert";
+
+import { ICodecOptions } from "../../codec/index.js";
+import {
+	TreeStoredSchema,
+	makeAnonChange,
+	revisionMetadataSourceFromInfo,
+	rootFieldKey,
+} from "../../core/index.js";
+import { leaf } from "../../domains/index.js";
+// eslint-disable-next-line import/no-internal-modules
+import { forbidden } from "../../feature-libraries/default-schema/defaultFieldKinds.js";
 import {
 	DefaultEditBuilder,
 	ModularChangeFamily,
@@ -13,24 +24,11 @@ import {
 } from "../../feature-libraries/index.js";
 // eslint-disable-next-line import/no-internal-modules
 import { SharedTreeChangeFamily } from "../../shared-tree/sharedTreeChangeFamily.js";
-import {
-	RevisionTagCodec,
-	TreeStoredSchema,
-	makeAnonChange,
-	revisionMetadataSourceFromInfo,
-	rootFieldKey,
-} from "../../core/index.js";
-import { leaf } from "../../domains/index.js";
 // eslint-disable-next-line import/no-internal-modules
 import { SharedTreeChange } from "../../shared-tree/sharedTreeChangeTypes.js";
-// eslint-disable-next-line import/no-internal-modules
-import { forbidden } from "../../feature-libraries/default-schema/defaultFieldKinds.js";
-import { MockIdCompressor, testRevisionTagCodec } from "../utils.js";
-import { ICodecOptions } from "../../codec/index.js";
 import { ajvValidator } from "../codec/index.js";
+import { testRevisionTagCodec } from "../utils.js";
 
-const idCompressor = new MockIdCompressor();
-const revisionTagCodec = new RevisionTagCodec(idCompressor);
 const dataChanges: ModularChangeset[] = [];
 const codecOptions: ICodecOptions = { jsonValidator: ajvValidator };
 const fieldBatchCodec = {
@@ -72,14 +70,19 @@ const emptySchema: TreeStoredSchema = {
 	},
 };
 const stSchemaChange: SharedTreeChange = {
-	changes: [{ type: "schema", innerChange: { schema: { new: emptySchema, old: emptySchema } } }],
+	changes: [
+		{
+			type: "schema",
+			innerChange: { schema: { new: emptySchema, old: emptySchema }, isInverse: false },
+		},
+	],
 };
 const stEmptyChange: SharedTreeChange = {
 	changes: [],
 };
 
 const sharedTreeFamily = new SharedTreeChangeFamily(
-	revisionTagCodec,
+	testRevisionTagCodec,
 	fieldBatchCodec,
 	codecOptions,
 );

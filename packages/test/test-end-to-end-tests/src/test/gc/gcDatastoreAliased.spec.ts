@@ -4,21 +4,23 @@
  */
 
 import { strict as assert } from "assert";
+
+import {
+	ITestDataObject,
+	TestDataObjectType,
+	describeCompat,
+} from "@fluid-private/test-version-utils";
 import { IContainer } from "@fluidframework/container-definitions";
 import { ContainerRuntime } from "@fluidframework/container-runtime";
 import { IContainerRuntime } from "@fluidframework/container-runtime-definitions";
 import {
+	ITestObjectProvider,
 	createSummarizer,
 	getContainerEntryPointBackCompat,
-	ITestObjectProvider,
 	summarizeNow,
 	waitForContainerConnection,
 } from "@fluidframework/test-utils";
-import {
-	describeCompat,
-	ITestDataObject,
-	TestDataObjectType,
-} from "@fluid-private/test-version-utils";
+
 import { defaultGCConfig } from "./gcTestConfigs.js";
 import { getGCStateFromSummary } from "./gcTestSummaryUtils.js";
 
@@ -95,7 +97,7 @@ describeCompat("GC Data Store Aliased Full Compat", "FullCompat", (getTestObject
 	});
 });
 
-describeCompat("GC Data Store Aliased No Compat", "2.0.0-rc.1.0.0", (getTestObjectProvider) => {
+describeCompat("GC Data Store Aliased No Compat", "NoCompat", (getTestObjectProvider) => {
 	let provider: ITestObjectProvider;
 
 	beforeEach("getTestObjectProvider", async () => {

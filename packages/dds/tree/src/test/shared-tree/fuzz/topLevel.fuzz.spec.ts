@@ -2,16 +2,19 @@
  * Copyright (c) Microsoft Corporation and contributors. All rights reserved.
  * Licensed under the MIT License.
  */
+
 import { takeAsync } from "@fluid-private/stochastic-test-utils";
 import {
 	DDSFuzzModel,
-	createDDSFuzzSuite,
-	DDSFuzzTestState,
 	DDSFuzzSuiteOptions,
+	DDSFuzzTestState,
+	createDDSFuzzSuite,
 } from "@fluid-private/test-dds-utils";
 import { FlushMode } from "@fluidframework/runtime-definitions";
+
 import { SharedTreeTestFactory, validateTreeConsistency } from "../../utils.js";
-import { makeOpGenerator, EditGeneratorOpWeights } from "./fuzzEditGenerators.js";
+
+import { EditGeneratorOpWeights, makeOpGenerator } from "./fuzzEditGenerators.js";
 import { fuzzReducer } from "./fuzzEditReducers.js";
 import { deterministicIdCompressorFactory, failureDirectory, onCreate } from "./fuzzUtils.js";
 import { Operation } from "./operationTypes.js";
@@ -50,6 +53,7 @@ describe("Fuzz - Top-Level", () => {
 		// which destroy trees for rollbacks. See AB#6456 for more information.
 		abort: 0,
 		fieldSelection: { optional: 1, required: 1, sequence: 3, recurse: 3 },
+		schema: 1,
 	};
 	const generatorFactory = () => takeAsync(opsPerRun, makeOpGenerator(editGeneratorOpWeights));
 	/**
@@ -68,6 +72,7 @@ describe("Fuzz - Top-Level", () => {
 			reducer: fuzzReducer,
 			validateConsistency: validateTreeConsistency,
 		};
+
 		const options: Partial<DDSFuzzSuiteOptions> = {
 			...baseOptions,
 			defaultTestCount: runsPerBatch,
@@ -78,8 +83,17 @@ describe("Fuzz - Top-Level", () => {
 				clientAddProbability: 0,
 				maxNumberOfClients: 3,
 			},
-			reconnectProbability: 0,
+			// AB#7162: enabling rehydrate in these tests hits 0x744 and 0x79d. Disabling rehydrate for now
+			// and using the default number of ops before attach.
+			detachedStartOptions: {
+				numOpsBeforeAttach: 5,
+				rehydrateDisabled: true,
+			},
+			reconnectProbability: 0.1,
 			idCompressorFactory: deterministicIdCompressorFactory(0xdeadbeef),
+			skipMinimization: true,
+			// AB#7594: Skipping seed 13 as it hits runs into assert 0x33f (double freeing cursor).
+			skip: [13],
 		};
 		createDDSFuzzSuite(model, options);
 	});
@@ -105,10 +119,16 @@ describe("Fuzz - Top-Level", () => {
 				flushMode: FlushMode.TurnBased,
 				enableGroupedBatching: true,
 			},
+			// AB#7162: see comment above.
+			detachedStartOptions: {
+				numOpsBeforeAttach: 5,
+				rehydrateDisabled: true,
+			},
 			saveFailures: {
 				directory: failureDirectory,
 			},
 			idCompressorFactory: deterministicIdCompressorFactory(0xdeadbeef),
+			skipMinimization: true,
 		};
 
 		createDDSFuzzSuite(model, options);

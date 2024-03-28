@@ -4,23 +4,25 @@
  */
 
 import { strict as assert } from "assert";
+
 import {
-	ITestObjectProvider,
-	waitForContainerConnection,
-	createSummarizer,
-	summarizeNow,
-	ITestContainerConfig,
-	createTestConfigProvider,
-} from "@fluidframework/test-utils";
-import {
-	describeCompat,
 	ITestDataObject,
 	TestDataObjectType,
+	describeCompat,
 } from "@fluid-private/test-version-utils";
-import { ISummaryTree, SummaryType } from "@fluidframework/protocol-definitions";
 import { IGCRuntimeOptions } from "@fluidframework/container-runtime";
 import { delay } from "@fluidframework/core-utils";
+import { ISummaryTree, SummaryType } from "@fluidframework/protocol-definitions";
 import { channelsTreeName, gcTreeKey } from "@fluidframework/runtime-definitions";
+import {
+	ITestContainerConfig,
+	ITestObjectProvider,
+	createSummarizer,
+	createTestConfigProvider,
+	summarizeNow,
+	waitForContainerConnection,
+} from "@fluidframework/test-utils";
+
 import { getGCDeletedStateFromSummary, getGCStateFromSummary } from "./gcTestSummaryUtils.js";
 
 /**
@@ -33,7 +35,7 @@ import { getGCDeletedStateFromSummary, getGCStateFromSummary } from "./gcTestSum
  * after the last summary was submitted. These should not be missed by GC before is runs the next time as they
  * can result in incorrect GC state or worse - incorrect deletion of objects.
  */
-describeCompat("GC trailing ops tests", "2.0.0-rc.1.0.0", (getTestObjectProvider) => {
+describeCompat("GC trailing ops tests", "NoCompat", (getTestObjectProvider) => {
 	/**
 	 * @param transition - The referenced state transition that the trailing op would do.
 	 * @param when - Whether the trailing op should be sent before or after sweep timeout.

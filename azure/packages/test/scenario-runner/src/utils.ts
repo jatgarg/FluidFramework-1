@@ -2,8 +2,9 @@
  * Copyright (c) Microsoft Corporation and contributors. All rights reserved.
  * Licensed under the MIT License.
  */
+
 import child_process from "child_process";
-import commander from "commander";
+
 import {
 	AzureClient,
 	// eslint-disable-next-line import/no-deprecated
@@ -15,17 +16,17 @@ import {
 } from "@fluidframework/azure-client";
 import { ContainerSchema } from "@fluidframework/fluid-static";
 import { SharedMap } from "@fluidframework/map";
+import { ITelemetryLoggerExt } from "@fluidframework/telemetry-utils";
 import { InsecureTokenProvider } from "@fluidframework/test-runtime-utils";
-
+import commander from "commander";
 import { v4 as uuid } from "uuid";
 
-import { ITelemetryLogger } from "@fluidframework/core-interfaces";
-import { AzureClientConnectionConfig, ContainerFactorySchema, IRunConfig } from "./interface";
+import { AzureClientConnectionConfig, ContainerFactorySchema, IRunConfig } from "./interface.js";
 
 export interface AzureClientConfig {
 	userId?: string;
 	userName?: string;
-	logger?: ITelemetryLogger;
+	logger?: ITelemetryLoggerExt;
 }
 
 export const delay = async (timeMs: number): Promise<void> =>

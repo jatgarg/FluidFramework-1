@@ -3,17 +3,7 @@
  * Licensed under the MIT License.
  */
 
-import { v4 as uuid } from "uuid";
-import { assert, unreachableCase } from "@fluidframework/core-utils";
 import { TypedEventEmitter, performance } from "@fluid-internal/client-utils";
-import {
-	IEvent,
-	ITelemetryProperties,
-	TelemetryEventCategory,
-	IRequest,
-	FluidObject,
-	LogLevel,
-} from "@fluidframework/core-interfaces";
 import {
 	AttachState,
 	ContainerWarning,
@@ -26,31 +16,42 @@ import {
 	ICriticalContainerError,
 	IDeltaManager,
 	IFluidCodeDetails,
-	IHostLoader,
-	IFluidModuleWithDetails,
-	IProvideRuntimeFactory,
-	IProvideFluidCodeDetailsComparer,
 	IFluidCodeDetailsComparer,
+	IFluidModuleWithDetails,
+	IGetPendingLocalStateProps,
+	IHostLoader,
+	IProvideFluidCodeDetailsComparer,
+	IProvideRuntimeFactory,
 	IRuntime,
 	ReadOnlyInfo,
 	isFluidCodeDetails,
-	IGetPendingLocalStateProps,
 } from "@fluidframework/container-definitions";
+import {
+	FluidObject,
+	IEvent,
+	IRequest,
+	type ISignalEnvelope,
+	ITelemetryBaseProperties,
+	LogLevel,
+} from "@fluidframework/core-interfaces";
+import { assert, isPromiseLike, unreachableCase } from "@fluidframework/core-utils";
 import {
 	IDocumentService,
 	IDocumentServiceFactory,
 	IDocumentStorageService,
 	IResolvedUrl,
+	ISnapshot,
 	IThrottlingWarning,
 	IUrlResolver,
 } from "@fluidframework/driver-definitions";
 import {
-	readAndParse,
-	OnlineStatus,
-	isOnline,
-	runWithRetry,
-	isCombinedAppAndProtocolSummary,
 	MessageType2,
+	OnlineStatus,
+	isCombinedAppAndProtocolSummary,
+	isInstanceOfISnapshot,
+	isOnline,
+	readAndParse,
+	runWithRetry,
 } from "@fluidframework/driver-utils";
 import { IQuorumSnapshot } from "@fluidframework/protocol-base";
 import {
@@ -73,57 +74,65 @@ import {
 	SummaryType,
 } from "@fluidframework/protocol-definitions";
 import {
-	createChildLogger,
 	EventEmitterWithErrorHandling,
-	PerformanceEvent,
-	raiseConnectedEvent,
-	connectedEventName,
-	normalizeError,
-	MonitoringContext,
-	createChildMonitoringContext,
-	wrapError,
-	ITelemetryLoggerExt,
-	formatTick,
 	GenericError,
+	IFluidErrorBase,
+	ITelemetryLoggerExt,
+	MonitoringContext,
+	PerformanceEvent,
+	type TelemetryEventCategory,
 	UsageError,
+	connectedEventName,
+	createChildLogger,
+	createChildMonitoringContext,
+	formatTick,
+	normalizeError,
+	raiseConnectedEvent,
+	wrapError,
 } from "@fluidframework/telemetry-utils";
 import structuredClone from "@ungap/structured-clone";
-import { Audience } from "./audience";
-import { ContainerContext } from "./containerContext";
+import { v4 as uuid } from "uuid";
+
+import { AttachProcessProps, AttachmentData, runRetriableAttachProcess } from "./attachment.js";
+import { Audience } from "./audience.js";
+import { ConnectionManager } from "./connectionManager.js";
+import { ConnectionState } from "./connectionState.js";
+import { IConnectionStateHandler, createConnectionStateHandler } from "./connectionStateHandler.js";
+import { ContainerContext } from "./containerContext.js";
+import { ContainerStorageAdapter } from "./containerStorageAdapter.js";
 import {
-	ReconnectMode,
-	IConnectionManagerFactoryArgs,
-	getPackageName,
 	IConnectionDetailsInternal,
+	IConnectionManagerFactoryArgs,
 	IConnectionStateChangeReason,
-} from "./contracts";
-import { DeltaManager, IConnectionArgs } from "./deltaManager";
-import { IDetachedBlobStorage, ILoaderOptions, RelativeLoader } from "./loader";
-import { pkgVersion } from "./packageVersion";
-import {
-	ContainerStorageAdapter,
-	getBlobContentsFromTree,
-	ISerializableBlobContents,
-} from "./containerStorageAdapter";
-import { IConnectionStateHandler, createConnectionStateHandler } from "./connectionStateHandler";
-import {
-	ISnapshotTreeWithBlobContents,
-	combineAppAndProtocolSummary,
-	getProtocolSnapshotTree,
-	getSnapshotTreeAndBlobsFromSerializedContainer,
-	combineSnapshotTreeAndSnapshotBlobs,
-	getDetachedContainerStateFromSerializedContainer,
-} from "./utils";
-import { initQuorumValuesFromCodeDetails } from "./quorum";
-import { NoopHeuristic } from "./noopHeuristic";
-import { ConnectionManager } from "./connectionManager";
-import { ConnectionState } from "./connectionState";
+	ReconnectMode,
+	getPackageName,
+} from "./contracts.js";
+import { DeltaManager, IConnectionArgs } from "./deltaManager.js";
+import { IDetachedBlobStorage, ILoaderOptions, RelativeLoader } from "./loader.js";
+import { NoopHeuristic } from "./noopHeuristic.js";
+import { pkgVersion } from "./packageVersion.js";
 import {
 	IProtocolHandler,
 	ProtocolHandler,
 	ProtocolHandlerBuilder,
 	protocolHandlerShouldProcessSignal,
-} from "./protocol";
+} from "./protocol.js";
+import { initQuorumValuesFromCodeDetails } from "./quorum.js";
+import {
+	type IPendingContainerState,
+	type IPendingDetachedContainerState,
+	SerializedStateManager,
+} from "./serializedStateManager.js";
+import {
+	ISnapshotTreeWithBlobContents,
+	combineAppAndProtocolSummary,
+	combineSnapshotTreeAndSnapshotBlobs,
+	getDetachedContainerStateFromSerializedContainer,
+	getDocumentAttributes,
+	getProtocolSnapshotTree,
+	getSnapshotTreeAndBlobsFromSerializedContainer,
+	runSingle,
+} from "./utils.js";
 
 const detachedContainerRefSeqNumber = 0;
 
@@ -313,9 +322,7 @@ export async function waitContainerToCatchUp(container: IContainer) {
 	});
 }
 
-const getCodeProposal =
-	// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-	(quorum: IQuorumProposals) => quorum.get("code") ?? quorum.get("code2");
+const getCodeProposal = (quorum: IQuorumProposals) => quorum.get("code") ?? quorum.get("code2");
 
 /**
  * Helper function to report to telemetry cases where operation takes longer than expected (200ms)
@@ -326,51 +333,13 @@ const getCodeProposal =
 export async function ReportIfTooLong(
 	logger: ITelemetryLoggerExt,
 	eventName: string,
-	action: () => Promise<ITelemetryProperties>,
+	action: () => Promise<ITelemetryBaseProperties>,
 ) {
 	const event = PerformanceEvent.start(logger, { eventName });
 	const props = await action();
 	if (event.duration > 200) {
 		event.end(props);
 	}
-}
-
-/**
- * State saved by a container at close time, to be used to load a new instance
- * of the container to the same state
- * @internal
- */
-export interface IPendingContainerState {
-	pendingRuntimeState: unknown;
-	/**
-	 * Snapshot from which container initially loaded.
-	 */
-	baseSnapshot: ISnapshotTree;
-	/**
-	 * Serializable blobs from the base snapshot. Used to load offline since
-	 * storage is not available.
-	 */
-	snapshotBlobs: ISerializableBlobContents;
-	/**
-	 * All ops since base snapshot sequence number up to the latest op
-	 * seen when the container was closed. Used to apply stashed (saved pending)
-	 * ops at the same sequence number at which they were made.
-	 */
-	savedOps: ISequencedDocumentMessage[];
-	url: string;
-	clientId?: string;
-}
-
-/**
- * State saved by a container in detached state, to be used to load a new instance
- * of the container to the same state (rehydrate)
- * @internal
- */
-export interface IPendingDetachedContainerState {
-	attached: boolean;
-	baseSnapshot: ISnapshotTree;
-	snapshotBlobs: ISerializableBlobContents;
-	hasAttachmentBlobs: boolean;
 }
 
 const summarizerClientType = "summarizer";
@@ -386,7 +355,6 @@ export class Container
 {
 	/**
 	 * Load an existing container.
-	 * @internal
 	 */
 	public static async load(
 		loadProps: IContainerLoadProps,
@@ -511,7 +479,6 @@ export class Container
 
 	/**
 	 * Used by the RelativeLoader to spawn a new Container for the same document.  Used to create the summarizing client.
-	 * @internal
 	 */
 	public readonly clone: (
 		loadProps: IContainerLoadProps,
@@ -561,8 +528,6 @@ export class Container
 		return this._lifecycleState === "disposing" || this._lifecycleState === "disposed";
 	}
 
-	private _attachState = AttachState.Detached;
-
 	private readonly storageAdapter: ContainerStorageAdapter;
 
 	private readonly _deltaManager: DeltaManager<ConnectionManager>;
@@ -588,11 +553,9 @@ export class Container
 	private firstConnection = true;
 	private readonly connectionTransitionTimes: number[] = [];
 	private _loadedFromVersion: IVersion | undefined;
-	private attachStarted = false;
 	private _dirtyContainer = false;
-	private readonly savedOps: ISequencedDocumentMessage[] = [];
-	private baseSnapshot?: ISnapshotTree;
-	private baseSnapshotBlobs?: ISerializableBlobContents;
+	private attachmentData: AttachmentData = { state: AttachState.Detached };
+	private readonly serializedStateManager: SerializedStateManager;
 	private readonly _containerId: string;
 
 	private lastVisible: number | undefined;
@@ -675,12 +638,8 @@ export class Container
 		return this._clientId;
 	}
 
-	private get offlineLoadEnabled(): boolean {
-		const enabled =
-			this.mc.config.getBoolean("Fluid.Container.enableOfflineLoad") ??
-			this.options?.enableOfflineLoad === true;
-		// summarizer will not have any pending state we want to save
-		return enabled && this.deltaManager.clientDetails.capabilities.interactive;
+	private get isInteractiveClient(): boolean {
+		return this.deltaManager.clientDetails.capabilities.interactive;
 	}
 
 	/**
@@ -749,9 +708,6 @@ export class Container
 
 	private readonly _lifecycleEvents = new TypedEventEmitter<IContainerLifecycleEvents>();
 
-	/**
-	 * @internal
-	 */
 	constructor(
 		createProps: IContainerCreateProps,
 		loadProps?: Pick<IContainerLoadProps, "pendingLocalState">,
@@ -824,7 +780,7 @@ export class Container
 
 		this.client = Container.setupClient(
 			this._containerId,
-			this.options,
+			options.client,
 			this.clientDetailsOverride,
 		);
 
@@ -844,7 +800,7 @@ export class Container
 					clientType, // Differentiating summarizer container from main container
 					containerId: this._containerId,
 					docId: () => this.resolvedUrl?.id,
-					containerAttachState: () => this._attachState,
+					containerAttachState: () => this.attachState,
 					containerLifecycleState: () => this._lifecycleState,
 					containerConnectionState: () => ConnectionState[this.connectionState],
 					serializedContainer: pendingLocalState !== undefined,
@@ -901,7 +857,7 @@ export class Container
 				logConnectionIssue: (
 					eventName: string,
 					category: TelemetryEventCategory,
-					details?: ITelemetryProperties,
+					details?: ITelemetryBaseProperties,
 				) => {
 					const mode = this.connectionMode;
 					// We get here when socket does not receive any ops on "write" connection, including
@@ -965,6 +921,17 @@ export class Container
 			pendingLocalState?.snapshotBlobs,
 			addProtocolSummaryIfMissing,
 			forceEnableSummarizeProtocolTree,
+		);
+
+		const offlineLoadEnabled =
+			(this.isInteractiveClient &&
+				this.mc.config.getBoolean("Fluid.Container.enableOfflineLoad")) ??
+			options.enableOfflineLoad === true;
+		this.serializedStateManager = new SerializedStateManager(
+			pendingLocalState,
+			this.subLogger,
+			this.storageAdapter,
+			offlineLoadEnabled,
 		);
 
 		const isDomAvailable =
@@ -1147,207 +1114,174 @@ export class Container
 	}
 
 	private async getPendingLocalStateCore(props: IGetPendingLocalStateProps) {
-		return PerformanceEvent.timedExecAsync(
-			this.mc.logger,
-			{
-				eventName: "getPendingLocalState",
-				notifyImminentClosure: props.notifyImminentClosure,
-				savedOpsSize: this.savedOps.length,
-				clientId: this.clientId,
-			},
-			async () => {
-				if (!this.offlineLoadEnabled) {
-					throw new UsageError(
-						"Can't get pending local state unless offline load is enabled",
-					);
-				}
-				if (this.closed || this._disposed) {
-					throw new UsageError(
-						"Pending state cannot be retried if the container is closed or disposed",
-					);
-				}
-				assert(
-					this.attachState === AttachState.Attached,
-					0x0d1 /* "Container should be attached before close" */,
-				);
-				assert(
-					this.resolvedUrl !== undefined && this.resolvedUrl.type === "fluid",
-					0x0d2 /* "resolved url should be valid Fluid url" */,
-				);
-				assert(!!this.baseSnapshot, 0x5d4 /* no base snapshot */);
-				assert(!!this.baseSnapshotBlobs, 0x5d5 /* no snapshot blobs */);
-				const pendingRuntimeState = await this.runtime.getPendingLocalState(props);
-				const pendingState: IPendingContainerState = {
-					pendingRuntimeState,
-					baseSnapshot: this.baseSnapshot,
-					snapshotBlobs: this.baseSnapshotBlobs,
-					savedOps: this.savedOps,
-					url: this.resolvedUrl.url,
-					// no need to save this if there is no pending runtime state
-					clientId: pendingRuntimeState !== undefined ? this.clientId : undefined,
-				};
-
-				return JSON.stringify(pendingState);
-			},
+		if (this.closed || this._disposed) {
+			throw new UsageError(
+				"Pending state cannot be retried if the container is closed or disposed",
+			);
+		}
+		assert(
+			this.attachmentData.state === AttachState.Attached,
+			0x0d1 /* "Container should be attached before close" */,
 		);
+		assert(
+			this.resolvedUrl !== undefined && this.resolvedUrl.type === "fluid",
+			0x0d2 /* "resolved url should be valid Fluid url" */,
+		);
+		const pendingState = await this.serializedStateManager.getPendingLocalStateCore(
+			props,
+			this.clientId,
+			this.runtime,
+			this.resolvedUrl,
+		);
+		return pendingState;
 	}
 
 	public get attachState(): AttachState {
-		return this._attachState;
+		return this.attachmentData.state;
 	}
 
 	public serialize(): string {
-		assert(
-			this.attachState === AttachState.Detached,
-			0x0d3 /* "Should only be called in detached container" */,
-		);
+		if (this.attachmentData.state === AttachState.Attached || this.closed) {
+			throw new UsageError("Container must not be attached or closed.");
+		}
 
-		const appSummary: ISummaryTree = this.runtime.createSummary();
-		const protocolSummary = this.captureProtocolSummary();
-		const combinedSummary = combineAppAndProtocolSummary(appSummary, protocolSummary);
+		const attachingData =
+			this.attachmentData.state === AttachState.Attaching ? this.attachmentData : undefined;
 
-		const [baseSnapshot, snapshotBlobs] =
+		const combinedSummary =
+			attachingData?.summary ??
+			combineAppAndProtocolSummary(
+				this.runtime.createSummary(),
+				this.captureProtocolSummary(),
+			);
+
+		const { baseSnapshot, snapshotBlobs } =
 			getSnapshotTreeAndBlobsFromSerializedContainer(combinedSummary);
+		const pendingRuntimeState =
+			attachingData !== undefined ? this.runtime.getPendingLocalState() : undefined;
+		assert(!isPromiseLike(pendingRuntimeState), 0x8e3 /* should not be a promise */);
 
 		const detachedContainerState: IPendingDetachedContainerState = {
 			attached: false,
 			baseSnapshot,
 			snapshotBlobs,
+			pendingRuntimeState,
 			hasAttachmentBlobs: !!this.detachedBlobStorage && this.detachedBlobStorage.size > 0,
 		};
 		return JSON.stringify(detachedContainerState);
 	}
 
-	public async attach(
-		request: IRequest,
-		attachProps?: { deltaConnection?: "none" | "delayed" },
-	): Promise<void> {
-		await PerformanceEvent.timedExecAsync(
-			this.mc.logger,
-			{ eventName: "Attach" },
-			async () => {
-				if (this._lifecycleState !== "loaded") {
-					// pre-0.58 error message: containerNotValidForAttach
-					throw new UsageError(
-						`The Container is not in a valid state for attach [${this._lifecycleState}]`,
-					);
-				}
-
-				// If container is already attached or attach is in progress, throw an error.
-				assert(
-					this._attachState === AttachState.Detached && !this.attachStarted,
-					0x205 /* "attach() called more than once" */,
-				);
-				this.attachStarted = true;
-
-				// If attachment blobs were uploaded in detached state we will go through a different attach flow
-				const hasAttachmentBlobs =
-					this.detachedBlobStorage !== undefined && this.detachedBlobStorage.size > 0;
-
-				try {
-					assert(
-						this.deltaManager.inbound.length === 0,
-						0x0d6 /* "Inbound queue should be empty when attaching" */,
-					);
-
-					let summary: ISummaryTree;
-					if (!hasAttachmentBlobs) {
-						// Get the document state post attach - possibly can just call attach but we need to change the
-						// semantics around what the attach means as far as async code goes.
-						const appSummary: ISummaryTree = this.runtime.createSummary();
-						const protocolSummary = this.captureProtocolSummary();
-						summary = combineAppAndProtocolSummary(appSummary, protocolSummary);
-
-						// Set the state as attaching as we are starting the process of attaching container.
-						// This should be fired after taking the summary because it is the place where we are
-						// starting to attach the container to storage.
-						// Also, this should only be fired in detached container.
-						this._attachState = AttachState.Attaching;
-						this.runtime.setAttachState(AttachState.Attaching);
-						this.emit("attaching");
-						if (this.offlineLoadEnabled) {
-							const [snapshot, snapshotBlobs] =
-								getSnapshotTreeAndBlobsFromSerializedContainer(summary);
-							this.baseSnapshot = snapshot;
-							this.baseSnapshotBlobs = snapshotBlobs;
-						}
-					}
-
-					// Actually go and create the resolved document
-					if (this.service === undefined) {
-						const createNewResolvedUrl = await this.urlResolver.resolve(request);
-						assert(
-							this.client.details.type !== summarizerClientType &&
-								createNewResolvedUrl !== undefined,
-							0x2c4 /* "client should not be summarizer before container is created" */,
-						);
-						this.service = await this.createDocumentService(async () =>
-							runWithRetry(
-								async () =>
-									this.serviceFactory.createContainer(
-										summary,
-										createNewResolvedUrl,
-										this.subLogger,
-										false, // clientIsSummarizer
-									),
-								"containerAttach",
-								this.mc.logger,
-								{
-									cancel: this._deltaManager.closeAbortController.signal,
-								}, // progress
-							),
+	public readonly attach = runSingle(
+		async (
+			request: IRequest,
+			attachProps?: { deltaConnection?: "none" | "delayed" },
+		): Promise<void> => {
+			await PerformanceEvent.timedExecAsync(
+				this.mc.logger,
+				{ eventName: "Attach" },
+				async () => {
+					if (
+						this._lifecycleState !== "loaded" ||
+						this.attachmentData.state === AttachState.Attached
+					) {
+						// pre-0.58 error message: containerNotValidForAttach
+						throw new UsageError(
+							`The Container is not in a valid state for attach [${this._lifecycleState}] and [${this.attachState}]`,
 						);
 					}
-					this.storageAdapter.connectToService(this.service);
 
-					if (hasAttachmentBlobs) {
-						// upload blobs to storage
-						assert(
-							!!this.detachedBlobStorage,
-							0x24e /* "assertion for type narrowing" */,
-						);
+					const normalizeErrorAndClose = (error: unknown): IFluidErrorBase => {
+						const newError = normalizeError(error);
+						this.close(newError);
+						// add resolved URL on error object so that host has the ability to find this document and delete it
+						newError.addTelemetryProperties({
+							resolvedUrl: this.service?.resolvedUrl?.url,
+						});
+						return newError;
+					};
 
-						// build a table mapping IDs assigned locally to IDs assigned by storage and pass it to runtime to
-						// support blob handles that only know about the local IDs
-						const redirectTable = new Map<string, string>();
-						// if new blobs are added while uploading, upload them too
-						while (redirectTable.size < this.detachedBlobStorage.size) {
-							const newIds = this.detachedBlobStorage
-								.getBlobIds()
-								.filter((id) => !redirectTable.has(id));
-							for (const id of newIds) {
-								const blob = await this.detachedBlobStorage.readBlob(id);
-								const response = await this.storageAdapter.createBlob(blob);
-								redirectTable.set(id, response.id);
+					const setAttachmentData: AttachProcessProps["setAttachmentData"] = (
+						attachmentData,
+					) => {
+						const previousState = this.attachmentData.state;
+						this.attachmentData = attachmentData;
+						const state = this.attachmentData.state;
+						if (state !== previousState && state !== AttachState.Detached) {
+							try {
+								this.runtime.setAttachState(state);
+								this.emit(state.toLocaleLowerCase());
+							} catch (error) {
+								throw normalizeErrorAndClose(error);
 							}
 						}
+					};
 
-						// take summary and upload
-						const appSummary: ISummaryTree = this.runtime.createSummary(redirectTable);
-						const protocolSummary = this.captureProtocolSummary();
-						summary = combineAppAndProtocolSummary(appSummary, protocolSummary);
-
-						this._attachState = AttachState.Attaching;
-						this.runtime.setAttachState(AttachState.Attaching);
-						this.emit("attaching");
-						if (this.offlineLoadEnabled) {
-							const [snapshot, snapshotBlobs] =
-								getSnapshotTreeAndBlobsFromSerializedContainer(summary);
-							this.baseSnapshot = snapshot;
-							this.baseSnapshotBlobs = snapshotBlobs;
+					const createAttachmentSummary: AttachProcessProps["createAttachmentSummary"] = (
+						redirectTable?: Map<string, string>,
+					) => {
+						try {
+							assert(
+								this.deltaManager.inbound.length === 0,
+								0x0d6 /* "Inbound queue should be empty when attaching" */,
+							);
+							return combineAppAndProtocolSummary(
+								this.runtime.createSummary(redirectTable),
+								this.captureProtocolSummary(),
+							);
+						} catch (error) {
+							throw normalizeErrorAndClose(error);
 						}
+					};
 
-						await this.storageAdapter.uploadSummaryWithContext(summary, {
-							referenceSequenceNumber: 0,
-							ackHandle: undefined,
-							proposalHandle: undefined,
+					const createOrGetStorageService: AttachProcessProps["createOrGetStorageService"] =
+						async (summary) => {
+							// Actually go and create the resolved document
+							if (this.service === undefined) {
+								const createNewResolvedUrl =
+									await this.urlResolver.resolve(request);
+								assert(
+									this.client.details.type !== summarizerClientType &&
+										createNewResolvedUrl !== undefined,
+									0x2c4 /* "client should not be summarizer before container is created" */,
+								);
+								this.service = await runWithRetry(
+									async () =>
+										this.serviceFactory.createContainer(
+											summary,
+											createNewResolvedUrl,
+											this.subLogger,
+											false, // clientIsSummarizer
+										),
+									"containerAttach",
+									this.mc.logger,
+									{
+										cancel: this._deltaManager.closeAbortController.signal,
+									}, // progress
+								);
+							}
+							this.storageAdapter.connectToService(this.service);
+							return this.storageAdapter;
+						};
+
+					let attachP = runRetriableAttachProcess({
+						initialAttachmentData: this.attachmentData,
+						offlineLoadEnabled: this.serializedStateManager.offlineLoadEnabled,
+						detachedBlobStorage: this.detachedBlobStorage,
+						setAttachmentData,
+						createAttachmentSummary,
+						createOrGetStorageService,
+					});
+
+					// only enable the new behavior if the config is set
+					if (
+						this.mc.config.getBoolean("Fluid.Container.RetryOnAttachFailure") !== true
+					) {
+						attachP = attachP.catch((error) => {
+							throw normalizeErrorAndClose(error);
 						});
 					}
 
-					this._attachState = AttachState.Attached;
-					this.runtime.setAttachState(AttachState.Attached);
-					this.emit("attached");
-
+					this.serializedStateManager.setSnapshot(await attachP);
 					if (!this.closed) {
 						this.handleDeltaConnectionArg(
 							{
@@ -1357,17 +1291,11 @@ export class Container
 							attachProps?.deltaConnection,
 						);
 					}
-				} catch (error) {
-					// add resolved URL on error object so that host has the ability to find this document and delete it
-					const newError = normalizeError(error);
-					newError.addTelemetryProperties({ resolvedUrl: this.resolvedUrl?.url });
-					this.close(newError);
-					throw newError;
-				}
-			},
-			{ start: true, end: true, cancel: "generic" },
-		);
-	}
+				},
+				{ start: true, end: true, cancel: "generic" },
+			);
+		},
+	);
 
 	private setAutoReconnectInternal(mode: ReconnectMode, reason: IConnectionStateChangeReason) {
 		const currentMode = this._deltaManager.connectionManager.reconnectMode;
@@ -1394,7 +1322,7 @@ export class Container
 	public connect() {
 		if (this.closed) {
 			throw new UsageError(`The Container is closed and cannot be connected`);
-		} else if (this._attachState !== AttachState.Attached) {
+		} else if (this.attachState !== AttachState.Attached) {
 			throw new UsageError(`The Container is not attached and cannot be connected`);
 		} else if (!this.connected) {
 			// Note: no need to fetch ops as we do it preemptively as part of DeltaManager.attachOpHandler().
@@ -1410,7 +1338,7 @@ export class Container
 	private connectInternal(args: IConnectionArgs) {
 		assert(!this.closed, 0x2c5 /* "Attempting to connect() a closed Container" */);
 		assert(
-			this._attachState === AttachState.Attached,
+			this.attachState === AttachState.Attached,
 			0x2c6 /* "Attempting to connect() a container that is not attached" */,
 		);
 
@@ -1545,11 +1473,6 @@ export class Container
 		return true;
 	}
 
-	private async getVersion(version: string | null): Promise<IVersion | undefined> {
-		const versions = await this.storageAdapter.getVersions(version, 1);
-		return versions[0];
-	}
-
 	private connectToDeltaStream(args: IConnectionArgs) {
 		// All agents need "write" access, including summarizer.
 		if (!this._canReconnect || !this.client.details.capabilities.interactive) {
@@ -1616,33 +1539,24 @@ export class Container
 
 		this.storageAdapter.connectToService(this.service);
 
-		this._attachState = AttachState.Attached;
+		this.attachmentData = {
+			state: AttachState.Attached,
+		};
 
 		timings.phase2 = performance.now();
+
+		const supportGetSnapshotApi: boolean =
+			this.mc.config.getBoolean("Fluid.Container.UseLoadingGroupIdForSnapshotFetch") ===
+				true && this.service?.policies?.supportGetSnapshotApi === true;
 		// Fetch specified snapshot.
-		const { snapshot, versionId } =
-			pendingLocalState === undefined
-				? await this.fetchSnapshotTree(specifiedVersion)
-				: { snapshot: pendingLocalState.baseSnapshot, versionId: undefined };
-
-		if (pendingLocalState) {
-			this.baseSnapshot = pendingLocalState.baseSnapshot;
-			this.baseSnapshotBlobs = pendingLocalState.snapshotBlobs;
-		} else {
-			assert(snapshot !== undefined, 0x237 /* "Snapshot should exist" */);
-			if (this.offlineLoadEnabled) {
-				this.baseSnapshot = snapshot;
-				// Save contents of snapshot now, otherwise closeAndGetPendingLocalState() must be async
-				this.baseSnapshotBlobs = await getBlobContentsFromTree(
-					snapshot,
-					this.storageAdapter,
-				);
-			}
-		}
-
-		const attributes: IDocumentAttributes = await this.getDocumentAttributes(
+		const { baseSnapshot, version } = await this.serializedStateManager.fetchSnapshot(
+			specifiedVersion,
+			supportGetSnapshotApi,
+		);
+		this._loadedFromVersion = version;
+		const attributes: IDocumentAttributes = await getDocumentAttributes(
 			this.storageAdapter,
-			snapshot,
+			baseSnapshot,
 		);
 
 		// If we saved ops, we will replay them and don't need DeltaManager to fetch them
@@ -1729,15 +1643,20 @@ export class Container
 
 		// ...load in the existing quorum
 		// Initialize the protocol handler
-		await this.initializeProtocolStateFromSnapshot(attributes, this.storageAdapter, snapshot);
+		await this.initializeProtocolStateFromSnapshot(
+			attributes,
+			this.storageAdapter,
+			baseSnapshot,
+		);
 
 		timings.phase3 = performance.now();
 		const codeDetails = this.getCodeDetailsFromQuorum();
 		await this.instantiateRuntime(
 			codeDetails,
-			snapshot,
+			baseSnapshot,
 			// give runtime a dummy value so it knows we're loading from a stash blob
 			pendingLocalState ? pendingLocalState?.pendingRuntimeState ?? {} : undefined,
+			isInstanceOfISnapshot(baseSnapshot) ? baseSnapshot : undefined,
 		);
 
 		// replay saved ops
@@ -1820,7 +1739,7 @@ export class Container
 		);
 		return {
 			sequenceNumber: attributes.sequenceNumber,
-			version: versionId,
+			version: version?.id,
 			dmLastProcessedSeqNumber: this._deltaManager.lastSequenceNumber,
 			dmLastKnownSeqNumber: this._deltaManager.lastKnownSeqNumber,
 		};
@@ -1851,10 +1770,10 @@ export class Container
 	}
 
 	private async rehydrateDetachedFromSnapshot({
-		attached,
 		baseSnapshot,
 		snapshotBlobs,
 		hasAttachmentBlobs,
+		pendingRuntimeState,
 	}: IPendingDetachedContainerState) {
 		if (hasAttachmentBlobs) {
 			assert(
@@ -1865,7 +1784,7 @@ export class Container
 		const snapshotTreeWithBlobContents: ISnapshotTreeWithBlobContents =
 			combineSnapshotTreeAndSnapshotBlobs(baseSnapshot, snapshotBlobs);
 		this.storageAdapter.loadSnapshotFromSnapshotBlobs(snapshotBlobs);
-		const attributes = await this.getDocumentAttributes(
+		const attributes = await getDocumentAttributes(
 			this.storageAdapter,
 			snapshotTreeWithBlobContents,
 		);
@@ -1888,31 +1807,13 @@ export class Container
 		);
 		const codeDetails = this.getCodeDetailsFromQuorum();
 
-		await this.instantiateRuntime(codeDetails, snapshotTreeWithBlobContents);
+		await this.instantiateRuntime(
+			codeDetails,
+			snapshotTreeWithBlobContents,
+			pendingRuntimeState,
+		);
 
 		this.setLoaded();
-	}
-
-	private async getDocumentAttributes(
-		storage: IDocumentStorageService,
-		tree: ISnapshotTree | undefined,
-	): Promise<IDocumentAttributes> {
-		if (tree === undefined) {
-			return {
-				minimumSequenceNumber: 0,
-				sequenceNumber: 0,
-			};
-		}
-
-		// Backward compatibility: old docs would have ".attributes" instead of "attributes"
-		const attributesHash =
-			".protocol" in tree.trees
-				? tree.trees[".protocol"].blobs.attributes
-				: tree.blobs[".attributes"];
-
-		const attributes = await readAndParse<IDocumentAttributes>(storage, attributesHash);
-
-		return attributes;
 	}
 
 	private async initializeProtocolStateFromSnapshot(
@@ -2032,13 +1933,12 @@ export class Container
 
 	private static setupClient(
 		containerId: string,
-		options?: ILoaderOptions,
+		loaderOptionsClient?: IClient,
 		clientDetailsOverride?: IClientDetails,
 	): IClient {
-		const loaderOptionsClient = structuredClone(options?.client);
 		const client: IClient =
 			loaderOptionsClient !== undefined
-				? (loaderOptionsClient as IClient)
+				? structuredClone(loaderOptionsClient)
 				: {
 						details: {
 							capabilities: { interactive: true },
@@ -2116,10 +2016,10 @@ export class Container
 			this.connectionStateHandler.cancelEstablishingConnection(reason);
 		});
 
-		deltaManager.on("disconnect", (reason: IConnectionStateChangeReason) => {
+		deltaManager.on("disconnect", (text, error) => {
 			this.noopHeuristic?.notifyDisconnect();
 			if (!this.closed) {
-				this.connectionStateHandler.receivedDisconnectEvent(reason);
+				this.connectionStateHandler.receivedDisconnectEvent({ text, error });
 			}
 		});
 
@@ -2343,9 +2243,6 @@ export class Container
 	}
 
 	private processRemoteMessage(message: ISequencedDocumentMessage) {
-		if (this.offlineLoadEnabled) {
-			this.savedOps.push(message);
-		}
 		const local = this.clientId === message.clientId;
 
 		// Allow the protocol handler to process the message
@@ -2353,7 +2250,7 @@ export class Container
 
 		// Forward messages to the loaded runtime for processing
 		this.runtime.process(message, local);
-
+		this.serializedStateManager.addProcessedOp(message);
 		// Inactive (not in quorum or not writers) clients don't take part in the minimum sequence number calculation.
 		if (this.activeConnection()) {
 			if (this.noopHeuristic === undefined) {
@@ -2392,7 +2289,8 @@ export class Container
 		this.emit("op", message);
 	}
 
-	private submitSignal(content: any, targetClientId?: string) {
+	// unknown should be removed once `@alpha` tag is removed from IContainerContext
+	private submitSignal(content: unknown | ISignalEnvelope, targetClientId?: string) {
 		this._deltaManager.submitSignal(JSON.stringify(content), targetClientId);
 	}
 
@@ -2406,36 +2304,11 @@ export class Container
 		}
 	}
 
-	/**
-	 * Get the most recent snapshot, or a specific version.
-	 * @param specifiedVersion - The specific version of the snapshot to retrieve
-	 * @returns The snapshot requested, or the latest snapshot if no version was specified, plus version ID
-	 */
-	private async fetchSnapshotTree(
-		specifiedVersion: string | undefined,
-	): Promise<{ snapshot?: ISnapshotTree; versionId?: string }> {
-		const version = await this.getVersion(specifiedVersion ?? null);
-
-		if (version === undefined && specifiedVersion !== undefined) {
-			// We should have a defined version to load from if specified version requested
-			this.mc.logger.sendErrorEvent({
-				eventName: "NoVersionFoundWhenSpecified",
-				id: specifiedVersion,
-			});
-		}
-		this._loadedFromVersion = version;
-		const snapshot = (await this.storageAdapter.getSnapshotTree(version)) ?? undefined;
-
-		if (snapshot === undefined && version !== undefined) {
-			this.mc.logger.sendErrorEvent({ eventName: "getSnapshotTreeFailed", id: version.id });
-		}
-		return { snapshot, versionId: version?.id };
-	}
-
 	private async instantiateRuntime(
 		codeDetails: IFluidCodeDetails,
-		snapshot: ISnapshotTree | undefined,
+		snapshotTree: ISnapshotTree | undefined,
 		pendingLocalState?: unknown,
+		snapshot?: ISnapshot,
 	) {
 		assert(this._runtime?.disposed !== false, 0x0dd /* "Existing runtime not disposed" */);
 
@@ -2465,16 +2338,12 @@ export class Container
 			throw new Error(packageNotFactoryError);
 		}
 
-		const getSpecifiedCodeDetails = () =>
-			(this.protocolHandler.quorum.get("code") ??
-				this.protocolHandler.quorum.get("code2")) as IFluidCodeDetails | undefined;
-
-		const existing = snapshot !== undefined;
+		const existing = snapshotTree !== undefined;
 
 		const context = new ContainerContext(
 			this.options,
 			this.scope,
-			snapshot,
+			snapshotTree,
 			this._loadedFromVersion,
 			this._deltaManager,
 			this.storageAdapter,
@@ -2496,11 +2365,11 @@ export class Container
 			() => this.clientId,
 			() => this.attachState,
 			() => this.connected,
-			getSpecifiedCodeDetails,
 			this._deltaManager.clientDetails,
 			existing,
 			this.subLogger,
 			pendingLocalState,
+			snapshot,
 		);
 
 		this._runtime = await PerformanceEvent.timedExecAsync(

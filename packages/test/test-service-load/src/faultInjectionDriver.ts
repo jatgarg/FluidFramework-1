@@ -3,8 +3,8 @@
  * Licensed under the MIT License.
  */
 
-import { ITelemetryBaseLogger, IDisposable } from "@fluidframework/core-interfaces";
 import { TypedEventEmitter } from "@fluid-internal/client-utils";
+import { IDisposable, ITelemetryBaseLogger } from "@fluidframework/core-interfaces";
 import { assert, Deferred } from "@fluidframework/core-utils";
 import {
 	DriverErrorTypes,
@@ -16,15 +16,16 @@ import {
 	IDocumentServiceFactory,
 	IDocumentStorageService,
 	IResolvedUrl,
+	ISnapshotFetchOptions,
 } from "@fluidframework/driver-definitions";
 import {
 	IClient,
-	ISummaryTree,
 	IDocumentMessage,
 	INack,
+	ISummaryTree,
 	NackErrorType,
 } from "@fluidframework/protocol-definitions";
-import { LoggingError, wrapError } from "@fluidframework/telemetry-utils";
+import { LoggingError, UsageError, wrapError } from "@fluidframework/telemetry-utils";
 
 export class FaultInjectionDocumentServiceFactory implements IDocumentServiceFactory {
 	private readonly _documentServices = new Map<IResolvedUrl, FaultInjectionDocumentService>();
@@ -340,9 +341,6 @@ export class FaultInjectionDocumentStorageService implements IDocumentStorageSer
 		}
 	}
 
-	public get repositoryUrl(): string {
-		return this.internal.repositoryUrl;
-	}
 	public get policies() {
 		return this.internal.policies;
 	}
@@ -350,6 +348,14 @@ export class FaultInjectionDocumentStorageService implements IDocumentStorageSer
 	public async getSnapshotTree(version, scenarioName?: string) {
 		this.throwIfOffline();
 		return this.internal.getSnapshotTree(version, scenarioName);
+	}
+
+	public async getSnapshot(snapshotFetchOptions?: ISnapshotFetchOptions) {
+		this.throwIfOffline();
+		if (this.internal.getSnapshot !== undefined) {
+			return this.internal.getSnapshot(snapshotFetchOptions);
+		}
+		throw new UsageError("GetSnapshotApi not present");
 	}
 
 	public async getVersions(versionId, count, scenarioName, fetchSource) {

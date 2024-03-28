@@ -5,6 +5,12 @@
 
 import { strict as assert } from "assert";
 
+import {
+	ITestDataObject,
+	TestDataObjectType,
+	describeCompat,
+} from "@fluid-private/test-version-utils";
+import { IContainer } from "@fluidframework/container-definitions";
 import { ISummarizer } from "@fluidframework/container-runtime";
 import { IDocumentStorageService } from "@fluidframework/driver-definitions";
 import { ISummaryTree, SummaryType } from "@fluidframework/protocol-definitions";
@@ -15,12 +21,7 @@ import {
 	summarizeNow,
 	waitForContainerConnection,
 } from "@fluidframework/test-utils";
-import {
-	describeCompat,
-	ITestDataObject,
-	TestDataObjectType,
-} from "@fluid-private/test-version-utils";
-import { IContainer } from "@fluidframework/container-definitions";
+
 import { defaultGCConfig } from "./gcTestConfigs.js";
 
 /**
@@ -30,7 +31,7 @@ import { defaultGCConfig } from "./gcTestConfigs.js";
  */
 describeCompat(
 	"GC unreferenced flag in downloaded snapshot",
-	"2.0.0-rc.1.0.0",
+	"NoCompat",
 	(getTestObjectProvider) => {
 		let provider: ITestObjectProvider;
 		let mainContainer: IContainer;

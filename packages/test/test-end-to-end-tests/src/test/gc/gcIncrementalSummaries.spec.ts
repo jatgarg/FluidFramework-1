@@ -4,9 +4,17 @@
  */
 
 import { strict as assert } from "assert";
+
+import {
+	ITestDataObject,
+	TestDataObjectType,
+	describeCompat,
+	itExpects,
+} from "@fluid-private/test-version-utils";
 import { IContainer } from "@fluidframework/container-definitions";
 import { ContainerRuntime, ISummarizer } from "@fluidframework/container-runtime";
 import { ISummaryTree, SummaryType } from "@fluidframework/protocol-definitions";
+import { channelsTreeName } from "@fluidframework/runtime-definitions";
 import { MockLogger } from "@fluidframework/telemetry-utils";
 import {
 	ITestObjectProvider,
@@ -14,13 +22,7 @@ import {
 	summarizeNow,
 	waitForContainerConnection,
 } from "@fluidframework/test-utils";
-import {
-	describeCompat,
-	ITestDataObject,
-	itExpects,
-	TestDataObjectType,
-} from "@fluid-private/test-version-utils";
-import { channelsTreeName } from "@fluidframework/runtime-definitions";
+
 import { defaultGCConfig } from "./gcTestConfigs.js";
 
 /**
@@ -30,7 +32,7 @@ import { defaultGCConfig } from "./gcTestConfigs.js";
  * - It received an op.
  * - Its reference state changed, i.e., it was referenced and became unreferenced or vice-versa.
  */
-describeCompat("GC incremental summaries", "2.0.0-rc.1.0.0", (getTestObjectProvider) => {
+describeCompat("GC incremental summaries", "NoCompat", (getTestObjectProvider) => {
 	let provider: ITestObjectProvider;
 	let mainContainer: IContainer;
 	let dataStoreA: ITestDataObject;

@@ -6,7 +6,8 @@
 /* eslint-disable no-bitwise */
 
 import { assert } from '@fluidframework/core-utils';
-import { fail } from '../Common';
+
+import { fail } from '../Common.js';
 
 /**
  * A map in which entries are always added in key-sorted order.

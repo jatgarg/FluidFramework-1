@@ -4,38 +4,40 @@
  */
 
 import { strict as assert } from "assert";
+
 import {
-	createTestConfigProvider,
-	createSummarizer,
+	ITestDataObject,
+	TestDataObjectType,
+	describeCompat,
+} from "@fluid-private/test-version-utils";
+import { IContainer } from "@fluidframework/container-definitions";
+import { IGCRuntimeOptions } from "@fluidframework/container-runtime";
+import { delay } from "@fluidframework/core-utils";
+import { ISummaryTree, SummaryType } from "@fluidframework/protocol-definitions";
+import { gcTreeKey } from "@fluidframework/runtime-definitions";
+import {
 	ITestContainerConfig,
 	ITestObjectProvider,
+	createSummarizer,
+	createTestConfigProvider,
 	summarizeNow,
 	waitForContainerConnection,
 } from "@fluidframework/test-utils";
+
 import {
-	describeCompat,
-	ITestDataObject,
-	TestDataObjectType,
-} from "@fluid-private/test-version-utils";
-import { IGCRuntimeOptions } from "@fluidframework/container-runtime";
-import { delay } from "@fluidframework/core-utils";
-import { gcTreeKey } from "@fluidframework/runtime-definitions";
-import { ISummaryTree, SummaryType } from "@fluidframework/protocol-definitions";
-import { IContainer } from "@fluidframework/container-definitions";
-import {
-	getGCStateFromSummary,
 	getGCDeletedStateFromSummary,
+	getGCStateFromSummary,
 	getGCTombstoneStateFromSummary,
 } from "./gcTestSummaryUtils.js";
 
 /**
  * Validates that an unreferenced datastore goes through all the GC phases without overlapping.
  */
-describeCompat("GC unreference phases", "2.0.0-rc.1.0.0", (getTestObjectProvider) => {
+describeCompat("GC unreference phases", "NoCompat", (getTestObjectProvider) => {
 	// Since these tests depend on these timing windows, they should not be run against drivers talking over the network
 	// (see this.skip() call below)
 	const tombstoneTimeoutMs = 200; // Tombstone at 200ms
-	const sweepGracePeriodMs = 100; // Sweep at 300ms
+	const sweepGracePeriodMs = 200; // Sweep at 400ms
 
 	const configProvider = createTestConfigProvider();
 	const gcOptions: IGCRuntimeOptions = {
@@ -85,7 +87,6 @@ describeCompat("GC unreference phases", "2.0.0-rc.1.0.0", (getTestObjectProvider
 			this.skip();
 		}
 
-		configProvider.set("Fluid.GarbageCollection.DisableAttachmentBlobSweep", true); // Only sweep DataStores
 		configProvider.set("Fluid.GarbageCollection.ThrowOnTombstoneUsage", true);
 		configProvider.set(
 			"Fluid.GarbageCollection.TestOverride.TombstoneTimeoutMs",
