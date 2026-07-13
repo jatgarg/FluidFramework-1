@@ -7,6 +7,19 @@ nyc
 *.log
 .DS_Store
 
+# C# port work (transpiledir branch)
+# Reference-only copy of the host repo's C# Fluid code; not part of Fluid CI.
+packages/dds/waccobalt/
+# .NET build output for packages/dds/map/src/csharp-port/
+packages/dds/map/src/csharp-port/**/bin/
+packages/dds/map/src/csharp-port/**/obj/
+# .NET build output for the shared shim project
+packages/dds/csharp-port-common/**/bin/
+packages/dds/csharp-port-common/**/obj/
+# .NET build output for the SharedString port
+packages/dds/sequence/src/csharp-port/**/bin/
+packages/dds/sequence/src/csharp-port/**/obj/
+
 .vale/*
 !.vale/config/
 

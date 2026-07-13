@@ -19,6 +19,9 @@
 			"!**/examples/**/build/**/*",
 			"!**/*.done.build.log",
 
+			// C# port work — excluded from Fluid TS build/lint
+			"!**/csharp-port/**",
+
 			// Webpack output
 			"**/webpack/**",
 

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<LangVersion>latest</LangVersion>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<AssemblyName>Microsoft.Office.Web.Fluid.SharedDirectory</AssemblyName>
+		<RootNamespace>Microsoft.Office.Web.Fluid</RootNamespace>
+		<!-- Prevent auto-inclusion of files under folders we intentionally don't build -->
+		<EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+		<!--
+			Suppressed warnings (shim-project scope):
+			  CS0649 — "Field is never assigned"; shim POCOs are populated via
+			  object initializers by external callers only.
+			  CS8618 — "Non-nullable field must contain a non-null value on exit
+			  from constructor"; same reason for POCO stubs.
+		-->
+		<NoWarn>$(NoWarn);CS0649</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\..\csharp-port-common\CsharpPortCommon.csproj" />
+	</ItemGroup>
+
+</Project>
