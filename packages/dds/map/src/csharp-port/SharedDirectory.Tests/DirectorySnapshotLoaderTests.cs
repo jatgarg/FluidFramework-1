@@ -7,7 +7,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using Xunit;
 
 namespace Microsoft.Office.Web.Fluid.Tests
@@ -204,9 +203,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 		private static void AssertJsonNumber(int expected, object? actual)
 		{
-			JsonElement element = Assert.IsType<JsonElement>(actual);
-			Assert.Equal(JsonValueKind.Number, element.ValueKind);
-			Assert.Equal(expected, element.GetInt32());
+			// TS-parity: JSON values now materialize to native types (Finding 18).
+			Assert.Equal((double)expected, Assert.IsType<double>(actual));
 		}
 	}
 }

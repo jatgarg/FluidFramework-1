@@ -1,11 +1,13 @@
 # SharedDirectory — TypeScript → C# feasibility port
 
-> **Status:** Wave 0 scaffolding. Not yet functional. See "Roadmap" below.
+> **Status:** Feature-complete for Word Native Phase-1 surface. 127/127 tests pass. Post-review parity audit closed 8 of 9 findings (see `PARITY-AUDIT.md`).
 > **Owner:** transpiledir branch, @jatgarg
 > **Delivery target:** Office C# Fluid repo (`.../DocumentSessionService.Core/Fluid/`),
 >   drops in next to `FluidSharedMap.cs`, `FluidSharedString.cs`.
 
-This folder holds a work-in-progress C# port of `packages/dds/map/src/directory.ts`
+**Start here for hand-off:** [`HANDOFF.md`](./HANDOFF.md). This README is the design record + open-question ledger.
+
+This folder holds the C# port of `packages/dds/map/src/directory.ts`
 (the Fluid `SharedDirectory` DDS) for consumption by Word Native's C# Fluid runtime.
 
 The folder is **excluded from the TypeScript build** (see `packages/dds/map/tsconfig.json`
@@ -21,7 +23,9 @@ The folder is **excluded from the TypeScript build** (see `packages/dds/map/tsco
 
 ```
 csharp-port/
-├── README.md                       ← this file
+├── README.md                       ← this file (design record + open questions)
+├── HANDOFF.md                      ← colleague-facing hand-off doc
+├── PARITY-AUDIT.md                 ← post-review TS parity audit findings
 ├── SharedDirectory.sln             ← solution: library + tests
 ├── SharedDirectory/                ← C# library project
 │   ├── SharedDirectory.csproj      ← net10.0, nullable enabled

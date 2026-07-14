@@ -160,7 +160,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void NonHandleValues_PassThroughAsJsonElements()
+		public void NonHandleValues_MaterializeAsDictionary()
 		{
 			var op = new DirectorySetOperation()
 			{
@@ -180,9 +180,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			string json = DirectoryOpSerializer.Serialize(op);
 			DirectorySetOperation roundTripped = Assert.IsType<DirectorySetOperation>(DirectoryOpSerializer.Deserialize(json));
 
-			JsonElement value = Assert.IsType<JsonElement>(roundTripped.Value.Value);
-			Assert.Equal("not_a_handle", value.GetProperty("type").GetString());
-			Assert.Equal("/dataObjects/target", value.GetProperty("url").GetString());
+			// TS-parity: JSON values now materialize to native types (Finding 18).
+			Dictionary<string, object?> value = Assert.IsType<Dictionary<string, object?>>(roundTripped.Value.Value);
+			Assert.Equal("not_a_handle", Assert.IsType<string>(value["type"]));
+			Assert.Equal("/dataObjects/target", Assert.IsType<string>(value["url"]));
 		}
 
 		[Fact]

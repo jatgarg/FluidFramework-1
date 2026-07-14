@@ -56,6 +56,10 @@ namespace Microsoft.Office.Web.Fluid
 		public readonly SequenceNumber Seq;
 		public readonly string? ClientId;
 
+		public bool HasClientId => ClientId != null;
+
+		public long RefSeq => Seq.referenceSequenceNumber;
+
 		/// <summary>
 		/// Test-friendly constructor (shim only). The host repo has richer
 		/// constructors that build a descriptor from a real SequencedDocumentMessage.
@@ -108,6 +112,11 @@ namespace Microsoft.Office.Web.Fluid
 	/// </summary>
 	public interface IFluidDataObjectSender
 	{
+		/// <summary>
+		/// Local client ID for the currently attached connection, or null before attach.
+		/// </summary>
+		string? LocalClientId => null;
+
 		/// <summary>
 		/// Queues an outbound op for a specific DDS. Returns the SequenceNumber
 		/// stamped on the outgoing message (in particular the clientSequenceNumber

@@ -51,11 +51,13 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("/foo", roundTripped.Path);
 			Assert.Equal("profile", roundTripped.Key);
 			Assert.Equal("Plain", roundTripped.Value.Type);
-			JsonElement roundTrippedValue = Assert.IsType<JsonElement>(roundTripped.Value.Value);
-			Assert.Equal("Ada", roundTrippedValue.GetProperty("name").GetString());
-			Assert.Equal(42, roundTrippedValue.GetProperty("count").GetInt32());
-			Assert.True(roundTrippedValue.GetProperty("enabled").GetBoolean());
-			Assert.Equal("logic", roundTrippedValue.GetProperty("tags")[1].GetString());
+			// TS-parity: JSON values now materialize to native types (Finding 18).
+			Dictionary<string, object?> roundTrippedValue = Assert.IsType<Dictionary<string, object?>>(roundTripped.Value.Value);
+			Assert.Equal("Ada", Assert.IsType<string>(roundTrippedValue["name"]));
+			Assert.Equal(42d, Assert.IsType<double>(roundTrippedValue["count"]));
+			Assert.True(Assert.IsType<bool>(roundTrippedValue["enabled"]));
+			List<object?> tags = Assert.IsType<List<object?>>(roundTrippedValue["tags"]);
+			Assert.Equal("logic", Assert.IsType<string>(tags[1]));
 		}
 
 		[Fact]

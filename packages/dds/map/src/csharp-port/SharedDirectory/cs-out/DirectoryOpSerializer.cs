@@ -29,8 +29,7 @@ namespace Microsoft.Office.Web.Fluid
 		private const string _clearTypeName = "clear";
 		private const string _createSubDirectoryTypeName = "createSubDirectory";
 		private const string _deleteSubDirectoryTypeName = "deleteSubDirectory";
-		private const string _serializedHandleTypeName = "__fluid_handle__";
-		private const string _serializedHandleUrlPropertyName = "url";
+		private const string _missingRegistryMessage = "SharedDirectory requires an IFluidDataObjectRegistry to serialize handle values.";
 
 		private static readonly JsonSerializerOptions _serializerOptions = new JsonSerializerOptions()
 		{
@@ -299,63 +298,12 @@ namespace Microsoft.Office.Web.Fluid
 
 		internal static object? MakeHandlesSerializable(object? value, IFluidDataObjectRegistry? registry)
 		{
-			if (value == null)
-			{
-				return null;
-			}
-
-			if (TryGetHandleUrl(value, registry, out string handleUrl))
-			{
-				return CreateSerializedHandleWireValue(handleUrl);
-			}
-
-			if (value is JsonElement)
-			{
-				return value;
-			}
-
-			if (value is IReadOnlyDictionary<string, object?> readOnlyDictionary)
-			{
-				Dictionary<string, object?> serializedDictionary = new Dictionary<string, object?>();
-				foreach (KeyValuePair<string, object?> entry in readOnlyDictionary)
-				{
-					serializedDictionary[entry.Key] = MakeHandlesSerializable(entry.Value, registry);
-				}
-
-				return serializedDictionary;
-			}
-
-			if (value is IDictionary dictionary)
-			{
-				Dictionary<string, object?> serializedDictionary = new Dictionary<string, object?>();
-				foreach (DictionaryEntry entry in dictionary)
-				{
-					if (entry.Key is string key)
-					{
-						serializedDictionary[key] = MakeHandlesSerializable(entry.Value, registry);
-					}
-				}
-
-				return serializedDictionary;
-			}
-
-			if (value is IEnumerable enumerable && value is not string)
-			{
-				List<object?> serializedList = new List<object?>();
-				foreach (object? item in enumerable)
-				{
-					serializedList.Add(MakeHandlesSerializable(item, registry));
-				}
-
-				return serializedList;
-			}
-
-			return value;
+			return HandleWireFormat.MakeHandlesSerializable(value, registry, _missingRegistryMessage);
 		}
 
 		internal static object? ReadJsonValueWithHandles(JsonElement element, IFluidDataObjectRegistry? registry)
 		{
-			return ConvertJsonElementWithHandles(element, registry, out bool _);
+			return MaterializeJsonValue(element, registry);
 		}
 
 		internal static object? ResolveSerializedHandles(object? value, IFluidDataObjectRegistry? registry)
@@ -367,12 +315,12 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (value is SerializedFluidHandle serializedHandle)
 			{
-				return ResolveSerializedFluidHandle(serializedHandle.Url, registry);
+				return HandleWireFormat.ResolveSerializedHandle(serializedHandle.Url, registry);
 			}
 
 			if (value is JsonElement element)
 			{
-				return ReadJsonValueWithHandles(element, registry);
+				return MaterializeJsonValue(element, registry);
 			}
 
 			if (value is IReadOnlyDictionary<string, object?> readOnlyDictionary)
@@ -414,115 +362,52 @@ namespace Microsoft.Office.Web.Fluid
 			return value;
 		}
 
-		private static object? ConvertJsonElementWithHandles(JsonElement element, IFluidDataObjectRegistry? registry, out bool changed)
+		private static object? MaterializeJsonValue(JsonElement element, IFluidDataObjectRegistry? registry)
 		{
 			switch (element.ValueKind)
 			{
 				case JsonValueKind.Object:
-					if (TryReadSerializedHandleUrl(element, out string? url))
+					if (HandleWireFormat.TryReadHandleUrl(element, out string url))
 					{
-						changed = true;
-						return ResolveSerializedFluidHandle(url, registry);
+						return HandleWireFormat.ResolveSerializedHandle(url, registry);
 					}
 
-					bool objectChanged = false;
 					Dictionary<string, object?> objectValue = new Dictionary<string, object?>();
 					foreach (JsonProperty property in element.EnumerateObject())
 					{
-						object? childValue = ConvertJsonElementWithHandles(property.Value, registry, out bool childChanged);
-						objectChanged |= childChanged;
-						objectValue[property.Name] = childValue;
+						objectValue[property.Name] = MaterializeJsonValue(property.Value, registry);
 					}
 
-					changed = objectChanged;
-					return objectChanged ? objectValue : element.Clone();
+					return objectValue;
 
 				case JsonValueKind.Array:
-					bool arrayChanged = false;
 					List<object?> arrayValue = new List<object?>();
 					foreach (JsonElement item in element.EnumerateArray())
 					{
-						object? childValue = ConvertJsonElementWithHandles(item, registry, out bool childChanged);
-						arrayChanged |= childChanged;
-						arrayValue.Add(childValue);
+						arrayValue.Add(MaterializeJsonValue(item, registry));
 					}
 
-					changed = arrayChanged;
-					return arrayChanged ? arrayValue : element.Clone();
+					return arrayValue;
+
+				case JsonValueKind.String:
+					return element.GetString();
+
+				case JsonValueKind.Number:
+					return element.GetDouble();
+
+				case JsonValueKind.True:
+					return true;
+
+				case JsonValueKind.False:
+					return false;
 
 				case JsonValueKind.Null:
 				case JsonValueKind.Undefined:
-					changed = false;
 					return null;
 
 				default:
-					changed = false;
-					return element.Clone();
+					throw new JsonException($"Unsupported JSON value kind '{element.ValueKind}'.");
 			}
-		}
-
-		private static bool TryReadSerializedHandleUrl(JsonElement element, out string url)
-		{
-			if (element.ValueKind == JsonValueKind.Object
-				&& element.TryGetProperty(_typePropertyName, out JsonElement typeElement)
-				&& typeElement.ValueKind == JsonValueKind.String
-				&& typeElement.GetString() == _serializedHandleTypeName
-				&& element.TryGetProperty(_serializedHandleUrlPropertyName, out JsonElement urlElement)
-				&& urlElement.ValueKind == JsonValueKind.String)
-			{
-				url = urlElement.GetString() ?? string.Empty;
-				return true;
-			}
-
-			url = string.Empty;
-			return false;
-		}
-
-		private static object ResolveSerializedFluidHandle(string url, IFluidDataObjectRegistry? registry)
-		{
-			if (registry != null)
-			{
-				IFluidDataObject? dataObject = registry.FindDataObject(url);
-				if (dataObject != null)
-				{
-					return dataObject;
-				}
-			}
-
-			return new SerializedFluidHandle(url);
-		}
-
-		private static bool TryGetHandleUrl(object value, IFluidDataObjectRegistry? registry, out string url)
-		{
-			if (value is SerializedFluidHandle serializedHandle)
-			{
-				url = serializedHandle.Url;
-				return true;
-			}
-
-			if (value is IFluidDataObject dataObject)
-			{
-				if (registry != null)
-				{
-					url = registry.GetDataObjectUrl(dataObject);
-					return true;
-				}
-
-				throw new OcsException(OcsGateErrorCode.InvalidOperation,
-					"SharedDirectory requires an IFluidDataObjectRegistry to serialize handle values.");
-			}
-
-			url = string.Empty;
-			return false;
-		}
-
-		private static Dictionary<string, object?> CreateSerializedHandleWireValue(string url)
-		{
-			return new Dictionary<string, object?>()
-			{
-				[_typePropertyName] = _serializedHandleTypeName,
-				[_serializedHandleUrlPropertyName] = url,
-			};
 		}
 
 		private static string ReadString(ref Utf8JsonReader reader, string propertyName)

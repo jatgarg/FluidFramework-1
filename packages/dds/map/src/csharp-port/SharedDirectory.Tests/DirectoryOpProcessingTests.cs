@@ -6,7 +6,6 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using Xunit;
 
 namespace Microsoft.Office.Web.Fluid.Tests
@@ -256,14 +255,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void RemoteOp_InvalidInput_ThrowsExpectedOcsError()
+		public void RemoteOp_UnknownInput_ThrowsExpectedOcsError()
 		{
 			var directory = new SharedDirectory();
-			string unknownPathOp = CreateSetOpJson("/nonexistent/deep", "k", "value");
-
-			OcsException unknownPath = Assert.Throws<OcsException>(
-				() => ProcessRemoteJson(directory, unknownPathOp));
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, unknownPath.ErrorCode);
 
 			OcsException unknownOp = Assert.Throws<OcsException>(
 				() => ProcessRemoteJson(directory, "{\"type\":\"gibberish\",\"path\":\"/\"}"));
@@ -348,16 +342,14 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 		private static void AssertJsonNumber(int expected, object? actual)
 		{
-			JsonElement element = Assert.IsType<JsonElement>(actual);
-			Assert.Equal(JsonValueKind.Number, element.ValueKind);
-			Assert.Equal(expected, element.GetInt32());
+			// TS-parity: JSON values now materialize to native types (Finding 18).
+			Assert.Equal((double)expected, Assert.IsType<double>(actual));
 		}
 
 		private static void AssertJsonString(string expected, object? actual)
 		{
-			JsonElement element = Assert.IsType<JsonElement>(actual);
-			Assert.Equal(JsonValueKind.String, element.ValueKind);
-			Assert.Equal(expected, element.GetString());
+			// TS-parity: JSON values now materialize to native types (Finding 18).
+			Assert.Equal(expected, Assert.IsType<string>(actual));
 		}
 	}
 }

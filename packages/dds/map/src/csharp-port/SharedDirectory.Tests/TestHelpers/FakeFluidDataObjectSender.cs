@@ -13,6 +13,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 		public List<(string Address, string OpTypeName, string OpJson, long ClientSeq)> Sent { get; } = new();
 
+		public string? LocalClientId { get; set; } = "local-client";
+
 		public SequenceNumber QueueDataObjectMessage(string address, string opTypeName, string opJson)
 		{
 			long clientSeq = _nextClientSeq++;

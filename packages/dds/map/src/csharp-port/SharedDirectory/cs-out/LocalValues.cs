@@ -20,25 +20,6 @@ namespace Microsoft.Office.Web.Fluid
 		object? Value { get; }
 	}
 
-	/// <summary>
-	/// Opaque handle value used when a received Fluid handle cannot be resolved
-	/// through an <see cref="IFluidDataObjectRegistry" />.
-	/// </summary>
-	public sealed class SerializedFluidHandle
-	{
-		public SerializedFluidHandle(string url)
-		{
-			Url = url ?? throw new ArgumentNullException(nameof(url));
-		}
-
-		public string Url { get; }
-
-		public override string ToString()
-		{
-			return Url;
-		}
-	}
-
 	/// <summary>Type-annotation values used in wire format ("Plain", "Shared").</summary>
 	public static class ValueType
 	{

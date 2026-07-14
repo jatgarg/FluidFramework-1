@@ -23,6 +23,18 @@ namespace Microsoft.Office.Web.Fluid
 
 		/// <summary>Child subdirectories keyed by name. Recursive.</summary>
 		public Dictionary<string, DirectorySnapshotDto> Subdirectories { get; set; } = new();
+
+		/// <summary>Subdirectory creation metadata used to identify this incarnation.</summary>
+		public DirectoryCreateInfo? CreateInfo { get; set; }
+	}
+
+	public sealed class DirectoryCreateInfo
+	{
+		/// <summary>Sequence number at which this subdirectory was created.</summary>
+		public long Csn { get; set; }
+
+		/// <summary>Client IDs that created this subdirectory incarnation.</summary>
+		public string[] CcIds { get; set; } = Array.Empty<string>();
 	}
 
 	/// <summary>C# counterpart to TS IDirectoryNewStorageFormat.</summary>
@@ -203,7 +215,57 @@ namespace Microsoft.Office.Web.Fluid
 				ReadSubdirectories(subdirectoriesElement, dto.Subdirectories, path, registry);
 			}
 
+			if (element.TryGetProperty("ci", out JsonElement createInfoElement))
+			{
+				dto.CreateInfo = ReadCreateInfo(createInfoElement, path);
+			}
+
 			return dto;
+		}
+
+		private static DirectoryCreateInfo ReadCreateInfo(JsonElement createInfoElement, string path)
+		{
+			if (createInfoElement.ValueKind != JsonValueKind.Object)
+			{
+				throw InvalidSnapshot($"Create info at {path}.ci must be a JSON object.");
+			}
+
+			if (!createInfoElement.TryGetProperty("csn", out JsonElement csnElement)
+				|| csnElement.ValueKind != JsonValueKind.Number
+				|| !csnElement.TryGetInt64(out long csn))
+			{
+				throw InvalidSnapshot($"Create info at {path}.ci must contain a numeric 'csn' field.");
+			}
+
+			string[] ccIds = Array.Empty<string>();
+			if (createInfoElement.TryGetProperty("ccIds", out JsonElement ccIdsElement))
+			{
+				if (ccIdsElement.ValueKind != JsonValueKind.Array)
+				{
+					throw InvalidSnapshot($"Create info at {path}.ci.ccIds must be an array.");
+				}
+
+				var clientIds = new List<string>();
+				int index = 0;
+				foreach (JsonElement clientIdElement in ccIdsElement.EnumerateArray())
+				{
+					if (clientIdElement.ValueKind != JsonValueKind.String)
+					{
+						throw InvalidSnapshot($"Create info client id at {path}.ci.ccIds[{index}] must be a string.");
+					}
+
+					clientIds.Add(clientIdElement.GetString() ?? string.Empty);
+					index++;
+				}
+
+				ccIds = clientIds.ToArray();
+			}
+
+			return new DirectoryCreateInfo()
+			{
+				Csn = csn,
+				CcIds = ccIds,
+			};
 		}
 
 		private static void ReadStorage(
@@ -235,18 +297,7 @@ namespace Microsoft.Office.Web.Fluid
 				object? value = null;
 				if (serializedElement.TryGetProperty("value", out JsonElement valueElement))
 				{
-					if (valueElement.ValueKind == JsonValueKind.Null)
-					{
-						value = null;
-					}
-					else if (valueElement.ValueKind == JsonValueKind.String)
-					{
-						value = valueElement.GetString();
-					}
-					else
-					{
-						value = DirectoryOpSerializer.ReadJsonValueWithHandles(valueElement, registry);
-					}
+					value = DirectoryOpSerializer.ReadJsonValueWithHandles(valueElement, registry);
 				}
 
 				storage[key] = new SerializedValue()

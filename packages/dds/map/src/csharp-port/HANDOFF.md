@@ -3,8 +3,9 @@
 > Target consumer: Word Native's C# Fluid runtime (server-side "special client").
 > The port lives in the Fluid Framework repo during development; on transfer,
 > `cs-out/*.cs` moves to `.../DocumentSessionService.Core/Fluid/` alongside
-> `FluidSharedMap.cs`. Everything under `csharp-port-common/` is throwaway shim
-> and is deleted on transfer.
+> `FluidSharedMap.cs`. Most of `csharp-port-common/` is throwaway shim and gets
+> deleted on transfer; two files (`SerializedFluidHandle.cs`,
+> `HandleWireFormat.cs`) are shared real deliverables and carry over (see §5).
 
 **Branch:** `transpiledir` (in worktree `../transpiledir`, base `microsoft/main`).
 
@@ -12,15 +13,22 @@
 
 ## 1. TL;DR
 
-- **78/78 tests passing**, 0 warnings, 0 errors.
+- **127/127 tests passing**, 0 warnings, 0 errors.
 - **API-complete** for the Word Native surface (see §4).
 - **Wire format:** POCO + `System.Text.Json`.
 - **Snapshot format:** both simple `IDirectoryDataObject` and blob-split
-  `IDirectoryNewStorageFormat` are supported on load.
+  `IDirectoryNewStorageFormat` are supported on load, including `.ci`
+  create-info round-trip for instance identity.
 - **TS parity:** pending-change model matches `directory.ts`'s per-op
   `PendingKeyLifetime` semantics; DDS-handle values use the TS
-  `{"type":"__fluid_handle__","url":"…"}` wire shape.
-- **Only deferred item:** `Dispose` lifecycle (pending confirmation from WN).
+  `{"type":"__fluid_handle__","url":"…"}` wire shape;
+  `isMessageForCurrentInstanceOfSubDirectory` filter matches TS at all 5
+  call sites; `seqDataComparator` ports TS clauses branch-for-branch.
+- **Post-review audit landed** (see `PARITY-AUDIT.md`) — 8 of 9 audit bugs
+  closed with regression tests; remaining item (legacy `Shared` value
+  migration) documented and only affects pre-2019 documents.
+- **Only major deferred item:** `Dispose` lifecycle (confirmed not needed
+  by WN for Phase 1).
 
 ---
 
@@ -28,31 +36,38 @@
 
 ```
 packages/dds/
-├── csharp-port-common/                        THROWAWAY — deleted on transfer
+├── csharp-port-common/                        MOSTLY throwaway shim
 │   ├── CsharpPortCommon.csproj
 │   ├── FluidInterfaces.cs                     IFluidDataObject / Sender / Registry etc.
 │   ├── FluidMessageTypes.cs                   fluidDataStoreMessageAttach shim
 │   ├── FluidObjectId.cs                       ID generator
-│   └── OcsException.cs                        OcsException + OcsGateErrorCode
+│   ├── OcsException.cs                        OcsException + OcsGateErrorCode
+│   ├── SerializedFluidHandle.cs               ★ CARRY-OVER — real deliverable
+│   └── HandleWireFormat.cs                    ★ CARRY-OVER — real deliverable
 │
 └── map/src/csharp-port/
     ├── README.md                              Design decisions + closed Q1-Q4
     ├── HANDOFF.md                             This file
+    ├── PARITY-AUDIT.md                        Post-review parity audit findings
     ├── SharedDirectory.sln
     ├── SharedDirectory/
     │   ├── SharedDirectory.csproj
     │   └── cs-out/                            KEEP — copies to waccobalt on transfer
     │       ├── SharedDirectory.cs             Public entry point
-    │       ├── SubDirectory.cs                Hierarchical impl + pending-change queues
+    │       ├── SubDirectory.cs                Hierarchical impl + PendingKeyLifetime + instance filter
     │       ├── Interfaces.cs                  IDirectory, ISharedDirectory, ops, events
-    │       ├── DirectoryOpSerializer.cs       JSON <-> DirectoryOperation
-    │       ├── DirectorySnapshotLoader.cs     Simple + blob-split snapshot load
+    │       ├── DirectoryOpSerializer.cs       JSON <-> DirectoryOperation (+ handle wire, native materialization)
+    │       ├── DirectorySnapshotLoader.cs     Simple + blob-split snapshot load (+ .ci)
     │       ├── LocalValues.cs                 Serializer/handle shims (wave-2 stub)
     │       └── Utils.cs                       Path helpers
-    └── SharedDirectory.Tests/                 xUnit, 67 tests, 5 files
+    └── SharedDirectory.Tests/                 xUnit, 127 tests, 10 files
+        ├── (existing feature tests)
+        ├── DirectoryInstanceFilterTests.cs    Post-review filter/identity/leak coverage
+        ├── DirectoryValueMaterializationTests.cs  Post-review Finding 18 coverage
+        └── PortedTests/                       Direct ports from TS directory.spec.ts family
 ```
 
-Total: ~2,300 LOC in `cs-out/`, ~1,000 LOC in tests.
+Total: ~2,700 LOC in `cs-out/`, ~2,300 LOC in tests.
 
 ---
 
@@ -65,7 +80,7 @@ cd packages/dds/map/src/csharp-port/SharedDirectory.Tests
 dotnet test
 ```
 
-Expected: **Passed: 78, Failed: 0**.
+Expected: **Passed: 127, Failed: 0**.
 
 ---
 
@@ -165,15 +180,20 @@ If the snapshot is blob-split and `blobResolver` is null, an `OcsException` is t
 
 **Three steps.**
 
-### Step 1 — Delete the shim
+### Step 1 — Slim the shim (don't delete outright)
+Most of `csharp-port-common/` matches host types by name/shape and can be removed. Two files are shared real deliverables — carry them over to a permanent location:
+
+**Carry over** to a shared assembly (or duplicate under `waccobalt/common/`):
+- `SerializedFluidHandle.cs` — small POCO, used on ingress when a handle URL can't be resolved to a live `IFluidDataObject`
+- `HandleWireFormat.cs` — helpers `IsHandleShape`/`ReadHandleFromShape`/`WriteHandleShape` used by op serialization
+
+**Delete** — waccobalt has real types with the same names + shapes:
 ```bash
-rm -rf packages/dds/csharp-port-common/
+rm packages/dds/csharp-port-common/{FluidInterfaces.cs,FluidMessageTypes.cs,FluidObjectId.cs,OcsException.cs,CsharpPortCommon.csproj}
 ```
-Every type it defined already exists in waccobalt: `IFluidDataObject`,
-`IFluidDataObjectSender`, `IFluidDataObjectRegistry`, `IFluidDataObjectMessageHandler`,
-`SequenceNumber`, `OpOrigin`, `SequencedDocumentMessageDescriptor`, `FluidObjectId`,
-`OcsException` + `OcsGateErrorCode`, `fluidDataStoreMessageAttach`. The port
-already uses the exact type names + shapes, so nothing changes at call sites.
+Removed types: `IFluidDataObject`, `IFluidDataObjectSender`, `IFluidDataObjectRegistry`, `IFluidDataObjectMessageHandler`, `SequenceNumber`, `OpOrigin`, `SequencedDocumentMessageDescriptor`, `FluidObjectId`, `OcsException` + `OcsGateErrorCode`, `fluidDataStoreMessageAttach`. The port already uses the exact type names + shapes, so nothing changes at call sites.
+
+Note: our `IFluidDataObjectSender` shim added a `LocalClientId` property. Waccobalt's real one may or may not expose that. If it doesn't, either extend waccobalt's or thread the client id another way (see §9 design notes).
 
 ### Step 2 — Copy `cs-out/` into waccobalt
 Move the seven files under

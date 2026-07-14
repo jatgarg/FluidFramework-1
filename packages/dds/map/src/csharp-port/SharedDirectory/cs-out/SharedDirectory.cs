@@ -16,13 +16,19 @@ namespace Microsoft.Office.Web.Fluid
 		private readonly SubDirectory _root;
 		private readonly IFluidDataObjectSender? _sender;
 		private readonly IFluidDataObjectRegistry? _registry;
+		private readonly Dictionary<long, SubDirectory> _pendingLocalOpSubdirectories = new Dictionary<long, SubDirectory>();
 
 		public SharedDirectory(string? id = null, IFluidDataObjectSender? sender = null, IFluidDataObjectRegistry? registry = null)
 		{
 			_id = id ?? FluidObjectId.CreateId();
 			_sender = sender;
 			_registry = registry;
-			_root = new SubDirectory(this, parent: null, absolutePath: "/");
+			_root = new SubDirectory(
+				this,
+				parent: null,
+				absolutePath: "/",
+				seqData: new SeqData(seq: 0, clientSeq: 0),
+				clientIds: null);
 		}
 
 		public string Id => _id;
@@ -133,65 +139,135 @@ namespace Microsoft.Office.Web.Fluid
 			return _sender.QueueDataObjectMessage(_id, GetOpTypeName(op), DirectoryOpSerializer.Serialize(op, _registry));
 		}
 
+		internal void RegisterPendingLocalOpSubDirectory(SequenceNumber seq, SubDirectory targetSubdir)
+		{
+			if (!seq.HasClientSequenceNumber)
+			{
+				return;
+			}
+
+			_pendingLocalOpSubdirectories[seq.clientSequenceNumber] = targetSubdir;
+		}
+
 		private void ProcessDirectoryOperation(SequencedDocumentMessageDescriptor descriptor, DirectoryOperation op)
 		{
-			SubDirectory target = ResolveSubDirectoryByPath(op.Path);
+			SubDirectory? localOpTargetSubdir = null;
+			bool hasLocalOpTargetSubdir = descriptor.Origin == OpOrigin.Local
+				&& TryGetPendingLocalOpSubDirectory(descriptor.Seq, out localOpTargetSubdir);
+
+			SubDirectory target;
+			if (descriptor.Origin == OpOrigin.Remote)
+			{
+				SubDirectory? remoteTarget = TryResolveSubDirectoryByPath(op.Path);
+				if (remoteTarget == null)
+				{
+					return;
+				}
+
+				target = remoteTarget;
+			}
+			else
+			{
+				try
+				{
+					target = ResolveSubDirectoryByPath(op.Path);
+				}
+				catch (OcsException) when (hasLocalOpTargetSubdir)
+				{
+					CompleteRejectedPendingLocalOp(descriptor.Seq, localOpTargetSubdir);
+					return;
+				}
+			}
 
 			if (descriptor.Origin == OpOrigin.Local)
 			{
+				bool ackAccepted;
 				switch (op)
 				{
 					case DirectorySetOperation setOp:
-						target.ProcessAckForKey(setOp.Key, descriptor.Seq);
+						ackAccepted = target.ProcessAckForKey(setOp.Key, descriptor, localOpTargetSubdir);
 						break;
 
 					case DirectoryDeleteOperation deleteOp:
-						target.ProcessAckForKey(deleteOp.Key, descriptor.Seq);
+						ackAccepted = target.ProcessAckForKey(deleteOp.Key, descriptor, localOpTargetSubdir);
 						break;
 
 					case DirectoryClearOperation:
-						target.ProcessAckForClear(descriptor.Seq);
+						ackAccepted = target.ProcessAckForClear(descriptor, localOpTargetSubdir);
 						break;
 
 					case DirectoryCreateSubDirectoryOperation createOp:
-						target.ProcessAckForSubdir(createOp.SubdirName, descriptor.Seq);
+						ackAccepted = target.ProcessAckForSubdir(createOp.SubdirName, descriptor, localOpTargetSubdir);
 						break;
 
 					case DirectoryDeleteSubDirectoryOperation deleteSubdirOp:
-						target.ProcessAckForSubdir(deleteSubdirOp.SubdirName, descriptor.Seq);
+						ackAccepted = target.ProcessAckForSubdir(deleteSubdirOp.SubdirName, descriptor, localOpTargetSubdir);
 						break;
 
 					default:
 						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unhandled op type: {op.GetType().Name}");
 				}
 
+				if (!ackAccepted)
+				{
+					CompleteRejectedPendingLocalOp(descriptor.Seq, localOpTargetSubdir);
+					return;
+				}
+
+				CompletePendingLocalOp(descriptor.Seq);
 				return;
 			}
 
 			switch (op)
 			{
 				case DirectorySetOperation setOp:
-					target.ApplyRemoteSet(setOp.Key, setOp.Value.Value);
+					target.ApplyRemoteSet(setOp.Key, setOp.Value.Value, descriptor);
 					break;
 
 				case DirectoryDeleteOperation deleteOp:
-					target.ApplyRemoteDelete(deleteOp.Key);
+					target.ApplyRemoteDelete(deleteOp.Key, descriptor);
 					break;
 
 				case DirectoryClearOperation:
-					target.ApplyRemoteClear();
+					target.ApplyRemoteClear(descriptor);
 					break;
 
 				case DirectoryCreateSubDirectoryOperation createOp:
-					target.ApplyRemoteCreateSubDirectory(createOp.SubdirName);
+					target.ApplyRemoteCreateSubDirectory(createOp.SubdirName, descriptor);
 					break;
 
 				case DirectoryDeleteSubDirectoryOperation deleteSubdirOp:
-					target.ApplyRemoteDeleteSubDirectory(deleteSubdirOp.SubdirName);
+					target.ApplyRemoteDeleteSubDirectory(deleteSubdirOp.SubdirName, descriptor);
 					break;
 
 				default:
 					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unhandled op type: {op.GetType().Name}");
+			}
+		}
+
+		private void CompleteRejectedPendingLocalOp(SequenceNumber seq, SubDirectory? targetSubdir)
+		{
+			targetSubdir?.ClearStalePendingEntry(seq);
+			CompletePendingLocalOp(seq);
+		}
+
+		private bool TryGetPendingLocalOpSubDirectory(SequenceNumber seq, out SubDirectory? targetSubdir)
+		{
+			if (seq.HasClientSequenceNumber && _pendingLocalOpSubdirectories.TryGetValue(seq.clientSequenceNumber, out SubDirectory? pendingTargetSubdir))
+			{
+				targetSubdir = pendingTargetSubdir;
+				return true;
+			}
+
+			targetSubdir = null;
+			return false;
+		}
+
+		private void CompletePendingLocalOp(SequenceNumber seq)
+		{
+			if (seq.HasClientSequenceNumber)
+			{
+				_pendingLocalOpSubdirectories.Remove(seq.clientSequenceNumber);
 			}
 		}
 
@@ -242,6 +318,29 @@ namespace Microsoft.Office.Web.Fluid
 				{
 					throw new OcsException(OcsGateErrorCode.InvalidOperation,
 						$"SharedDirectory.ResolveSubDirectoryByPath: path '{absolutePath}' does not exist (missing segment '{segment}')");
+				}
+
+				cursor = child;
+			}
+
+			return cursor;
+		}
+
+		private SubDirectory? TryResolveSubDirectoryByPath(string absolutePath)
+		{
+			if (absolutePath == "/" || absolutePath == string.Empty)
+			{
+				return _root;
+			}
+
+			string[] segments = absolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+			SubDirectory cursor = _root;
+			foreach (string segment in segments)
+			{
+				SubDirectory? child = cursor.GetSequencedSubDirectoryInternal(segment);
+				if (child == null)
+				{
+					return null;
 				}
 
 				cursor = child;

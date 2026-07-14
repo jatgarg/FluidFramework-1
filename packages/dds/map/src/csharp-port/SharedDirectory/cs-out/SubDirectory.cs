@@ -11,9 +11,23 @@ using System.Linq;
 
 namespace Microsoft.Office.Web.Fluid
 {
+	internal sealed class SeqData
+	{
+		public SeqData(long seq, long clientSeq)
+		{
+			Seq = seq;
+			ClientSeq = clientSeq;
+		}
+
+		public long Seq { get; set; }
+
+		public long ClientSeq { get; set; }
+	}
+
 	internal sealed class SubDirectory : IDirectory
 	{
 		private const long _noPending = -1;
+		internal const string DetachedClientId = "detached";
 
 		private readonly object _lock = new object();
 		private readonly SharedDirectory _root;
@@ -25,29 +39,40 @@ namespace Microsoft.Office.Web.Fluid
 		private readonly List<PendingStorageEntry> _pendingStorageData = new List<PendingStorageEntry>();
 		private readonly List<PendingSubDirectoryEntry> _pendingSubDirectoryData = new List<PendingSubDirectoryEntry>();
 		private readonly Dictionary<long, object> _pendingByClientSequenceNumber = new Dictionary<long, object>();
+		private long _localCreationSeq;
 
 		private abstract class PendingStorageEntry
 		{
+			protected PendingStorageEntry(SubDirectory subdir)
+			{
+				Subdir = subdir;
+			}
+
+			public SubDirectory Subdir { get; }
 		}
 
 		private sealed class PendingKeySet
 		{
-			public PendingKeySet(object? value, PendingKeyLifetime lifetime)
+			public PendingKeySet(object? value, PendingKeyLifetime lifetime, SubDirectory subdir)
 			{
 				Value = value;
 				Lifetime = lifetime;
+				Subdir = subdir;
 			}
 
 			public object? Value { get; }
 
 			public PendingKeyLifetime Lifetime { get; }
 
+			public SubDirectory Subdir { get; }
+
 			public long ClientSequenceNumber { get; set; } = _noPending;
 		}
 
 		private sealed class PendingKeyLifetime : PendingStorageEntry
 		{
-			public PendingKeyLifetime(string key)
+			public PendingKeyLifetime(string key, SubDirectory subdir)
+				: base(subdir)
 			{
 				Key = key;
 			}
@@ -59,7 +84,8 @@ namespace Microsoft.Office.Web.Fluid
 
 		private sealed class PendingKeyDelete : PendingStorageEntry
 		{
-			public PendingKeyDelete(string key)
+			public PendingKeyDelete(string key, SubDirectory subdir)
+				: base(subdir)
 			{
 				Key = key;
 			}
@@ -71,25 +97,33 @@ namespace Microsoft.Office.Web.Fluid
 
 		private sealed class PendingClear : PendingStorageEntry
 		{
+			public PendingClear(SubDirectory subdir)
+				: base(subdir)
+			{
+			}
+
 			public long ClientSequenceNumber { get; set; } = _noPending;
 		}
 
 		private abstract class PendingSubDirectoryEntry
 		{
-			protected PendingSubDirectoryEntry(string subdirName)
+			protected PendingSubDirectoryEntry(string subdirName, SubDirectory parentSubdir)
 			{
 				SubdirName = subdirName;
+				ParentSubdir = parentSubdir;
 			}
 
 			public string SubdirName { get; }
+
+			public SubDirectory ParentSubdir { get; }
 
 			public long ClientSequenceNumber { get; set; } = _noPending;
 		}
 
 		private sealed class PendingSubDirectoryCreate : PendingSubDirectoryEntry
 		{
-			public PendingSubDirectoryCreate(string subdirName, SubDirectory subdir)
-				: base(subdirName)
+			public PendingSubDirectoryCreate(string subdirName, SubDirectory parentSubdir, SubDirectory subdir)
+				: base(subdirName, parentSubdir)
 			{
 				Subdir = subdir;
 			}
@@ -99,8 +133,8 @@ namespace Microsoft.Office.Web.Fluid
 
 		private sealed class PendingSubDirectoryDelete : PendingSubDirectoryEntry
 		{
-			public PendingSubDirectoryDelete(string subdirName, SubDirectory subdir)
-				: base(subdirName)
+			public PendingSubDirectoryDelete(string subdirName, SubDirectory parentSubdir, SubDirectory subdir)
+				: base(subdirName, parentSubdir)
 			{
 				Subdir = subdir;
 			}
@@ -108,17 +142,28 @@ namespace Microsoft.Office.Web.Fluid
 			public SubDirectory Subdir { get; }
 		}
 
-		internal SubDirectory(SharedDirectory root, SubDirectory? parent, string absolutePath)
+		internal SubDirectory(
+			SharedDirectory root,
+			SubDirectory? parent,
+			string absolutePath,
+			SeqData seqData,
+			IEnumerable<string>? clientIds)
 		{
 			_root = root;
 			_parent = parent;
 			_absolutePath = absolutePath;
+			SeqData = seqData;
+			ClientIds = clientIds == null ? new HashSet<string>() : new HashSet<string>(clientIds);
 			_storage = new Dictionary<string, object?>();
 			_subdirs = new Dictionary<string, SubDirectory>();
 			_subdirOrder = new List<string>();
 		}
 
 		public string AbsolutePath => _absolutePath;
+
+		internal SeqData SeqData { get; }
+
+		internal HashSet<string> ClientIds { get; }
 
 		public event ValueChangedEventHandler? OnValueChanged;
 		public event SubDirectoryEventHandler? OnSubDirectoryCreated;
@@ -155,7 +200,7 @@ namespace Microsoft.Office.Web.Fluid
 				else
 				{
 					PendingKeyLifetime lifetime = GetOrCreatePendingKeyLifetimeNoLock(key);
-					PendingKeySet pendingKeySet = new PendingKeySet(value, lifetime);
+					PendingKeySet pendingKeySet = new PendingKeySet(value, lifetime, this);
 					lifetime.KeySets.Add(pendingKeySet);
 					SequenceNumber seq = SubmitSetOp(key, value);
 					RegisterPendingAckNoLock(seq, pendingKeySet);
@@ -211,7 +256,7 @@ namespace Microsoft.Office.Web.Fluid
 				}
 				else
 				{
-					PendingKeyDelete pendingKeyDelete = new PendingKeyDelete(key);
+					PendingKeyDelete pendingKeyDelete = new PendingKeyDelete(key, this);
 					_pendingStorageData.Add(pendingKeyDelete);
 					SequenceNumber seq = SubmitDeleteOp(key);
 					RegisterPendingAckNoLock(seq, pendingKeyDelete);
@@ -258,7 +303,7 @@ namespace Microsoft.Office.Web.Fluid
 				}
 				else
 				{
-					PendingClear pendingClear = new PendingClear();
+					PendingClear pendingClear = new PendingClear(this);
 					_pendingStorageData.Add(pendingClear);
 					SequenceNumber seq = SubmitClearOp();
 					RegisterPendingAckNoLock(seq, pendingClear);
@@ -336,14 +381,19 @@ namespace Microsoft.Office.Web.Fluid
 					return existingSubdir;
 				}
 
-				subdir = new SubDirectory(_root, this, MakeChildAbsolutePath(_absolutePath, subdirName));
+				subdir = new SubDirectory(
+					_root,
+					this,
+					MakeChildAbsolutePath(_absolutePath, subdirName),
+					CreateLocalSeqDataNoLock(),
+					CreateLocalClientIdsNoLock());
 				if (_root.Sender == null)
 				{
 					AddSequencedSubDirectoryNoLock(subdirName, subdir);
 				}
 				else
 				{
-					PendingSubDirectoryCreate pendingSubdirCreate = new PendingSubDirectoryCreate(subdirName, subdir);
+					PendingSubDirectoryCreate pendingSubdirCreate = new PendingSubDirectoryCreate(subdirName, this, subdir);
 					_pendingSubDirectoryData.Add(pendingSubdirCreate);
 					SequenceNumber seq = SubmitCreateSubDirectoryOp(subdirName);
 					RegisterPendingAckNoLock(seq, pendingSubdirCreate);
@@ -427,7 +477,7 @@ namespace Microsoft.Office.Web.Fluid
 				}
 				else
 				{
-					PendingSubDirectoryDelete pendingSubdirDelete = new PendingSubDirectoryDelete(subdirName, previousSubdir);
+					PendingSubDirectoryDelete pendingSubdirDelete = new PendingSubDirectoryDelete(subdirName, this, previousSubdir);
 					_pendingSubDirectoryData.Add(pendingSubdirDelete);
 					SequenceNumber seq = SubmitDeleteSubDirectoryOp(subdirName);
 					RegisterPendingAckNoLock(seq, pendingSubdirDelete);
@@ -512,10 +562,16 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		internal void ProcessAckForKey(string key, SequenceNumber seq)
+		internal bool ProcessAckForKey(string key, SequencedDocumentMessageDescriptor msg, SubDirectory? targetSubdir)
 		{
 			lock (_lock)
 			{
+				if (!IsMessageForCurrentInstanceOfSubDirectory(msg, targetSubdir))
+				{
+					return false;
+				}
+
+				SequenceNumber seq = msg.Seq;
 				ValidateAckSequenceNoLock(seq, $"SubDirectory.ProcessAckForKey: client seq is missing for key '{key}' at path '{_absolutePath}'");
 				if (!_pendingByClientSequenceNumber.TryGetValue(seq.clientSequenceNumber, out object? pending))
 				{
@@ -537,13 +593,20 @@ namespace Microsoft.Office.Web.Fluid
 				}
 
 				_pendingByClientSequenceNumber.Remove(seq.clientSequenceNumber);
+				return true;
 			}
 		}
 
-		internal void ProcessAckForSubdir(string subdirName, SequenceNumber seq)
+		internal bool ProcessAckForSubdir(string subdirName, SequencedDocumentMessageDescriptor msg, SubDirectory? targetSubdir)
 		{
 			lock (_lock)
 			{
+				if (!IsMessageForCurrentInstanceOfSubDirectory(msg, targetSubdir))
+				{
+					return false;
+				}
+
+				SequenceNumber seq = msg.Seq;
 				ValidateAckSequenceNoLock(seq, $"SubDirectory.ProcessAckForSubdir: client seq is missing for subdirectory '{subdirName}' at path '{_absolutePath}'");
 				if (!_pendingByClientSequenceNumber.TryGetValue(seq.clientSequenceNumber, out object? pending))
 				{
@@ -570,20 +633,34 @@ namespace Microsoft.Office.Web.Fluid
 					{
 						AddSequencedSubDirectoryNoLock(subdirName, pendingCreate.Subdir);
 					}
+
+					MarkCreatedSubDirectorySequencedNoLock(pendingCreate.Subdir, msg);
 				}
 				else
 				{
+					if (_subdirs.TryGetValue(subdirName, out SubDirectory? deletedSubdir))
+					{
+						deletedSubdir.ClearSubDirectorySequencedData();
+					}
+
 					RemoveSequencedSubDirectoryNoLock(subdirName);
 				}
 
 				_pendingByClientSequenceNumber.Remove(seq.clientSequenceNumber);
+				return true;
 			}
 		}
 
-		internal void ProcessAckForClear(SequenceNumber seq)
+		internal bool ProcessAckForClear(SequencedDocumentMessageDescriptor msg, SubDirectory? targetSubdir)
 		{
 			lock (_lock)
 			{
+				if (!IsMessageForCurrentInstanceOfSubDirectory(msg, targetSubdir))
+				{
+					return false;
+				}
+
+				SequenceNumber seq = msg.Seq;
 				ValidateAckSequenceNoLock(seq, $"SubDirectory.ProcessAckForClear: client seq is missing at path '{_absolutePath}'");
 				if (!_pendingByClientSequenceNumber.TryGetValue(seq.clientSequenceNumber, out object? pending))
 				{
@@ -605,14 +682,20 @@ namespace Microsoft.Office.Web.Fluid
 				_pendingStorageData.RemoveAt(0);
 				_storage.Clear();
 				_pendingByClientSequenceNumber.Remove(seq.clientSequenceNumber);
+				return true;
 			}
 		}
 
-		internal void ApplyRemoteSet(string key, object? value)
+		internal void ApplyRemoteSet(string key, object? value, SequencedDocumentMessageDescriptor msg)
 		{
 			ValueChangedEventArgs? args = null;
 			lock (_lock)
 			{
+				if (!IsMessageForCurrentInstanceOfSubDirectory(msg, targetSubdir: null))
+				{
+					return;
+				}
+
 				_storage.TryGetValue(key, out object? previous);
 				_storage[key] = value;
 				if (!HasPendingStorageEntryForKeyOrClearNoLock(key))
@@ -633,11 +716,16 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		internal void ApplyRemoteDelete(string key)
+		internal void ApplyRemoteDelete(string key, SequencedDocumentMessageDescriptor msg)
 		{
 			ValueChangedEventArgs? args = null;
 			lock (_lock)
 			{
+				if (!IsMessageForCurrentInstanceOfSubDirectory(msg, targetSubdir: null))
+				{
+					return;
+				}
+
 				if (_storage.TryGetValue(key, out object? previous))
 				{
 					_storage.Remove(key);
@@ -660,11 +748,16 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		internal void ApplyRemoteClear()
+		internal void ApplyRemoteClear(SequencedDocumentMessageDescriptor msg)
 		{
 			List<ValueChangedEventArgs> args = new List<ValueChangedEventArgs>();
 			lock (_lock)
 			{
+				if (!IsMessageForCurrentInstanceOfSubDirectory(msg, targetSubdir: null))
+				{
+					return;
+				}
+
 				List<KeyValuePair<string, object?>> previousEntries = _storage.ToList();
 				_storage.Clear();
 				if (HasPendingClearNoLock())
@@ -695,15 +788,34 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		internal void ApplyRemoteCreateSubDirectory(string subdirName)
+		internal void ApplyRemoteCreateSubDirectory(string subdirName, SequencedDocumentMessageDescriptor msg)
 		{
 			SubDirectoryEventArgs? args = null;
 			lock (_lock)
 			{
+				if (!IsMessageForCurrentInstanceOfSubDirectory(msg, targetSubdir: null))
+				{
+					return;
+				}
+
 				bool hasPending = HasPendingSubDirectoryEntryNoLock(subdirName);
+				SubDirectory? subdir = GetOptimisticSubDirectoryNoLock(subdirName);
+				if (subdir == null)
+				{
+					subdir = new SubDirectory(
+						_root,
+						this,
+						MakeChildAbsolutePath(_absolutePath, subdirName),
+						CreateRemoteSeqData(msg),
+						CreateRemoteClientIds(msg));
+				}
+				else
+				{
+					MarkCreatedSubDirectorySequencedNoLock(subdir, msg);
+				}
+
 				if (!_subdirs.ContainsKey(subdirName))
 				{
-					SubDirectory subdir = GetOptimisticSubDirectoryNoLock(subdirName) ?? new SubDirectory(_root, this, MakeChildAbsolutePath(_absolutePath, subdirName));
 					AddSequencedSubDirectoryNoLock(subdirName, subdir);
 					if (!hasPending)
 					{
@@ -723,16 +835,23 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		internal void ApplyRemoteDeleteSubDirectory(string subdirName)
+		internal void ApplyRemoteDeleteSubDirectory(string subdirName, SequencedDocumentMessageDescriptor msg)
 		{
 			SubDirectoryEventArgs? args = null;
 			lock (_lock)
 			{
+				if (!IsMessageForCurrentInstanceOfSubDirectory(msg, targetSubdir: null))
+				{
+					return;
+				}
+
 				if (!_subdirs.ContainsKey(subdirName))
 				{
 					return;
 				}
 
+				SubDirectory deletedSubdir = _subdirs[subdirName];
+				deletedSubdir.ClearSubDirectorySequencedData();
 				RemoveSequencedSubDirectoryNoLock(subdirName);
 				if (!HasPendingSubDirectoryDeleteNoLock(subdirName))
 				{
@@ -767,12 +886,18 @@ namespace Microsoft.Office.Web.Fluid
 					_storage[kvp.Key] = DirectoryOpSerializer.ResolveSerializedHandles(kvp.Value.Value, _root.Registry);
 				}
 
+				Dictionary<long, long> snapshotClientSeqByCreateSeq = new Dictionary<long, long>();
 				foreach (KeyValuePair<string, DirectorySnapshotDto> kvp in dto.Subdirectories)
 				{
 					if (!_subdirs.TryGetValue(kvp.Key, out SubDirectory? child))
 					{
 						string childPath = MakeChildAbsolutePath(_absolutePath, kvp.Key);
-						child = new SubDirectory(_root, this, childPath);
+						child = new SubDirectory(
+							_root,
+							this,
+							childPath,
+							CreateSnapshotSeqDataNoLock(kvp.Value.CreateInfo, snapshotClientSeqByCreateSeq),
+							CreateSnapshotClientIds(kvp.Value.CreateInfo));
 						AddSequencedSubDirectoryNoLock(kvp.Key, child);
 					}
 
@@ -863,6 +988,134 @@ namespace Microsoft.Office.Web.Fluid
 			}
 
 			_pendingByClientSequenceNumber.Add(clientSequenceNumber, pending);
+			_root.RegisterPendingLocalOpSubDirectory(seq, this);
+		}
+
+		internal void ClearSubDirectorySequencedData()
+		{
+			lock (_lock)
+			{
+				foreach (SubDirectory subdir in _subdirs.Values.ToList())
+				{
+					subdir.ClearSubDirectorySequencedData();
+				}
+
+				SeqData.Seq = -1;
+				SeqData.ClientSeq = -1;
+				_storage.Clear();
+				_subdirs.Clear();
+				_subdirOrder.Clear();
+				ClientIds.Clear();
+				ClientIds.Add(GetLocalClientIdOrDetached());
+			}
+		}
+
+		internal void ClearStalePendingEntry(SequenceNumber seq)
+		{
+			if (!seq.HasClientSequenceNumber)
+			{
+				return;
+			}
+
+			lock (_lock)
+			{
+				long clientSequenceNumber = seq.clientSequenceNumber;
+				if (!_pendingByClientSequenceNumber.TryGetValue(clientSequenceNumber, out object? pending))
+				{
+					return;
+				}
+
+				if (pending is PendingKeySet pendingKeySet)
+				{
+					PendingKeyLifetime lifetime = pendingKeySet.Lifetime;
+					lifetime.KeySets.Remove(pendingKeySet);
+					if (lifetime.KeySets.Count == 0)
+					{
+						_pendingStorageData.Remove(lifetime);
+					}
+				}
+				else if (pending is PendingStorageEntry pendingStorageEntry)
+				{
+					_pendingStorageData.Remove(pendingStorageEntry);
+				}
+				else if (pending is PendingSubDirectoryEntry pendingSubdirEntry)
+				{
+					_pendingSubDirectoryData.Remove(pendingSubdirEntry);
+				}
+
+				_pendingByClientSequenceNumber.Remove(clientSequenceNumber);
+			}
+		}
+
+		private bool IsMessageForCurrentInstanceOfSubDirectory(SequencedDocumentMessageDescriptor msg, SubDirectory? targetSubdir)
+		{
+			return (targetSubdir == null || ReferenceEquals(targetSubdir, this))
+				&& ((msg.HasClientId && ClientIds.Contains(msg.ClientId!))
+					|| ClientIds.Contains(DetachedClientId)
+					|| (SeqData.Seq != -1 && SeqData.Seq <= msg.RefSeq));
+		}
+
+		private SeqData CreateLocalSeqDataNoLock()
+		{
+			long seq = _root.Sender == null ? 0 : -1;
+			return new SeqData(seq, ++_localCreationSeq);
+		}
+
+		private HashSet<string> CreateLocalClientIdsNoLock()
+		{
+			return new HashSet<string>() { GetLocalClientIdOrDetached() };
+		}
+
+		private SeqData CreateRemoteSeqData(SequencedDocumentMessageDescriptor msg)
+		{
+			long clientSeq = msg.Seq.HasClientSequenceNumber ? msg.Seq.clientSequenceNumber : -1;
+			return new SeqData(msg.Seq.sequenceNumber, clientSeq);
+		}
+
+		private string GetLocalClientIdOrDetached()
+		{
+			return _root.Sender?.LocalClientId ?? DetachedClientId;
+		}
+
+		private IEnumerable<string> CreateRemoteClientIds(SequencedDocumentMessageDescriptor msg)
+		{
+			if (msg.HasClientId)
+			{
+				yield return msg.ClientId!;
+			}
+		}
+
+		private SeqData CreateSnapshotSeqDataNoLock(
+			DirectoryCreateInfo? createInfo,
+			Dictionary<long, long> snapshotClientSeqByCreateSeq)
+		{
+			if (createInfo != null && createInfo.Csn > 0)
+			{
+				snapshotClientSeqByCreateSeq.TryGetValue(createInfo.Csn, out long fakeClientSeq);
+				snapshotClientSeqByCreateSeq[createInfo.Csn] = fakeClientSeq + 1;
+				return new SeqData(createInfo.Csn, fakeClientSeq);
+			}
+
+			return new SeqData(seq: 0, clientSeq: ++_localCreationSeq);
+		}
+
+		private IEnumerable<string>? CreateSnapshotClientIds(DirectoryCreateInfo? createInfo)
+		{
+			return createInfo?.CcIds;
+		}
+
+		private void MarkCreatedSubDirectorySequencedNoLock(SubDirectory subdir, SequencedDocumentMessageDescriptor msg)
+		{
+			if (msg.HasClientId)
+			{
+				subdir.ClientIds.Add(msg.ClientId!);
+			}
+
+			if (SeqData.Seq != -1 && SeqData.Seq <= msg.Seq.sequenceNumber && subdir.SeqData.Seq == -1)
+			{
+				subdir.SeqData.Seq = msg.Seq.sequenceNumber;
+				subdir.SeqData.ClientSeq = msg.Origin == OpOrigin.Local && msg.Seq.HasClientSequenceNumber ? msg.Seq.clientSequenceNumber : -1;
+			}
 		}
 
 		private void ProcessAckForKeySetNoLock(string key, PendingKeySet pendingKeySet, long clientSequenceNumber)
@@ -1013,7 +1266,7 @@ namespace Microsoft.Office.Web.Fluid
 				return lifetime;
 			}
 
-			PendingKeyLifetime newLifetime = new PendingKeyLifetime(key);
+			PendingKeyLifetime newLifetime = new PendingKeyLifetime(key, this);
 			_pendingStorageData.Add(newLifetime);
 			return newLifetime;
 		}
@@ -1126,7 +1379,67 @@ namespace Microsoft.Office.Web.Fluid
 				}
 			}
 
-			return subdirs;
+			return subdirs.OrderBy(entry => entry.Value.SeqData, SeqDataComparer.Instance).ToList();
+		}
+
+		private sealed class SeqDataComparer : IComparer<SeqData>
+		{
+			public static readonly SeqDataComparer Instance = new SeqDataComparer();
+
+			private SeqDataComparer()
+			{
+			}
+
+			public int Compare(SeqData? a, SeqData? b)
+			{
+				if (ReferenceEquals(a, b))
+				{
+					return 0;
+				}
+
+				if (a == null)
+				{
+					return 1;
+				}
+
+				if (b == null)
+				{
+					return -1;
+				}
+
+				return SeqDataComparator(a, b);
+			}
+		}
+
+		private static int SeqDataComparator(SeqData a, SeqData b)
+		{
+			if (IsAcknowledgedOrDetached(a))
+			{
+				if (IsAcknowledgedOrDetached(b))
+				{
+					return a.Seq == b.Seq ? a.ClientSeq.CompareTo(b.ClientSeq) : a.Seq.CompareTo(b.Seq);
+				}
+				else
+				{
+					return -1;
+				}
+			}
+			else
+			{
+				if (IsAcknowledgedOrDetached(b))
+				{
+					return 1;
+				}
+				else
+				{
+					return a.Seq == b.Seq ? a.ClientSeq.CompareTo(b.ClientSeq) : a.Seq.CompareTo(b.Seq);
+				}
+			}
+		}
+
+		private static bool IsAcknowledgedOrDetached(SeqData seqData)
+		{
+			return seqData.Seq >= 0;
 		}
 
 		private PendingSubDirectoryEntry? FindLatestPendingSubDirectoryEntryNoLock(string subdirName)
