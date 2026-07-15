@@ -9,6 +9,13 @@ import { recommended } from "@fluidframework/eslint-config-fluid/flat.mts";
 const config: Linter.Config[] = [
 	...recommended,
 	{
+		// C# port work lives under src/csharp-port/ and is excluded from TS build
+		// (see tsconfig.json). Also exclude it from ESLint so shim / fixture-generator
+		// files (which use Node builtins, non-TS syntax, or bin/obj build artifacts)
+		// don't fail lint.
+		ignores: ["src/csharp-port/**"],
+	},
+	{
 		rules: {
 			"@fluid-internal/fluid/no-unchecked-record-access": "warn",
 			"@typescript-eslint/explicit-function-return-type": "warn",

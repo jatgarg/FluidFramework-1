@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "segmentCount": 1,
+  "length": 11,
+  "segments": [
+    "Hell world!"
+  ],
+  "startIndex": 0,
+  "headerMetadata": {
+    "minSequenceNumber": 2,
+    "sequenceNumber": 2,
+    "orderedChunkMetadata": [
+      {
+        "id": "header"
+      }
+    ],
+    "totalLength": 11,
+    "totalSegmentCount": 1
+  }
+}

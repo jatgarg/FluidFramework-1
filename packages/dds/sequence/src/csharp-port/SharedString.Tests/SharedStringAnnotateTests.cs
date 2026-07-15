@@ -1,0 +1,456 @@
+// -----------------------------------------------------------------------------
+// Wave 10b annotate integration tests for SharedString POC.
+// -----------------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Microsoft.Office.Web.Fluid.MergeTree;
+using Xunit;
+
+namespace Microsoft.Office.Web.Fluid.Tests
+{
+	public sealed class SharedStringAnnotateTests
+	{
+		[Fact]
+		public void AnnotateRange_SetsPropsOnSegment()
+		{
+			var sharedString = new SharedString();
+			sharedString.InsertText(0, "hello world");
+
+			sharedString.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "red",
+			});
+
+			Assert.Equal("red", Assert.IsType<string>(GetRequiredProperty(sharedString, 0, "color")));
+		}
+
+		[Fact]
+		public void AnnotateRange_MultipleProps_AllApplied()
+		{
+			var sharedString = new SharedString();
+			sharedString.InsertText(0, "hello world");
+
+			sharedString.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "red",
+				["font"] = "arial",
+				["bold"] = true,
+				["weight"] = 700,
+			});
+
+			PropertySet properties = GetRequiredProperties(sharedString, 2);
+			Assert.Equal("red", Assert.IsType<string>(properties["color"]));
+			Assert.Equal("arial", Assert.IsType<string>(properties["font"]));
+			Assert.True(Assert.IsType<bool>(properties["bold"]));
+			Assert.Equal(700, Assert.IsType<int>(properties["weight"]));
+		}
+
+		[Fact]
+		public void AnnotateRange_OverExistingProps_MergesAndOverwrites()
+		{
+			var sharedString = new SharedString();
+			sharedString.InsertText(0, "hello world");
+			sharedString.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "red",
+			});
+
+			sharedString.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "blue",
+				["bold"] = true,
+			});
+
+			PropertySet properties = GetRequiredProperties(sharedString, 1);
+			Assert.Equal("blue", Assert.IsType<string>(properties["color"]));
+			Assert.True(Assert.IsType<bool>(properties["bold"]));
+		}
+
+		[Fact]
+		public void AnnotateRange_NullValue_DeletesProperty()
+		{
+			var sharedString = new SharedString();
+			sharedString.InsertText(0, "hello world");
+			sharedString.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "red",
+			});
+
+			sharedString.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = null,
+			});
+
+			AssertNoProperty(sharedString, 1, "color");
+		}
+
+		[Fact]
+		public void AnnotateRange_SplitsSegmentsAtBoundaries()
+		{
+			MergeTree.MergeTree tree = new MergeTree.MergeTree();
+			tree.InsertSegments(
+				0,
+				new ISegment[] { new TextSegment("hello world") },
+				MergeTree.MergeTree.UnassignedSequenceNumber,
+				MergeTree.MergeTree.UnassignedSequenceNumber,
+				"client");
+
+			tree.AnnotateRange(2, 7, new PropertySet()
+			{
+				["color"] = "red",
+			}, MergeTree.MergeTree.UnassignedSequenceNumber, MergeTree.MergeTree.UnassignedSequenceNumber, "client");
+
+			List<ISegment> segments = tree.WalkAllSegments().ToList();
+			Assert.Equal(3, segments.Count);
+			Assert.Equal("he", Assert.IsType<TextSegment>(segments[0]).Text);
+			Assert.Equal("llo w", Assert.IsType<TextSegment>(segments[1]).Text);
+			Assert.Equal("orld", Assert.IsType<TextSegment>(segments[2]).Text);
+			Assert.Null(segments[0].Properties);
+			Assert.Equal("red", Assert.IsType<string>(segments[1].Properties!["color"]));
+			Assert.Null(segments[2].Properties);
+		}
+
+		[Fact]
+		public void LocalAnnotate_EmitsAnnotateOp()
+		{
+			var sender = new FakeFluidDataObjectSender();
+			var sharedString = new SharedString("shared-string", sender);
+			sharedString.InsertText(0, "hello world");
+			sender.Sent.Clear();
+
+			sharedString.AnnotateRange(2, 7, new PropertySet()
+			{
+				["color"] = "red",
+			});
+
+			var sent = Assert.Single(sender.Sent);
+			Assert.Equal("shared-string", sent.Address);
+			Assert.Equal("annotate", sent.OpTypeName);
+			MergeTreeAnnotateMsg op = Assert.IsType<MergeTreeAnnotateMsg>(
+				SharedStringOpSerializer.Deserialize(sent.OpJson));
+			Assert.Equal(2, op.Pos1);
+			Assert.Equal(7, op.Pos2);
+			Assert.NotNull(op.Props);
+			Assert.Equal("red", Assert.IsType<string>(op.Props!["color"]));
+		}
+
+		[Fact]
+		public void LocalAnnotate_WithoutSender_DoesNotEmit()
+		{
+			var sharedString = new SharedString(sender: null);
+			sharedString.InsertText(0, "hello world");
+			SequenceDeltaEventArgs? captured = null;
+			sharedString.OnSequenceDelta += (sender, args) => captured = args;
+
+			sharedString.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "red",
+			});
+
+			Assert.Equal("red", Assert.IsType<string>(GetRequiredProperty(sharedString, 0, "color")));
+			Assert.NotNull(captured);
+			Assert.Equal("annotate", captured!.OpType);
+		}
+
+		[Fact]
+		public void LocalAnnotate_FiresEventWithLocalTrue()
+		{
+			var sharedString = new SharedString();
+			sharedString.InsertText(0, "hello world");
+			var events = new List<SequenceDeltaEventArgs>();
+			sharedString.OnSequenceDelta += (sender, args) => events.Add(args);
+
+			sharedString.AnnotateRange(2, 7, new PropertySet()
+			{
+				["color"] = "red",
+			});
+
+			SequenceDeltaEventArgs captured = Assert.Single(events);
+			Assert.True(captured.Local);
+			Assert.Equal("annotate", captured.OpType);
+			Assert.Equal(2, captured.Position);
+			Assert.Equal(5, captured.Length);
+			Assert.Null(captured.Text);
+			Assert.NotNull(captured.AnnotatedProperties);
+			Assert.Equal("red", Assert.IsType<string>(captured.AnnotatedProperties!["color"]));
+		}
+
+		[Fact]
+		public void RemoteAnnotate_FiresEventWithLocalFalse()
+		{
+			SharedString sharedString = CreateSharedStringWithAckedText("hello world");
+			var events = new List<SequenceDeltaEventArgs>();
+			sharedString.OnSequenceDelta += (sender, args) => events.Add(args);
+
+			ProcessRemoteAnnotate(sharedString, 0, 5, new PropertySet()
+			{
+				["color"] = "red",
+			}, refSeq: 1, seq: 2);
+
+			SequenceDeltaEventArgs captured = Assert.Single(events);
+			Assert.False(captured.Local);
+			Assert.Equal("annotate", captured.OpType);
+			Assert.Equal(0, captured.Position);
+			Assert.Equal(5, captured.Length);
+			Assert.Null(captured.Text);
+			Assert.Equal("red", Assert.IsType<string>(GetRequiredProperty(sharedString, 0, "color")));
+		}
+
+		[Fact]
+		public void TwoClients_SequentialAnnotate_Converges()
+		{
+			var harness = new TwoClientHarness();
+			LoadInitialSharedText(harness, "hello world");
+			harness.SenderA.Sent.Clear();
+
+			harness.ClientA.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "red",
+			});
+			harness.DeliverAtoB(Assert.Single(harness.SenderA.Sent), refSeq: harness.CurrentServerSeq);
+
+			AssertConvergedText(harness.ClientA, harness.ClientB);
+			Assert.Equal("red", Assert.IsType<string>(GetRequiredProperty(harness.ClientA, 0, "color")));
+			Assert.Equal("red", Assert.IsType<string>(GetRequiredProperty(harness.ClientB, 0, "color")));
+		}
+
+		[Fact]
+		public void TwoClients_ConcurrentNonOverlappingAnnotate_Converges()
+		{
+			var harness = new TwoClientHarness();
+			LoadInitialSharedText(harness, "abcdefghij");
+			harness.SenderA.Sent.Clear();
+			harness.SenderB.Sent.Clear();
+			long refSeq = harness.CurrentServerSeq;
+
+			harness.ClientA.AnnotateRange(0, 3, new PropertySet()
+			{
+				["color"] = "red",
+			});
+			var sentA = Assert.Single(harness.SenderA.Sent);
+			harness.ClientB.AnnotateRange(5, 8, new PropertySet()
+			{
+				["bold"] = true,
+			});
+			var sentB = Assert.Single(harness.SenderB.Sent);
+
+			harness.DeliverAtoB(sentA, refSeq);
+			harness.DeliverBtoA(sentB, refSeq);
+
+			AssertConvergedText(harness.ClientA, harness.ClientB);
+			Assert.Equal("red", Assert.IsType<string>(GetRequiredProperty(harness.ClientA, 1, "color")));
+			Assert.Equal("red", Assert.IsType<string>(GetRequiredProperty(harness.ClientB, 1, "color")));
+			Assert.True(Assert.IsType<bool>(GetRequiredProperty(harness.ClientA, 6, "bold")));
+			Assert.True(Assert.IsType<bool>(GetRequiredProperty(harness.ClientB, 6, "bold")));
+		}
+
+		[Fact]
+		public void TwoClients_ConcurrentOverlappingAnnotate_LastWriteWins()
+		{
+			var harness = new TwoClientHarness();
+			LoadInitialSharedText(harness, "hello world");
+			harness.SenderA.Sent.Clear();
+			harness.SenderB.Sent.Clear();
+			long refSeq = harness.CurrentServerSeq;
+
+			harness.ClientA.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "red",
+			});
+			var sentA = Assert.Single(harness.SenderA.Sent);
+			harness.ClientB.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = "blue",
+			});
+			var sentB = Assert.Single(harness.SenderB.Sent);
+
+			harness.DeliverAtoB(sentA, refSeq);
+			harness.DeliverBtoA(sentB, refSeq);
+
+			object? colorA = GetRequiredProperty(harness.ClientA, 0, "color");
+			object? colorB = GetRequiredProperty(harness.ClientB, 0, "color");
+			AssertConvergedText(harness.ClientA, harness.ClientB);
+			Assert.Equal(colorA, colorB);
+			Assert.Equal("blue", Assert.IsType<string>(colorA));
+		}
+
+		[Fact]
+		public void LoadSnapshot_ThenAnnotate_WorksCorrectly()
+		{
+			var sharedString = new SharedString();
+			sharedString.LoadFromSnapshot(LoadSimpleHelloSnapshot());
+
+			sharedString.AnnotateRange(7, 12, new PropertySet()
+			{
+				["color"] = "green",
+			});
+
+			Assert.Equal("Hello, world!", sharedString.GetText());
+			Assert.Equal("green", Assert.IsType<string>(GetRequiredProperty(sharedString, 7, "color")));
+			AssertNoProperty(sharedString, 0, "color");
+		}
+
+		private static SharedString CreateSharedStringWithAckedText(string text)
+		{
+			var sender = new FakeFluidDataObjectSender();
+			var sharedString = new SharedString("doc", sender);
+			sharedString.InsertText(0, text);
+			ProcessLocalAck(sharedString, Assert.Single(sender.Sent), refSeq: 0, seq: 1);
+			return sharedString;
+		}
+
+		private static void LoadInitialSharedText(TwoClientHarness harness, string text)
+		{
+			harness.ClientA.InsertText(0, text);
+			harness.DeliverAtoB(Assert.Single(harness.SenderA.Sent), refSeq: 0);
+			AssertConvergedText(harness.ClientA, harness.ClientB);
+		}
+
+		private static void ProcessRemoteAnnotate(
+			SharedString sharedString,
+			int start,
+			int end,
+			PropertySet props,
+			long refSeq,
+			long seq,
+			string clientId = "remote-client")
+		{
+			string opJson = SharedStringOpSerializer.Serialize(new MergeTreeAnnotateMsg()
+			{
+				Pos1 = start,
+				Pos2 = end,
+				Props = props,
+			});
+
+			sharedString.ProcessDataObjectOp(RemoteMessage(refSeq, seq, clientId), opJson);
+		}
+
+		private static void ProcessLocalAck(
+			SharedString sharedString,
+			(string Address, string OpTypeName, string OpJson, long ClientSeq) sent,
+			long refSeq,
+			long seq)
+		{
+			sharedString.ProcessDataObjectOp(LocalAck(sent.ClientSeq, refSeq, seq), sent.OpJson);
+		}
+
+		private static SequencedDocumentMessageDescriptor RemoteMessage(
+			long refSeq,
+			long seq,
+			string clientId = "remote-client")
+		{
+			return new SequencedDocumentMessageDescriptor(
+				SequenceNumber.ForTesting(clientSeq: 0, refSeq: refSeq, seq: seq),
+				OpOrigin.Remote,
+				clientId);
+		}
+
+		private static SequencedDocumentMessageDescriptor LocalAck(long clientSeq, long refSeq, long seq)
+		{
+			return new SequencedDocumentMessageDescriptor(
+				SequenceNumber.ForTesting(clientSeq: clientSeq, refSeq: refSeq, seq: seq),
+				OpOrigin.Local);
+		}
+
+		private static SharedStringSnapshotDto LoadSimpleHelloSnapshot()
+		{
+			string fixturePath = Path.Combine(
+				AppContext.BaseDirectory,
+				"Fixtures",
+				"simple-hello.snapshot.json.txt");
+			return SharedStringSnapshotLoader.Parse(File.ReadAllText(fixturePath));
+		}
+
+		private static PropertySet GetRequiredProperties(SharedString sharedString, int position)
+		{
+			PropertySet? properties = sharedString.GetPropertiesAtPosition(position);
+			Assert.NotNull(properties);
+			return properties!;
+		}
+
+		private static object? GetRequiredProperty(SharedString sharedString, int position, string key)
+		{
+			PropertySet properties = GetRequiredProperties(sharedString, position);
+			Assert.True(properties.ContainsKey(key), $"Expected property '{key}' at position {position}.");
+			return properties[key];
+		}
+
+		private static void AssertNoProperty(SharedString sharedString, int position, string key)
+		{
+			PropertySet? properties = sharedString.GetPropertiesAtPosition(position);
+			Assert.True(properties is null || !properties.ContainsKey(key), $"Expected property '{key}' to be absent at position {position}.");
+		}
+
+		private static void AssertConvergedText(SharedString clientA, SharedString clientB)
+		{
+			string textA = clientA.GetText();
+			string textB = clientB.GetText();
+			Assert.True(
+				string.Equals(textA, textB, StringComparison.Ordinal),
+				$"Expected clients to converge. Client A: '{textA}'. Client B: '{textB}'.");
+		}
+
+		private sealed class TwoClientHarness
+		{
+			private const string _clientAId = "client-a";
+			private const string _clientBId = "client-b";
+			private long _serverSeq;
+
+			public TwoClientHarness()
+			{
+				SenderA = new FakeFluidDataObjectSender();
+				SenderB = new FakeFluidDataObjectSender();
+				ClientA = new SharedString("doc", SenderA);
+				ClientB = new SharedString("doc", SenderB);
+			}
+
+			public SharedString ClientA { get; }
+
+			public SharedString ClientB { get; }
+
+			public FakeFluidDataObjectSender SenderA { get; }
+
+			public FakeFluidDataObjectSender SenderB { get; }
+
+			public long CurrentServerSeq => _serverSeq;
+
+			public void DeliverAtoB(
+				(string Address, string OpTypeName, string OpJson, long ClientSeq) sent,
+				long refSeq)
+			{
+				Deliver(sent, fromClientId: _clientAId, from: ClientA, to: ClientB, refSeq: refSeq);
+			}
+
+			public void DeliverBtoA(
+				(string Address, string OpTypeName, string OpJson, long ClientSeq) sent,
+				long refSeq)
+			{
+				Deliver(sent, fromClientId: _clientBId, from: ClientB, to: ClientA, refSeq: refSeq);
+			}
+
+			private void Deliver(
+				(string Address, string OpTypeName, string OpJson, long ClientSeq) sent,
+				string fromClientId,
+				SharedString from,
+				SharedString to,
+				long refSeq)
+			{
+				long serverSeq = ++_serverSeq;
+				var descriptorForTo = new SequencedDocumentMessageDescriptor(
+					SequenceNumber.ForTesting(clientSeq: sent.ClientSeq, refSeq: refSeq, seq: serverSeq),
+					OpOrigin.Remote,
+					fromClientId);
+				to.ProcessDataObjectOp(descriptorForTo, sent.OpJson);
+
+				var descriptorForFrom = new SequencedDocumentMessageDescriptor(
+					SequenceNumber.ForTesting(clientSeq: sent.ClientSeq, refSeq: refSeq, seq: serverSeq),
+					OpOrigin.Local,
+					fromClientId);
+				from.ProcessDataObjectOp(descriptorForFrom, sent.OpJson);
+			}
+		}
+	}
+}
