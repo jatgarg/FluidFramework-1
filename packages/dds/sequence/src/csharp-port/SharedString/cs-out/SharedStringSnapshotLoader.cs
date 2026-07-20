@@ -506,15 +506,14 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (totalLength is null
 				|| totalSegmentCount is null
-				|| sequenceNumber is null
-				|| minSequenceNumber is null)
+				|| sequenceNumber is null)
 			{
 				throw InvalidSnapshot($"Legacy SharedString snapshot header metadata at {path} is incomplete.");
 			}
 
 			SharedStringSnapshotHeaderMetadata metadata = new()
 			{
-				MinSequenceNumber = minSequenceNumber.Value,
+				MinSequenceNumber = minSequenceNumber ?? sequenceNumber.Value,
 				SequenceNumber = sequenceNumber.Value,
 				TotalLength = totalLength.Value,
 				TotalSegmentCount = totalSegmentCount.Value,
@@ -884,10 +883,11 @@ namespace Microsoft.Office.Web.Fluid
 				throw InvalidSnapshot($"Header metadata at {path} must be a JSON object.");
 			}
 
+			long sequenceNumber = ReadRequiredLongProperty(element, "sequenceNumber", path);
 			var metadata = new SharedStringSnapshotHeaderMetadata()
 			{
-				MinSequenceNumber = ReadRequiredLongProperty(element, "minSequenceNumber", path),
-				SequenceNumber = ReadRequiredLongProperty(element, "sequenceNumber", path),
+				MinSequenceNumber = ReadOptionalLongProperty(element, "minSequenceNumber", path) ?? sequenceNumber,
+				SequenceNumber = sequenceNumber,
 				TotalLength = ReadRequiredIntProperty(element, "totalLength", path),
 				TotalSegmentCount = ReadRequiredIntProperty(element, "totalSegmentCount", path),
 			};
