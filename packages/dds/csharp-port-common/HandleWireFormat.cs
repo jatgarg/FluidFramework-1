@@ -18,22 +18,34 @@ namespace Microsoft.Office.Web.Fluid
 		public const string SerializedHandleTypeName = "__fluid_handle__";
 		public const string UrlPropertyName = "url";
 
+		/// <summary>
+		/// Name of the optional <c>payloadPending</c> property on <c>ISerializedHandle</c>.
+		/// TS writes it only when <c>true</c>; omitted otherwise (matches
+		/// <c>encodeHandleForSerialization</c> in <c>runtime-utils/src/handles.ts</c>).
+		/// </summary>
+		public const string PayloadPendingPropertyName = "payloadPending";
+
 		public static bool IsHandleShape(JsonElement element)
 		{
-			return TryReadHandleUrl(element, out _);
+			return TryReadHandleUrl(element, out _, out _);
 		}
 
 		public static object ReadHandleFromShape(JsonElement element, IFluidDataObjectRegistry? registry)
 		{
-			if (!TryReadHandleUrl(element, out string url))
+			if (!TryReadHandleUrl(element, out string url, out bool payloadPending))
 			{
 				throw new JsonException("Expected Fluid handle JSON object.");
 			}
 
-			return ResolveSerializedHandle(url, registry);
+			return ResolveSerializedHandle(url, registry, payloadPending);
 		}
 
 		public static void WriteHandleShape(Utf8JsonWriter writer, string url)
+		{
+			WriteHandleShape(writer, url, payloadPending: false);
+		}
+
+		public static void WriteHandleShape(Utf8JsonWriter writer, string url, bool payloadPending)
 		{
 			ArgumentNullException.ThrowIfNull(writer);
 			ArgumentNullException.ThrowIfNull(url);
@@ -41,6 +53,11 @@ namespace Microsoft.Office.Web.Fluid
 			writer.WriteStartObject();
 			writer.WriteString(TypePropertyName, SerializedHandleTypeName);
 			writer.WriteString(UrlPropertyName, url);
+			if (payloadPending)
+			{
+				writer.WriteBoolean(PayloadPendingPropertyName, true);
+			}
+
 			writer.WriteEndObject();
 		}
 
@@ -54,9 +71,9 @@ namespace Microsoft.Office.Web.Fluid
 				return null;
 			}
 
-			if (TryGetHandleUrl(value, registry, missingRegistryMessage, out string handleUrl))
+			if (TryGetHandleUrl(value, registry, missingRegistryMessage, out string handleUrl, out bool payloadPending))
 			{
-				return CreateSerializedHandleWireValue(handleUrl);
+				return CreateSerializedHandleWireValue(handleUrl, payloadPending);
 			}
 
 			if (value is JsonElement)
@@ -117,7 +134,7 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (value is SerializedFluidHandle serializedHandle)
 			{
-				return ResolveSerializedHandle(serializedHandle.Url, registry);
+				return ResolveSerializedHandle(serializedHandle.Url, registry, serializedHandle.PayloadPending);
 			}
 
 			if (value is JsonElement element)
@@ -166,6 +183,11 @@ namespace Microsoft.Office.Web.Fluid
 
 		public static bool TryReadHandleUrl(JsonElement element, out string url)
 		{
+			return TryReadHandleUrl(element, out url, out _);
+		}
+
+		public static bool TryReadHandleUrl(JsonElement element, out string url, out bool payloadPending)
+		{
 			if (element.ValueKind == JsonValueKind.Object
 				&& element.TryGetProperty(TypePropertyName, out JsonElement typeElement)
 				&& typeElement.ValueKind == JsonValueKind.String
@@ -174,14 +196,22 @@ namespace Microsoft.Office.Web.Fluid
 				&& urlElement.ValueKind == JsonValueKind.String)
 			{
 				url = urlElement.GetString() ?? string.Empty;
+				payloadPending = element.TryGetProperty(PayloadPendingPropertyName, out JsonElement payloadPendingElement)
+					&& payloadPendingElement.ValueKind == JsonValueKind.True;
 				return true;
 			}
 
 			url = string.Empty;
+			payloadPending = false;
 			return false;
 		}
 
 		public static object ResolveSerializedHandle(string url, IFluidDataObjectRegistry? registry)
+		{
+			return ResolveSerializedHandle(url, registry, payloadPending: false);
+		}
+
+		public static object ResolveSerializedHandle(string url, IFluidDataObjectRegistry? registry, bool payloadPending)
 		{
 			if (registry != null)
 			{
@@ -192,7 +222,7 @@ namespace Microsoft.Office.Web.Fluid
 				}
 			}
 
-			return new SerializedFluidHandle(url);
+			return new SerializedFluidHandle(url, payloadPending);
 		}
 
 		public static bool TryGetHandleUrl(
@@ -201,9 +231,20 @@ namespace Microsoft.Office.Web.Fluid
 			string missingRegistryMessage,
 			out string url)
 		{
+			return TryGetHandleUrl(value, registry, missingRegistryMessage, out url, out _);
+		}
+
+		public static bool TryGetHandleUrl(
+			object value,
+			IFluidDataObjectRegistry? registry,
+			string missingRegistryMessage,
+			out string url,
+			out bool payloadPending)
+		{
 			if (value is SerializedFluidHandle serializedHandle)
 			{
 				url = serializedHandle.Url;
+				payloadPending = serializedHandle.PayloadPending;
 				return true;
 			}
 
@@ -212,6 +253,9 @@ namespace Microsoft.Office.Web.Fluid
 				if (registry != null)
 				{
 					url = registry.GetDataObjectUrl(dataObject);
+					// Live registry-resolved handles have their payload already; TS omits
+					// payloadPending in encodeHandleForSerialization's non-pending branch.
+					payloadPending = false;
 					return true;
 				}
 
@@ -219,16 +263,29 @@ namespace Microsoft.Office.Web.Fluid
 			}
 
 			url = string.Empty;
+			payloadPending = false;
 			return false;
 		}
 
 		public static Dictionary<string, object?> CreateSerializedHandleWireValue(string url)
 		{
-			return new Dictionary<string, object?>()
+			return CreateSerializedHandleWireValue(url, payloadPending: false);
+		}
+
+		public static Dictionary<string, object?> CreateSerializedHandleWireValue(string url, bool payloadPending)
+		{
+			Dictionary<string, object?> wireValue = new Dictionary<string, object?>()
 			{
 				[TypePropertyName] = SerializedHandleTypeName,
 				[UrlPropertyName] = url,
 			};
+
+			if (payloadPending)
+			{
+				wireValue[PayloadPendingPropertyName] = true;
+			}
+
+			return wireValue;
 		}
 
 		private static object? ConvertJsonElementWithHandles(JsonElement element, IFluidDataObjectRegistry? registry, out bool changed)
@@ -236,10 +293,10 @@ namespace Microsoft.Office.Web.Fluid
 			switch (element.ValueKind)
 			{
 				case JsonValueKind.Object:
-					if (TryReadHandleUrl(element, out string url))
+					if (TryReadHandleUrl(element, out string url, out bool payloadPending))
 					{
 						changed = true;
-						return ResolveSerializedHandle(url, registry);
+						return ResolveSerializedHandle(url, registry, payloadPending);
 					}
 
 					bool objectChanged = false;

@@ -344,6 +344,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.NotNull(captured);
 			Assert.Equal("foo", captured!.SubdirName);
 			Assert.Equal("/", captured.ParentPath);
+			// TS ref: directory.ts emits (relativePath, local, target) where relativePath
+			// is the subdir name at the raising SubDirectory. Path mirrors that argument.
+			Assert.Equal("foo", captured.Path);
 		}
 
 		[Fact]
@@ -375,6 +378,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.NotNull(captured);
 			Assert.Equal("foo", captured!.SubdirName);
 			Assert.Equal("/", captured.ParentPath);
+			Assert.Equal("foo", captured.Path);
 		}
 
 		// TODO(w2c): op processing coverage lives in DirectoryOpProcessingTests.cs.

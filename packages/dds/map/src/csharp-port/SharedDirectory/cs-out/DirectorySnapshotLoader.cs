@@ -18,8 +18,8 @@ namespace Microsoft.Office.Web.Fluid
 {
 	public sealed class DirectorySnapshotDto
 	{
-		/// <summary>Key-value pairs at this directory level. Value is ISerializableValue-style snapshot data.</summary>
-		public Dictionary<string, SerializedValue> Storage { get; set; } = new();
+		/// <summary>Key-value pairs at this directory level. Value is TS ISerializableValue-style snapshot data.</summary>
+		public Dictionary<string, SerializableValue> Storage { get; set; } = new();
 
 		/// <summary>Child subdirectories keyed by name. Recursive.</summary>
 		public Dictionary<string, DirectorySnapshotDto> Subdirectories { get; set; } = new();
@@ -165,7 +165,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			// Matches TS loadCore's sequential populate(...) calls: every fragment merges
 			// into the same root and later storage values override earlier ones.
-			foreach (KeyValuePair<string, SerializedValue> kvp in source.Storage)
+			foreach (KeyValuePair<string, SerializableValue> kvp in source.Storage)
 			{
 				target.Storage[kvp.Key] = kvp.Value;
 			}
@@ -237,40 +237,41 @@ namespace Microsoft.Office.Web.Fluid
 				throw InvalidSnapshot($"Create info at {path}.ci must contain a numeric 'csn' field.");
 			}
 
-			string[] ccIds = Array.Empty<string>();
-			if (createInfoElement.TryGetProperty("ccIds", out JsonElement ccIdsElement))
+			// TS ICreateInfo.ccIds is required. Reject missing rather than defaulting to
+			// an empty array (see packages/dds/map/src/directory.ts).
+			if (!createInfoElement.TryGetProperty("ccIds", out JsonElement ccIdsElement))
 			{
-				if (ccIdsElement.ValueKind != JsonValueKind.Array)
+				throw InvalidSnapshot($"Create info at {path}.ci must contain a 'ccIds' array.");
+			}
+
+			if (ccIdsElement.ValueKind != JsonValueKind.Array)
+			{
+				throw InvalidSnapshot($"Create info at {path}.ci.ccIds must be an array.");
+			}
+
+			var clientIds = new List<string>();
+			int index = 0;
+			foreach (JsonElement clientIdElement in ccIdsElement.EnumerateArray())
+			{
+				if (clientIdElement.ValueKind != JsonValueKind.String)
 				{
-					throw InvalidSnapshot($"Create info at {path}.ci.ccIds must be an array.");
+					throw InvalidSnapshot($"Create info client id at {path}.ci.ccIds[{index}] must be a string.");
 				}
 
-				var clientIds = new List<string>();
-				int index = 0;
-				foreach (JsonElement clientIdElement in ccIdsElement.EnumerateArray())
-				{
-					if (clientIdElement.ValueKind != JsonValueKind.String)
-					{
-						throw InvalidSnapshot($"Create info client id at {path}.ci.ccIds[{index}] must be a string.");
-					}
-
-					clientIds.Add(clientIdElement.GetString() ?? string.Empty);
-					index++;
-				}
-
-				ccIds = clientIds.ToArray();
+				clientIds.Add(clientIdElement.GetString() ?? string.Empty);
+				index++;
 			}
 
 			return new DirectoryCreateInfo()
 			{
 				Csn = csn,
-				CcIds = ccIds,
+				CcIds = clientIds.ToArray(),
 			};
 		}
 
 		private static void ReadStorage(
 			JsonElement storageElement,
-			Dictionary<string, SerializedValue> storage,
+			Dictionary<string, SerializableValue> storage,
 			string path,
 			IFluidDataObjectRegistry? registry)
 		{
@@ -300,7 +301,7 @@ namespace Microsoft.Office.Web.Fluid
 					value = DirectoryOpSerializer.ReadJsonValueWithHandles(valueElement, registry);
 				}
 
-				storage[key] = new SerializedValue()
+				storage[key] = new SerializableValue()
 				{
 					Type = typeElement.GetString() ?? string.Empty,
 					Value = value,

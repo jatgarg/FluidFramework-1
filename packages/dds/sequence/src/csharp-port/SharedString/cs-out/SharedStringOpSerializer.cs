@@ -1682,9 +1682,9 @@ namespace Microsoft.Office.Web.Fluid
 		private static object? ReadJsonObjectValue(ref Utf8JsonReader reader, IFluidDataObjectRegistry? registry)
 		{
 			MergeTree.PropertySet properties = ReadPropertySet(ref reader, "object", registry);
-			if (TryReadHandleUrl(properties, out string url))
+			if (TryReadHandleUrl(properties, out string url, out bool payloadPending))
 			{
-				return HandleWireFormat.ResolveSerializedHandle(url, registry);
+				return HandleWireFormat.ResolveSerializedHandle(url, registry, payloadPending);
 			}
 
 			return properties;
@@ -1712,7 +1712,7 @@ namespace Microsoft.Office.Web.Fluid
 			throw new JsonException("Unexpected end of JSON array.");
 		}
 
-		private static bool TryReadHandleUrl(IReadOnlyDictionary<string, object?> properties, out string url)
+		private static bool TryReadHandleUrl(IReadOnlyDictionary<string, object?> properties, out string url, out bool payloadPending)
 		{
 			if (properties.TryGetValue(HandleWireFormat.TypePropertyName, out object? typeValue)
 				&& typeValue is string typeString
@@ -1721,10 +1721,16 @@ namespace Microsoft.Office.Web.Fluid
 				&& urlValue is string urlString)
 			{
 				url = urlString;
+				// TS ISerializedHandle.payloadPending is optional and only set to true; treat
+				// any other shape (missing / false / non-bool) as "not pending".
+				payloadPending = properties.TryGetValue(HandleWireFormat.PayloadPendingPropertyName, out object? pendingValue)
+					&& pendingValue is bool pendingBool
+					&& pendingBool;
 				return true;
 			}
 
 			url = string.Empty;
+			payloadPending = false;
 			return false;
 		}
 

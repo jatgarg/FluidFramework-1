@@ -53,12 +53,23 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Parse_UnknownTopLevelField_IgnoresField()
 		{
-			const string json = "{\"storage\":{},\"ci\":{\"csn\":42}}";
+			const string json = "{\"storage\":{},\"ci\":{\"csn\":42,\"ccIds\":[\"c1\"]}}";
 
 			DirectorySnapshotDto dto = DirectorySnapshotLoader.Parse(json);
 
 			Assert.Empty(dto.Storage);
 			Assert.Empty(dto.Subdirectories);
+		}
+
+		[Fact]
+		public void Parse_CreateInfo_MissingCcIds_Throws()
+		{
+			// TS ICreateInfo requires ccIds (packages/dds/map/src/directory.ts).
+			const string json = "{\"storage\":{},\"ci\":{\"csn\":42}}";
+
+			OcsException exception = Assert.Throws<OcsException>(() => DirectorySnapshotLoader.Parse(json));
+
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 		}
 
 		[Fact]

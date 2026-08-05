@@ -134,5 +134,77 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
 		}
+
+		// -----------------------------------------------------------------
+		// Strict-deserialization regression tests.
+		// TS ref: packages/dds/map/src/directory.ts — IDirectorySetOperation,
+		// IDirectoryDeleteOperation, IDirectoryClearOperation,
+		// IDirectoryCreateSubDirectoryOperation, IDirectoryDeleteSubDirectoryOperation.
+		// All fields on those interfaces are required; the C# deserializer must
+		// reject wire ops missing them rather than defaulting to "".
+		// -----------------------------------------------------------------
+
+		[Fact]
+		public void Deserialize_MissingType_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"path\":\"/\",\"key\":\"k\",\"value\":{\"type\":\"Plain\",\"value\":1}}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
+
+		[Fact]
+		public void Deserialize_MissingPath_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"set\",\"key\":\"k\",\"value\":{\"type\":\"Plain\",\"value\":1}}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
+
+		[Fact]
+		public void Deserialize_SetOp_MissingKey_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"set\",\"path\":\"/\",\"value\":{\"type\":\"Plain\",\"value\":1}}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
+
+		[Fact]
+		public void Deserialize_SetOp_MissingValue_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"set\",\"path\":\"/\",\"key\":\"k\"}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
+
+		[Fact]
+		public void Deserialize_SetOp_ValueMissingType_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"set\",\"path\":\"/\",\"key\":\"k\",\"value\":{\"value\":1}}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
+
+		[Fact]
+		public void Deserialize_DeleteOp_MissingKey_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"delete\",\"path\":\"/\"}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
+
+		[Fact]
+		public void Deserialize_CreateSubDirectoryOp_MissingSubdirName_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"createSubDirectory\",\"path\":\"/\"}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
+
+		[Fact]
+		public void Deserialize_DeleteSubDirectoryOp_MissingSubdirName_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"deleteSubDirectory\",\"path\":\"/\"}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
+
+		[Fact]
+		public void Deserialize_ClearOp_MissingPath_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"clear\"}"));
+			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+		}
 	}
 }

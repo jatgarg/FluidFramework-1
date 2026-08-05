@@ -256,5 +256,56 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				return _urlsByObject[obj];
 			}
 		}
+
+		// -----------------------------------------------------------------
+		// payloadPending regression tests
+		// TS ref: runtime-utils/src/handles.ts encodeHandleForSerialization,
+		// which emits `payloadPending: true` only for pending-payload handles
+		// and omits the field entirely otherwise.
+		// -----------------------------------------------------------------
+
+		[Fact]
+		public void RemoteSet_HandleWire_WithPayloadPending_PreservesFlagOnSerializedHandle()
+		{
+			var directory = new SharedDirectory();
+			const string json = "{\"type\":\"set\",\"path\":\"/\",\"key\":\"k\",\"value\":{\"type\":\"Plain\",\"value\":{\"type\":\"__fluid_handle__\",\"url\":\"/pending\",\"payloadPending\":true}}}";
+
+			directory.ProcessDataObjectOp(RemoteMessage(), json);
+
+			SerializedFluidHandle handle = Assert.IsType<SerializedFluidHandle>(directory.Get("k"));
+			Assert.Equal("/pending", handle.Url);
+			Assert.True(handle.PayloadPending);
+		}
+
+		[Fact]
+		public void LocalSet_SerializedFluidHandleWithPayloadPending_EmitsPayloadPendingOnWire()
+		{
+			var sender = new FakeFluidDataObjectSender();
+			var directory = new SharedDirectory("dir", sender);
+
+			directory.Set("k", new SerializedFluidHandle("/pending", payloadPending: true));
+
+			var sent = Assert.Single(sender.Sent);
+			using JsonDocument document = JsonDocument.Parse(sent.OpJson);
+			JsonElement handleWire = document.RootElement.GetProperty("value").GetProperty("value");
+			Assert.Equal("__fluid_handle__", handleWire.GetProperty("type").GetString());
+			Assert.Equal("/pending", handleWire.GetProperty("url").GetString());
+			Assert.True(handleWire.GetProperty("payloadPending").GetBoolean());
+		}
+
+		[Fact]
+		public void LocalSet_SerializedFluidHandleWithoutPayloadPending_OmitsPayloadPendingOnWire()
+		{
+			var sender = new FakeFluidDataObjectSender();
+			var directory = new SharedDirectory("dir", sender);
+
+			directory.Set("k", new SerializedFluidHandle("/shared"));
+
+			var sent = Assert.Single(sender.Sent);
+			using JsonDocument document = JsonDocument.Parse(sent.OpJson);
+			JsonElement handleWire = document.RootElement.GetProperty("value").GetProperty("value");
+			// TS omits `payloadPending` entirely when the handle is not pending.
+			Assert.False(handleWire.TryGetProperty("payloadPending", out _));
+		}
 	}
 }

@@ -133,16 +133,17 @@ namespace Microsoft.Office.Web.Fluid
 			}
 
 			string? typeString = null;
-			string path = string.Empty;
-			string key = string.Empty;
-			string subdirName = string.Empty;
+			string? path = null;
+			string? key = null;
+			string? subdirName = null;
 			SerializableValue? value = null;
+			bool valueSeen = false;
 
 			while (reader.Read())
 			{
 				if (reader.TokenType == JsonTokenType.EndObject)
 				{
-					return CreateOperation(typeString, path, key, value, subdirName);
+					return CreateOperation(typeString, path, key, value, valueSeen, subdirName);
 				}
 
 				if (reader.TokenType != JsonTokenType.PropertyName)
@@ -172,6 +173,7 @@ namespace Microsoft.Office.Web.Fluid
 
 					case _valuePropertyName:
 						value = ReadSerializableValue(ref reader, registry);
+						valueSeen = true;
 						break;
 
 					case _subdirNamePropertyName:
@@ -187,19 +189,45 @@ namespace Microsoft.Office.Web.Fluid
 			throw new JsonException("Unexpected end of directory operation JSON object.");
 		}
 
-		private static DirectoryOperation CreateOperation(string? typeString, string path, string key, SerializableValue? value, string subdirName)
+		private static DirectoryOperation CreateOperation(string? typeString, string? path, string? key, SerializableValue? value, bool valueSeen, string? subdirName)
 		{
+			if (typeString == null)
+			{
+				throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory operation is missing required 'type' field.");
+			}
+
+			if (path == null)
+			{
+				throw new OcsException(OcsGateErrorCode.UnknownOp, $"Directory '{typeString}' operation is missing required 'path' field.");
+			}
+
 			switch (typeString)
 			{
 				case _setTypeName:
+					if (key == null)
+					{
+						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'set' operation is missing required 'key' field.");
+					}
+
+					if (!valueSeen)
+					{
+						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'set' operation is missing required 'value' field.");
+					}
+
 					return new DirectorySetOperation()
 					{
 						Path = path,
 						Key = key,
-						Value = value ?? new SerializableValue(),
+						// value != null is guaranteed once valueSeen is true; ReadSerializableValue never returns null.
+						Value = value!,
 					};
 
 				case _deleteTypeName:
+					if (key == null)
+					{
+						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'delete' operation is missing required 'key' field.");
+					}
+
 					return new DirectoryDeleteOperation()
 					{
 						Path = path,
@@ -213,6 +241,11 @@ namespace Microsoft.Office.Web.Fluid
 					};
 
 				case _createSubDirectoryTypeName:
+					if (subdirName == null)
+					{
+						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'createSubDirectory' operation is missing required 'subdirName' field.");
+					}
+
 					return new DirectoryCreateSubDirectoryOperation()
 					{
 						Path = path,
@@ -220,6 +253,11 @@ namespace Microsoft.Office.Web.Fluid
 					};
 
 				case _deleteSubDirectoryTypeName:
+					if (subdirName == null)
+					{
+						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'deleteSubDirectory' operation is missing required 'subdirName' field.");
+					}
+
 					return new DirectoryDeleteSubDirectoryOperation()
 					{
 						Path = path,
@@ -249,13 +287,19 @@ namespace Microsoft.Office.Web.Fluid
 				throw new JsonException("Expected serializable value JSON object.");
 			}
 
-			string type = string.Empty;
+			string? type = null;
 			object? value = null;
 
 			while (reader.Read())
 			{
 				if (reader.TokenType == JsonTokenType.EndObject)
 				{
+					if (type == null)
+					{
+						// TS ISerializableValue.type is required (see internalInterfaces.ts).
+						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory serializable value is missing required 'type' field.");
+					}
+
 					return new SerializableValue()
 					{
 						Type = type,
@@ -367,9 +411,9 @@ namespace Microsoft.Office.Web.Fluid
 			switch (element.ValueKind)
 			{
 				case JsonValueKind.Object:
-					if (HandleWireFormat.TryReadHandleUrl(element, out string url))
+					if (HandleWireFormat.TryReadHandleUrl(element, out string url, out bool payloadPending))
 					{
-						return HandleWireFormat.ResolveSerializedHandle(url, registry);
+						return HandleWireFormat.ResolveSerializedHandle(url, registry, payloadPending);
 					}
 
 					Dictionary<string, object?> objectValue = new Dictionary<string, object?>();

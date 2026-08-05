@@ -32,9 +32,9 @@ namespace Microsoft.Office.Web.Fluid
 		/// <summary>
 		/// Convert a value to its serialized form, i.e. to be used in ops and summaries.
 		/// </summary>
-		public static SerializedValue SerializeValue(object? value, IFluidDataObjectRegistry? registry = null)
+		public static SerializableValue SerializeValue(object? value, IFluidDataObjectRegistry? registry = null)
 		{
-			return new SerializedValue()
+			return new SerializableValue()
 			{
 				Type = ValueType.Plain,
 				Value = DirectoryOpSerializer.MakeHandlesSerializable(value, registry),

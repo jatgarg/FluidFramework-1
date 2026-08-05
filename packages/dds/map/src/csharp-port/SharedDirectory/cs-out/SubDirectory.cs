@@ -403,6 +403,7 @@ namespace Microsoft.Office.Web.Fluid
 				{
 					SubdirName = subdirName,
 					ParentPath = _absolutePath,
+					Path = subdirName,
 					Local = true,
 				};
 			}
@@ -487,6 +488,7 @@ namespace Microsoft.Office.Web.Fluid
 				{
 					SubdirName = subdirName,
 					ParentPath = _absolutePath,
+					Path = subdirName,
 					Local = true,
 				};
 			}
@@ -823,6 +825,7 @@ namespace Microsoft.Office.Web.Fluid
 						{
 							SubdirName = subdirName,
 							ParentPath = _absolutePath,
+							Path = subdirName,
 							Local = false,
 						};
 					}
@@ -859,6 +862,7 @@ namespace Microsoft.Office.Web.Fluid
 					{
 						SubdirName = subdirName,
 						ParentPath = _absolutePath,
+						Path = subdirName,
 						Local = false,
 					};
 				}
@@ -881,7 +885,7 @@ namespace Microsoft.Office.Web.Fluid
 			{
 				// Snapshot population intentionally merges into the existing tree so
 				// blob-split fragments behave like TS's sequential populate(...) calls.
-				foreach (KeyValuePair<string, SerializedValue> kvp in dto.Storage)
+				foreach (KeyValuePair<string, SerializableValue> kvp in dto.Storage)
 				{
 					_storage[kvp.Key] = DirectoryOpSerializer.ResolveSerializedHandles(kvp.Value.Value, _root.Registry);
 				}

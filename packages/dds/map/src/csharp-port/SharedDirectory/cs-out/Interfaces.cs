@@ -62,6 +62,14 @@ namespace Microsoft.Office.Web.Fluid
 		public string ParentPath { get; set; } = string.Empty; // absolute path of parent
 
 		/// <summary>
+		/// Relative path of the affected subdirectory, matching the first argument
+		/// of the TS <c>subDirectoryCreated</c> / <c>subDirectoryDeleted</c> event
+		/// (see <c>directory.ts</c>). At the emission site this equals
+		/// <see cref="SubdirName"/>; TS re-emits joined paths as events bubble up.
+		/// </summary>
+		public string Path { get; set; } = string.Empty;
+
+		/// <summary>
 		/// True if this change was caused by a local mutation; false if it was applied from a remote op.
 		/// </summary>
 		public bool Local { get; set; }
@@ -224,6 +232,12 @@ namespace Microsoft.Office.Web.Fluid
 	/// <summary>
 	/// The ready-for-serialization format of values contained in DDS contents.
 	/// </summary>
+	/// <remarks>
+	/// Mirrors TS <c>ISerializableValue</c> in
+	/// <c>packages/dds/map/src/internalInterfaces.ts</c>. Used both for op values
+	/// and for entries in the snapshot's <c>storage</c> map (TS
+	/// <c>IDirectoryDataObject.storage: Record&lt;string, ISerializableValue&gt;</c>).
+	/// </remarks>
 	public class SerializableValue
 	{
 		/// <summary>
@@ -234,23 +248,6 @@ namespace Microsoft.Office.Web.Fluid
 		/// <summary>
 		/// The JSONable representation of the value.
 		/// </summary>
-		public object? Value { get; set; }
-	}
-
-	/// <summary>
-	/// Serialized SerializableValue counterpart.
-	/// </summary>
-	public class SerializedValue
-	{
-		/// <summary>
-		/// A type annotation to help indicate how the value serializes.
-		/// </summary>
-		public string Type { get; set; } = string.Empty;
-
-		/// <summary>
-		/// Snapshot representation of the value.
-		/// </summary>
-		/// <remarks>Will be null if the original value was undefined.</remarks>
 		public object? Value { get; set; }
 	}
 
