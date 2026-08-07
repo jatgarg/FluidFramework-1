@@ -59,14 +59,14 @@ namespace Microsoft.Office.Web.Fluid
 			Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
 		};
 
-		public static string Serialize(MergeTree.IMergeTreeOp op, IFluidDataObjectRegistry? registry = null)
+		public static string Serialize(MergeTree.IMergeTreeOp op, IFluidDataObjectRegistry? registry = null, long? currentSequenceNumber = null)
 		{
 			ArgumentNullException.ThrowIfNull(op);
 
 			using MemoryStream stream = new MemoryStream();
 			using (Utf8JsonWriter writer = new Utf8JsonWriter(stream, _writerOptions))
 			{
-				WriteTo(writer, op, registry);
+				WriteTo(writer, op, registry, currentSequenceNumber);
 			}
 
 			return Encoding.UTF8.GetString(stream.ToArray());
@@ -104,10 +104,19 @@ namespace Microsoft.Office.Web.Fluid
 			return operation;
 		}
 
-		public static void WriteTo(Utf8JsonWriter writer, MergeTree.IMergeTreeOp op, IFluidDataObjectRegistry? registry = null)
+		public static void WriteTo(Utf8JsonWriter writer, MergeTree.IMergeTreeOp op, IFluidDataObjectRegistry? registry = null, long? currentSequenceNumber = null)
 		{
 			ArgumentNullException.ThrowIfNull(writer);
 			ArgumentNullException.ThrowIfNull(op);
+
+			// Interval ops go on the wire as the TS IntervalCollectionMap "act" envelope
+			// (see packages/dds/sequence/src/intervalCollectionMap.ts). WriteIntervalCollectionMapOperation
+			// manages its own outer object, so route here before writer.WriteStartObject.
+			if (op is MergeTree.IntervalOpMsg intervalOp)
+			{
+				WriteIntervalCollectionMapOperation(writer, intervalOp, registry, currentSequenceNumber);
+				return;
+			}
 
 			writer.WriteStartObject();
 
@@ -238,95 +247,6 @@ namespace Microsoft.Office.Web.Fluid
 					}
 
 					writer.WriteEndArray();
-					break;
-
-				case MergeTree.MergeTreeDeltaType.IntervalAdd:
-					if (op is not MergeTree.IntervalAddOpMsg intervalAddOperation)
-					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown interval add op runtime type: {op.GetType().FullName}");
-					}
-
-					WriteIntervalEnvelope(writer, MergeTree.MergeTreeDeltaType.IntervalAdd, MergeTree.IntervalOpKind.Add, intervalAddOperation);
-					writer.WriteNumber(_startPropertyName, intervalAddOperation.Start);
-					writer.WriteNumber(_endPropertyName, intervalAddOperation.End);
-					writer.WriteNumber(_intervalTypePropertyName, (int)intervalAddOperation.IntervalType);
-					writer.WriteNumber(_stickinessPropertyName, (int)intervalAddOperation.Stickiness);
-					writer.WriteNumber(_startSidePropertyName, (int)intervalAddOperation.StartSide);
-					writer.WriteNumber(_endSidePropertyName, (int)intervalAddOperation.EndSide);
-					writer.WritePropertyName(_propsPropertyName);
-					if (intervalAddOperation.Props is null)
-					{
-						writer.WriteNullValue();
-					}
-					else
-					{
-						WritePropertySet(writer, intervalAddOperation.Props, registry);
-					}
-
-					break;
-
-				case MergeTree.MergeTreeDeltaType.IntervalDelete:
-					if (op is not MergeTree.IntervalDeleteOpMsg intervalDeleteOperation)
-					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown interval delete op runtime type: {op.GetType().FullName}");
-					}
-
-					WriteIntervalEnvelope(writer, MergeTree.MergeTreeDeltaType.IntervalDelete, MergeTree.IntervalOpKind.Delete, intervalDeleteOperation);
-					break;
-
-				case MergeTree.MergeTreeDeltaType.IntervalChange:
-					if (op is not MergeTree.IntervalChangeOpMsg intervalChangeOperation)
-					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown interval change op runtime type: {op.GetType().FullName}");
-					}
-
-					WriteIntervalEnvelope(writer, MergeTree.MergeTreeDeltaType.IntervalChange, MergeTree.IntervalOpKind.Change, intervalChangeOperation);
-					writer.WritePropertyName(_startPropertyName);
-					if (intervalChangeOperation.Start.HasValue)
-					{
-						writer.WriteNumberValue(intervalChangeOperation.Start.Value);
-					}
-					else
-					{
-						writer.WriteNullValue();
-					}
-
-					writer.WritePropertyName(_endPropertyName);
-					if (intervalChangeOperation.End.HasValue)
-					{
-						writer.WriteNumberValue(intervalChangeOperation.End.Value);
-					}
-					else
-					{
-						writer.WriteNullValue();
-					}
-
-					if (intervalChangeOperation.Stickiness.HasValue)
-					{
-						writer.WriteNumber(_stickinessPropertyName, (int)intervalChangeOperation.Stickiness.Value);
-					}
-
-					if (intervalChangeOperation.StartSide.HasValue)
-					{
-						writer.WriteNumber(_startSidePropertyName, (int)intervalChangeOperation.StartSide.Value);
-					}
-
-					if (intervalChangeOperation.EndSide.HasValue)
-					{
-						writer.WriteNumber(_endSidePropertyName, (int)intervalChangeOperation.EndSide.Value);
-					}
-
-					break;
-
-				case MergeTree.MergeTreeDeltaType.IntervalPropertyChanged:
-					if (op is not MergeTree.IntervalPropertyChangedOpMsg intervalPropertyChangedOperation)
-					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown interval property-changed op runtime type: {op.GetType().FullName}");
-					}
-
-					WriteIntervalEnvelope(writer, MergeTree.MergeTreeDeltaType.IntervalPropertyChanged, MergeTree.IntervalOpKind.PropertyChanged, intervalPropertyChangedOperation);
-					writer.WritePropertyName(_propsPropertyName);
-					WritePropertySet(writer, intervalPropertyChangedOperation.Props, registry);
 					break;
 
 				default:
@@ -620,80 +540,16 @@ namespace Microsoft.Office.Web.Fluid
 					groupOperation.Ops.AddRange(ops);
 					return groupOperation;
 
-				case (int)MergeTree.MergeTreeDeltaType.IntervalAdd:
-					RequireIntervalOpKind(intervalOpKind, MergeTree.IntervalOpKind.Add);
-					return new MergeTree.IntervalAddOpMsg()
-					{
-						CollectionName = collectionName,
-						IntervalId = intervalId,
-						Start = RequireInt32(start, _startPropertyName),
-						End = RequireInt32(end, _endPropertyName),
-						IntervalType = intervalType.HasValue
-							? (Intervals.IntervalType)intervalType.Value
-							: Intervals.IntervalType.SlideOnRemove,
-						Stickiness = stickiness.HasValue
-							? (Intervals.IntervalStickiness)stickiness.Value
-							: Intervals.IntervalStickiness.End,
-						StartSide = startSide.HasValue
-							? (Intervals.Side)startSide.Value
-							: Intervals.Side.Before,
-						EndSide = endSide.HasValue
-							? (Intervals.Side)endSide.Value
-							: Intervals.Side.Before,
-						Props = props,
-					};
-
-				case (int)MergeTree.MergeTreeDeltaType.IntervalDelete:
-					RequireIntervalOpKind(intervalOpKind, MergeTree.IntervalOpKind.Delete);
-					return new MergeTree.IntervalDeleteOpMsg()
-					{
-						CollectionName = collectionName,
-						IntervalId = intervalId,
-					};
-
-				case (int)MergeTree.MergeTreeDeltaType.IntervalChange:
-					RequireIntervalOpKind(intervalOpKind, MergeTree.IntervalOpKind.Change);
-					return new MergeTree.IntervalChangeOpMsg()
-					{
-						CollectionName = collectionName,
-						IntervalId = intervalId,
-						Start = start,
-						End = end,
-						Stickiness = stickiness.HasValue ? (Intervals.IntervalStickiness)stickiness.Value : (Intervals.IntervalStickiness?)null,
-						StartSide = startSide.HasValue ? (Intervals.Side)startSide.Value : (Intervals.Side?)null,
-						EndSide = endSide.HasValue ? (Intervals.Side)endSide.Value : (Intervals.Side?)null,
-					};
-
-				case (int)MergeTree.MergeTreeDeltaType.IntervalPropertyChanged:
-					RequireIntervalOpKind(intervalOpKind, MergeTree.IntervalOpKind.PropertyChanged);
-					return new MergeTree.IntervalPropertyChangedOpMsg()
-					{
-						CollectionName = collectionName,
-						IntervalId = intervalId,
-						Props = props ?? new MergeTree.PropertySet(),
-					};
-
 				default:
 					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree op type: {type?.ToString() ?? "<missing>"}");
 			}
 		}
 
-		private static void WriteIntervalEnvelope(
-			Utf8JsonWriter writer,
-			MergeTree.MergeTreeDeltaType type,
-			MergeTree.IntervalOpKind intervalOpKind,
-			MergeTree.IntervalOpMsg intervalOperation)
-		{
-			writer.WriteNumber(_typePropertyName, (int)type);
-			writer.WriteNumber(_intervalOpKindPropertyName, (int)intervalOpKind);
-			writer.WriteString(_collectionPropertyName, intervalOperation.CollectionName);
-			writer.WriteString(_idPropertyName, intervalOperation.IntervalId);
-		}
-
 		private static void WriteIntervalCollectionMapOperation(
 			Utf8JsonWriter writer,
 			MergeTree.IntervalOpMsg intervalOperation,
-			IFluidDataObjectRegistry? registry)
+			IFluidDataObjectRegistry? registry,
+			long? currentSequenceNumber = null)
 		{
 			writer.WriteStartObject();
 			writer.WriteString(_typePropertyName, _intervalMapOperationTypeName);
@@ -710,6 +566,7 @@ namespace Microsoft.Office.Web.Fluid
 					WriteIntervalMapPayloadHeader(
 						writer,
 						addOperation.IntervalType,
+						currentSequenceNumber,
 						addOperation.Stickiness,
 						addOperation.StartSide,
 						addOperation.EndSide);
@@ -724,7 +581,7 @@ namespace Microsoft.Office.Web.Fluid
 					writer.WriteString(_opNamePropertyName, _intervalDeleteOpName);
 					writer.WritePropertyName(_valuePropertyName);
 					writer.WriteStartObject();
-					WriteIntervalMapPayloadHeader(writer, Intervals.IntervalType.SlideOnRemove);
+					WriteIntervalMapPayloadHeader(writer, Intervals.IntervalType.SlideOnRemove, currentSequenceNumber);
 					writer.WritePropertyName(_propertiesPropertyName);
 					WriteIntervalMapProperties(writer, deleteOperation.CollectionName, deleteOperation.IntervalId, null, registry);
 					writer.WriteEndObject();
@@ -737,6 +594,7 @@ namespace Microsoft.Office.Web.Fluid
 					WriteIntervalMapPayloadHeader(
 						writer,
 						Intervals.IntervalType.SlideOnRemove,
+						currentSequenceNumber,
 						changeOperation.Stickiness,
 						changeOperation.StartSide,
 						changeOperation.EndSide);
@@ -751,7 +609,7 @@ namespace Microsoft.Office.Web.Fluid
 					writer.WriteString(_opNamePropertyName, _intervalChangeOpName);
 					writer.WritePropertyName(_valuePropertyName);
 					writer.WriteStartObject();
-					WriteIntervalMapPayloadHeader(writer, Intervals.IntervalType.SlideOnRemove);
+					WriteIntervalMapPayloadHeader(writer, Intervals.IntervalType.SlideOnRemove, currentSequenceNumber);
 					writer.WritePropertyName(_propertiesPropertyName);
 					WriteIntervalMapProperties(
 						writer,
@@ -773,11 +631,16 @@ namespace Microsoft.Office.Web.Fluid
 		private static void WriteIntervalMapPayloadHeader(
 			Utf8JsonWriter writer,
 			Intervals.IntervalType intervalType,
+			long? currentSequenceNumber = null,
 			Intervals.IntervalStickiness? stickiness = null,
 			Intervals.Side? startSide = null,
 			Intervals.Side? endSide = null)
 		{
-			writer.WriteNumber(_sequenceNumberPropertyName, 0);
+			// TS-parity: sequenceNumber in serialized interval ops carries the client's
+			// current known sequence number at serialize time
+			// (packages/dds/sequence/src/intervals/sequenceInterval.ts:468 uses
+			// this.client.getCurrentSeq()). Reconnect/rebase logic reads this.
+			writer.WriteNumber(_sequenceNumberPropertyName, currentSequenceNumber ?? 0);
 			writer.WriteNumber(_intervalTypePropertyName, (int)intervalType);
 			if (stickiness.HasValue)
 			{
@@ -941,16 +804,15 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static bool IsMergeTreeGroupMember(MergeTree.MergeTreeOp op)
 		{
+			// TS group ops (MergeTreeDeltaType.GROUP) only contain merge-tree delta ops
+			// (see packages/dds/merge-tree/src/ops.ts IMergeTreeGroupMsg.ops). Interval
+			// ops go out as individual IntervalCollectionMap acts, never in a group.
 			return op.Type == MergeTree.MergeTreeDeltaType.Insert
 				|| op.Type == MergeTree.MergeTreeDeltaType.Remove
 				|| op.Type == MergeTree.MergeTreeDeltaType.Annotate
 				|| op.Type == MergeTree.MergeTreeDeltaType.Obliterate
 				|| op.Type == MergeTree.MergeTreeDeltaType.ObliterateSided
-				|| op.Type == MergeTree.MergeTreeDeltaType.Group
-				|| op.Type == MergeTree.MergeTreeDeltaType.IntervalAdd
-				|| op.Type == MergeTree.MergeTreeDeltaType.IntervalDelete
-				|| op.Type == MergeTree.MergeTreeDeltaType.IntervalChange
-				|| op.Type == MergeTree.MergeTreeDeltaType.IntervalPropertyChanged;
+				|| op.Type == MergeTree.MergeTreeDeltaType.Group;
 		}
 
 		private static IntervalMapOperationValue ReadIntervalMapOperationValue(ref Utf8JsonReader reader, IFluidDataObjectRegistry? registry)

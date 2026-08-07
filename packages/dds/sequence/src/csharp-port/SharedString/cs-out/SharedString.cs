@@ -1198,6 +1198,16 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			ArgumentNullException.ThrowIfNull(op);
 
+			// Interval ops always go on the wire as individual IntervalCollectionMap
+			// "act" ops (see packages/dds/sequence/src/intervalCollection.ts submitDelta).
+			// They must never be added to a MergeTreeGroupMsg batch, whose members are
+			// merge-tree delta ops only per TS IMergeTreeGroupMsg.
+			if (op is IntervalOpMsg)
+			{
+				SendLocalOp(op, opTypeName);
+				return;
+			}
+
 			lock (_lock)
 			{
 				if (_batchOps is not null)
@@ -1235,7 +1245,7 @@ namespace Microsoft.Office.Web.Fluid
 
 			MergeTreeGroupMsg groupOp = new();
 			groupOp.Ops.AddRange(ops);
-			string opJson = SharedStringOpSerializer.Serialize(groupOp, _registry);
+			string opJson = SharedStringOpSerializer.Serialize(groupOp, _registry, currentSequenceNumber: _client.CollabWindowCurrentSeq);
 			SequenceNumber sequenceNumber = _sender.QueueDataObjectMessage(_id, _groupOpType, opJson);
 			AssociateSentClientSequence(ops, sequenceNumber);
 		}
@@ -1247,7 +1257,7 @@ namespace Microsoft.Office.Web.Fluid
 				return;
 			}
 
-			string opJson = SharedStringOpSerializer.Serialize(op, _registry);
+			string opJson = SharedStringOpSerializer.Serialize(op, _registry, currentSequenceNumber: _client.CollabWindowCurrentSeq);
 			SequenceNumber sequenceNumber = _sender.QueueDataObjectMessage(_id, opTypeName, opJson);
 			if (op.ClientSeq is long localSeq)
 			{
@@ -1262,7 +1272,7 @@ namespace Microsoft.Office.Web.Fluid
 				return;
 			}
 
-			string opJson = SharedStringOpSerializer.Serialize(op, _registry);
+			string opJson = SharedStringOpSerializer.Serialize(op, _registry, currentSequenceNumber: _client.CollabWindowCurrentSeq);
 			SequenceNumber sequenceNumber = _sender.QueueDataObjectMessage(_id, GetLocalOpTypeName(op), opJson);
 			if (op is MergeTreeGroupMsg groupOp)
 			{

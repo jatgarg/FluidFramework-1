@@ -107,14 +107,19 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			var addSent = Assert.Single(sender.Sent);
 			using (JsonDocument document = JsonDocument.Parse(addSent.OpJson))
 			{
-				JsonElement handleWire = document.RootElement.GetProperty("props").GetProperty("target");
+				// TS wire: op is wrapped in IntervalCollectionMap "act" envelope; the interval
+				// properties bag lives at value.value.properties per intervalCollection.ts.
+				JsonElement payload = document.RootElement.GetProperty("value").GetProperty("value");
+				JsonElement handleWire = payload.GetProperty("properties").GetProperty("target");
 				Assert.Equal("__fluid_handle__", handleWire.GetProperty("type").GetString());
 				Assert.Equal("/dataObjects/target", handleWire.GetProperty("url").GetString());
 			}
 
+			// Inbound TS-compatible property-change op (opName "change" with only the
+			// properties bag — mirrors intervalCollection.ts's propertyChanged emission).
 			sharedString.ProcessDataObjectOp(
 				RemoteMessage(refSeq: 0, seq: 1),
-				"{\"type\":13,\"intervalOpKind\":3,\"collection\":\"comments\",\"id\":\"i1\",\"props\":{\"changed\":{\"type\":\"__fluid_handle__\",\"url\":\"/dataObjects/changed\"}}}");
+				"{\"type\":\"act\",\"key\":\"comments\",\"value\":{\"opName\":\"change\",\"value\":{\"sequenceNumber\":0,\"intervalType\":2,\"properties\":{\"changed\":{\"type\":\"__fluid_handle__\",\"url\":\"/dataObjects/changed\"},\"intervalId\":\"i1\",\"referenceRangeLabels\":[\"comments\"]}}}}");
 
 			Assert.Same(changedHandle, interval.Properties!["changed"]);
 		}
@@ -189,7 +194,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			var handle = new TestFluidDataObject("target");
 			registry.Register(handle, "/dataObjects/target");
 			var sharedString = new SharedString(registry: registry);
-			const string snapshotJson = "{\"version\":\"1\",\"segmentCount\":1,\"length\":5,\"startIndex\":0,\"segments\":[{\"text\":\"hello\",\"props\":{\"target\":{\"type\":\"__fluid_handle__\",\"url\":\"/dataObjects/target\"}}}],\"headerMetadata\":{\"minSequenceNumber\":0,\"sequenceNumber\":1,\"totalLength\":5,\"totalSegmentCount\":1}}";
+			const string snapshotJson = "{\"version\":\"1\",\"segmentCount\":1,\"length\":5,\"startIndex\":0,\"segments\":[{\"text\":\"hello\",\"props\":{\"target\":{\"type\":\"__fluid_handle__\",\"url\":\"/dataObjects/target\"}}}],\"headerMetadata\":{\"minSequenceNumber\":0,\"sequenceNumber\":1,\"totalLength\":5,\"totalSegmentCount\":1,\"orderedChunkMetadata\":[{\"id\":\"header\"}]}}";
 
 			sharedString.LoadFromSnapshot(snapshotJson);
 

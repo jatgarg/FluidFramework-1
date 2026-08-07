@@ -138,8 +138,11 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void O5_GroupCanRoundTripLegacyIntervalMembersForExistingBatches()
+		public void O5_GroupRejectsIntervalOpMembers()
 		{
+			// TS-parity: MergeTreeGroupMsg (packages/dds/merge-tree/src/ops.ts IMergeTreeGroupMsg)
+			// only carries merge-tree delta ops. Interval ops go on the wire individually as
+			// IntervalCollectionMap "act" envelopes; they must never be batched into a group.
 			MergeTreeGroupMsg group = OpBuilder.CreateGroupOp(
 				new IntervalAddOpMsg()
 				{
@@ -149,9 +152,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 					End = 2,
 				});
 
-			MergeTreeGroupMsg roundTripped = Assert.IsType<MergeTreeGroupMsg>(
-				SharedStringOpSerializer.Deserialize(SharedStringOpSerializer.Serialize(group)));
-			Assert.IsType<IntervalAddOpMsg>(Assert.Single(roundTripped.Ops));
+			Assert.Throws<System.Text.Json.JsonException>(
+				() => SharedStringOpSerializer.Serialize(group));
 		}
 
 		[Fact]

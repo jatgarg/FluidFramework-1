@@ -1450,9 +1450,20 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return;
 			}
 
+			// Interval ops go on the wire individually as IntervalCollectionMap "act"
+			// envelopes, never inside a MergeTreeGroupMsg (see TS IMergeTreeGroupMsg
+			// which only carries merge-tree delta ops). Peel them off so the group
+			// only holds insert/remove/annotate/obliterate members.
 			MergeTreeGroupMsg groupOp = new();
+			List<IMergeTreeOp> intervalOps = new();
 			foreach (IMergeTreeOp op in batchOps)
 			{
+				if (op is IntervalOpMsg)
+				{
+					intervalOps.Add(op);
+					continue;
+				}
+
 				if (op is not MergeTreeOp mergeTreeOp)
 				{
 					rebasedOps.Add(op);
@@ -1462,10 +1473,16 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				groupOp.Ops.Add(mergeTreeOp);
 			}
 
-			if (groupOp.Ops.Count > 0)
+			if (groupOp.Ops.Count == 1)
+			{
+				rebasedOps.Add(groupOp.Ops[0]);
+			}
+			else if (groupOp.Ops.Count > 1)
 			{
 				rebasedOps.Add(groupOp);
 			}
+
+			rebasedOps.AddRange(intervalOps);
 		}
 
 		private object? CloneInsertSegmentSpec(PendingOpEntry pending)

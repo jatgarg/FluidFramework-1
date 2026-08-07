@@ -264,14 +264,17 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			local.RegeneratePendingOps();
 
-			var rebased = Assert.Single(sender.Sent);
-			MergeTreeGroupMsg group = Assert.IsType<MergeTreeGroupMsg>(SharedStringOpSerializer.Deserialize(rebased.OpJson));
-			Assert.Collection(
-				group.Ops,
-				first => AssertInsert(first, 7),
-				second => AssertIntervalAdd(second, 8, 10));
+			// TS-parity: interval ops always go on the wire as individual "act" envelopes,
+			// never inside a MergeTreeGroupMsg. So the rebase emits the merge-tree op
+			// (insert, single member => not grouped) and the interval add separately.
+			Assert.Equal(2, sender.Sent.Count);
+			MergeTreeInsertMsg insert = Assert.IsType<MergeTreeInsertMsg>(SharedStringOpSerializer.Deserialize(sender.Sent[0].OpJson));
+			AssertInsert(insert, 7);
+			IntervalAddOpMsg intervalAdd = Assert.IsType<IntervalAddOpMsg>(SharedStringOpSerializer.Deserialize(sender.Sent[1].OpJson));
+			AssertIntervalAdd(intervalAdd, 8, 10);
 
-			ApplyRebasedOpToServerAndAckLocal(local, serverVisible, rebased, refSeq: 2, seq: 3);
+			ApplyRebasedOpToServerAndAckLocal(local, serverVisible, sender.Sent[0], refSeq: 2, seq: 3);
+			ApplyRebasedOpToServerAndAckLocal(local, serverVisible, sender.Sent[1], refSeq: 2, seq: 4);
 			Assert.Equal("XXabcdeIfghi", local.GetText());
 			Assert.Equal(local.GetText(), serverVisible.GetText());
 			AssertIntervalPositions(serverVisible.GetIntervalCollection("comments").GetIntervalById("abc"), 8, 10);

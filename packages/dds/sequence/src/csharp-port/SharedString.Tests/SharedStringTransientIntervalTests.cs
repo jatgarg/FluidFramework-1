@@ -51,7 +51,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			sharedString.DeleteText(2, 3);
 
-			AssertIds(collection.CreateForwardIteratorWithStartPosition(0), "slide-survivor", "transient-survivor");
+			// Iterate whole collection; detached intervals must be filtered out.
+			// Enumeration order is insertion-based (not position-sorted), so assert the set.
+			HashSet<string?> ids = collection.Select(interval => interval.Id).ToHashSet();
+			Assert.Equal(new HashSet<string?> { "slide-survivor", "transient-survivor" }, ids);
 		}
 
 		[Fact]

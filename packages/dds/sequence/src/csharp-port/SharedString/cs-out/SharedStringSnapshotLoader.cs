@@ -132,8 +132,6 @@ namespace Microsoft.Office.Web.Fluid
 
 	public static class SharedStringSnapshotLoader
 	{
-		private const string _defaultCatchupClientId = "snapshot-catchup";
-
 		/// <summary>Loads a SharedString snapshot JSON into an intermediate DTO tree.</summary>
 		public static SharedStringSnapshotDto Load(
 			string json,
@@ -335,13 +333,20 @@ namespace Microsoft.Office.Web.Fluid
 			SharedStringSnapshotDto snapshot,
 			IFluidDataObjectRegistry? registry)
 		{
-			long nextSequenceNumber = target.CollabWindowCurrentSeq;
 			int index = 0;
 			foreach (CatchupOpDto catchupOp in snapshot.CatchupOps)
 			{
-				long sequenceNumber = catchupOp.SequenceNumber ?? checked(nextSequenceNumber + 1);
-				long referenceSequenceNumber = catchupOp.ReferenceSequenceNumber ?? target.CollabWindowCurrentSeq;
-				long minimumSequenceNumber = catchupOp.MinimumSequenceNumber ?? target.CollabWindowMinSeq;
+				// TS-parity: all sequence-numbering + clientId fields are required on each
+				// ISequencedDocumentMessage and set by ReadCatchupOp above. Assert non-null
+				// rather than defaulting to synthetic values that mask malformed snapshots.
+				long sequenceNumber = catchupOp.SequenceNumber
+					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'sequenceNumber'.");
+				long referenceSequenceNumber = catchupOp.ReferenceSequenceNumber
+					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'referenceSequenceNumber'.");
+				long minimumSequenceNumber = catchupOp.MinimumSequenceNumber
+					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'minimumSequenceNumber'.");
+				string clientId = catchupOp.ClientId
+					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'clientId'.");
 
 				if (minimumSequenceNumber < target.CollabWindowMinSeq
 					|| referenceSequenceNumber < target.CollabWindowMinSeq
@@ -356,14 +361,13 @@ namespace Microsoft.Office.Web.Fluid
 					op,
 					seq: sequenceNumber,
 					refSeq: referenceSequenceNumber,
-					clientId: catchupOp.ClientId ?? _defaultCatchupClientId);
+					clientId: clientId);
 
 				if (minimumSequenceNumber > target.CollabWindowMinSeq)
 				{
 					target.SetCollaborationWindow(minimumSequenceNumber, target.CollabWindowCurrentSeq, runZamboni: false);
 				}
 
-				nextSequenceNumber = Math.Max(nextSequenceNumber, sequenceNumber);
 				index++;
 			}
 		}
@@ -647,55 +651,64 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static CatchupOpDto ReadCatchupOp(JsonElement element, string path)
 		{
-			if (element.ValueKind == JsonValueKind.String)
-			{
-				return new CatchupOpDto()
-				{
-					OpJson = element.GetString() ?? string.Empty,
-				};
-			}
-
+			// TS-parity: catchup ops are serialized as ISequencedDocumentMessage[]
+			// (see packages/dds/merge-tree/src/snapshotlegacy.ts:187 which does
+			// JSON.stringify(catchUpMsgs)). Each entry must be an object with the
+			// full sequence-numbering + clientId + contents fields — reject strings
+			// and reject missing required fields rather than defaulting.
 			if (element.ValueKind != JsonValueKind.Object)
 			{
-				throw InvalidSnapshot($"SharedString catchup op at {path} must be an op string or object.");
+				throw InvalidSnapshot($"SharedString catchup op at {path} must be a JSON object (an ISequencedDocumentMessage).");
+			}
+
+			long? sequenceNumber = ReadOptionalLongProperty(element, "sequenceNumber", path);
+			if (sequenceNumber is null)
+			{
+				throw InvalidSnapshot($"SharedString catchup op at {path} must contain 'sequenceNumber'.");
+			}
+
+			long? referenceSequenceNumber = ReadOptionalLongProperty(element, "referenceSequenceNumber", path);
+			if (referenceSequenceNumber is null)
+			{
+				throw InvalidSnapshot($"SharedString catchup op at {path} must contain 'referenceSequenceNumber'.");
+			}
+
+			long? minimumSequenceNumber = ReadOptionalLongProperty(element, "minimumSequenceNumber", path);
+			if (minimumSequenceNumber is null)
+			{
+				throw InvalidSnapshot($"SharedString catchup op at {path} must contain 'minimumSequenceNumber'.");
+			}
+
+			if (!element.TryGetProperty("clientId", out JsonElement clientIdElement))
+			{
+				throw InvalidSnapshot($"SharedString catchup op at {path} must contain 'clientId'.");
+			}
+
+			string? clientId = clientIdElement.ValueKind switch
+			{
+				JsonValueKind.String => clientIdElement.GetString(),
+				// TS ISequencedDocumentMessage.clientId is `string | null` (null only for
+				// system-emitted messages, which cannot appear in catchup snapshots).
+				_ => throw InvalidSnapshot($"SharedString catchup op at {path}.clientId must be a string."),
+			};
+
+			if (!element.TryGetProperty("contents", out JsonElement contentsElement))
+			{
+				throw InvalidSnapshot($"SharedString catchup op at {path} must contain 'contents' (the merge-tree op).");
 			}
 
 			var dto = new CatchupOpDto()
 			{
-				SequenceNumber = ReadOptionalLongProperty(element, "sequenceNumber", path)
-					?? ReadOptionalLongProperty(element, "seq", path),
-				ReferenceSequenceNumber = ReadOptionalLongProperty(element, "referenceSequenceNumber", path)
-					?? ReadOptionalLongProperty(element, "refSeq", path),
-				MinimumSequenceNumber = ReadOptionalLongProperty(element, "minimumSequenceNumber", path)
-					?? ReadOptionalLongProperty(element, "minSeq", path),
-				ClientId = ReadOptionalStringProperty(element, "clientId", path)
-					?? ReadOptionalStringProperty(element, "client", path),
+				SequenceNumber = sequenceNumber,
+				ReferenceSequenceNumber = referenceSequenceNumber,
+				MinimumSequenceNumber = minimumSequenceNumber,
+				ClientId = clientId,
+				OpJson = ReadOpJson(contentsElement, $"{path}.contents"),
 			};
-
-			if (element.TryGetProperty("opJson", out JsonElement opJsonElement))
-			{
-				dto.OpJson = ReadOpJson(opJsonElement, $"{path}.opJson");
-			}
-			else if (element.TryGetProperty("contents", out JsonElement contentsElement))
-			{
-				dto.OpJson = ReadOpJson(contentsElement, $"{path}.contents");
-			}
-			else if (element.TryGetProperty("op", out JsonElement opElement))
-			{
-				dto.OpJson = ReadOpJson(opElement, $"{path}.op");
-			}
-			else if (element.TryGetProperty("type", out _))
-			{
-				dto.OpJson = element.GetRawText();
-			}
-			else
-			{
-				throw InvalidSnapshot($"SharedString catchup op at {path} must contain 'opJson', 'contents', 'op', or a merge-tree op object.");
-			}
 
 			if (string.IsNullOrEmpty(dto.OpJson))
 			{
-				throw InvalidSnapshot($"SharedString catchup op at {path} must not be empty.");
+				throw InvalidSnapshot($"SharedString catchup op at {path}.contents must not be empty.");
 			}
 
 			return dto;
@@ -892,12 +905,17 @@ namespace Microsoft.Office.Web.Fluid
 				TotalSegmentCount = ReadRequiredIntProperty(element, "totalSegmentCount", path),
 			};
 
-			if (element.TryGetProperty("orderedChunkMetadata", out JsonElement orderedChunkMetadataElement)
-				&& orderedChunkMetadataElement.ValueKind != JsonValueKind.Null
-				&& orderedChunkMetadataElement.ValueKind != JsonValueKind.Undefined)
+			if (!element.TryGetProperty("orderedChunkMetadata", out JsonElement orderedChunkMetadataElement)
+				|| orderedChunkMetadataElement.ValueKind == JsonValueKind.Null
+				|| orderedChunkMetadataElement.ValueKind == JsonValueKind.Undefined)
 			{
-				ReadOrderedChunkMetadata(orderedChunkMetadataElement, metadata.OrderedChunkMetadata, $"{path}.orderedChunkMetadata");
+				// TS ref: packages/dds/merge-tree/src/snapshotChunks.ts MergeTreeHeaderMetadata
+				// declares orderedChunkMetadata as a required array. The writer always emits
+				// at least [{id: "header"}] (see snapshotV1.ts:196).
+				throw InvalidSnapshot($"JSON property {path}.orderedChunkMetadata is required.");
 			}
+
+			ReadOrderedChunkMetadata(orderedChunkMetadataElement, metadata.OrderedChunkMetadata, $"{path}.orderedChunkMetadata");
 
 			ReadCatchupOpsBlobNames(element, metadata.CatchupOpsBlobNames, path);
 			return metadata;

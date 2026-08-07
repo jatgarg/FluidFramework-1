@@ -80,8 +80,12 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("c1", roundTripped.IntervalId);
 			AssertNullableInt(5, roundTripped.Start);
 			Assert.Null(roundTripped.End);
+			// TS wire: op is wrapped in the IntervalCollectionMap "act" envelope, and
+			// interval.serialize() (packages/dds/sequence/src/intervals/sequenceInterval.ts)
+			// omits the endpoint when it's undefined. Assert absence, not null.
 			using JsonDocument document = JsonDocument.Parse(json);
-			Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("end").ValueKind);
+			JsonElement payload = document.RootElement.GetProperty("value").GetProperty("value");
+			Assert.False(payload.TryGetProperty("end", out _));
 		}
 
 		[Fact]
@@ -120,9 +124,13 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void IntervalOps_HaveDistinctTypeCodes()
+		public void IntervalOps_WireShape_MatchesTSIntervalCollectionMap()
 		{
-			AssertTypeCode(
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts submitDelta emits
+			// { opName: "add"/"delete"/"change", value: ... }, wrapped by
+			// packages/dds/sequence/src/intervalCollectionMap.ts under
+			// { type: "act", key: <collection>, value: { opName, value } }.
+			AssertIntervalWireShape(
 				new IntervalAddOpMsg()
 				{
 					CollectionName = "comments",
@@ -131,17 +139,15 @@ namespace Microsoft.Office.Web.Fluid.Tests
 					End = 10,
 					Props = new PropertySet(),
 				},
-				10,
-				0);
-			AssertTypeCode(
+				"add");
+			AssertIntervalWireShape(
 				new IntervalDeleteOpMsg()
 				{
 					CollectionName = "comments",
 					IntervalId = "c1",
 				},
-				11,
-				1);
-			AssertTypeCode(
+				"delete");
+			AssertIntervalWireShape(
 				new IntervalChangeOpMsg()
 				{
 					CollectionName = "comments",
@@ -149,17 +155,16 @@ namespace Microsoft.Office.Web.Fluid.Tests
 					Start = 5,
 					End = null,
 				},
-				12,
-				2);
-			AssertTypeCode(
+				"change");
+			AssertIntervalWireShape(
 				new IntervalPropertyChangedOpMsg()
 				{
 					CollectionName = "comments",
 					IntervalId = "c1",
 					Props = new PropertySet(),
 				},
-				13,
-				3);
+				// TS-parity: propertyChanged ops go on the wire as opName "change" too.
+				"change");
 		}
 
 		private static T RoundTrip<T>(T op)
@@ -181,6 +186,54 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			using JsonDocument document = JsonDocument.Parse(json);
 			Assert.Equal(expectedType, document.RootElement.GetProperty("type").GetInt32());
 			Assert.Equal(expectedIntervalOpKind, document.RootElement.GetProperty("intervalOpKind").GetInt32());
+		}
+
+		private static void AssertIntervalWireShape(IMergeTreeOp op, string expectedOpName)
+		{
+			string json = SharedStringOpSerializer.Serialize(op);
+			using JsonDocument document = JsonDocument.Parse(json);
+			JsonElement root = document.RootElement;
+			Assert.Equal("act", root.GetProperty("type").GetString());
+			Assert.Equal("comments", root.GetProperty("key").GetString());
+			JsonElement inner = root.GetProperty("value");
+			Assert.Equal(expectedOpName, inner.GetProperty("opName").GetString());
+		}
+
+		[Fact]
+		public void IntervalOp_WireCarriesClientCurrentSequenceNumber()
+		{
+			// TS-parity: intervals/sequenceInterval.ts:468 sets sequenceNumber = client.getCurrentSeq()
+			// on the serialized interval. Reconnect/rebase logic reads this.
+			IntervalAddOpMsg op = new IntervalAddOpMsg()
+			{
+				CollectionName = "comments",
+				IntervalId = "c1",
+				Start = 2,
+				End = 4,
+				Props = new PropertySet(),
+			};
+
+			string json = SharedStringOpSerializer.Serialize(op, registry: null, currentSequenceNumber: 42);
+			using JsonDocument document = JsonDocument.Parse(json);
+			JsonElement payload = document.RootElement.GetProperty("value").GetProperty("value");
+			Assert.Equal(42, payload.GetProperty("sequenceNumber").GetInt64());
+		}
+
+		[Fact]
+		public void IntervalOp_WireDefaultsSequenceNumberToZeroWhenUnknown()
+		{
+			// Backwards compat: callers that don't have a client context (tests, ad-hoc serialization)
+			// still get a valid wire message; TS treats missing sequenceNumber == 0.
+			IntervalDeleteOpMsg op = new IntervalDeleteOpMsg()
+			{
+				CollectionName = "comments",
+				IntervalId = "c1",
+			};
+
+			string json = SharedStringOpSerializer.Serialize(op);
+			using JsonDocument document = JsonDocument.Parse(json);
+			JsonElement payload = document.RootElement.GetProperty("value").GetProperty("value");
+			Assert.Equal(0, payload.GetProperty("sequenceNumber").GetInt64());
 		}
 	}
 }

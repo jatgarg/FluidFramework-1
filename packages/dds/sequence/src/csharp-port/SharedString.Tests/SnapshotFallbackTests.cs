@@ -121,8 +121,11 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void Load_MissingOrderedChunkMetadata_SingleChunkStillLoads()
+		public void Load_MissingOrderedChunkMetadata_Throws()
 		{
+			// TS-parity: MergeTreeHeaderMetadata.orderedChunkMetadata is required
+			// (packages/dds/merge-tree/src/snapshotChunks.ts). The writer always emits
+			// at least [{id: "header"}], so absence indicates a malformed snapshot.
 			string snapshotJson = CreateV1Snapshot(
 				"[\"A\"]",
 				segmentCount: 1,
@@ -131,10 +134,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				sequenceNumber: 1,
 				orderedChunkMetadataJson: null);
 
-			Client client = LoadIntoClient(snapshotJson);
+			OcsException exception = Assert.Throws<OcsException>(() => LoadIntoClient(snapshotJson));
 
-			Assert.Equal("A", client.GetText(0, client.GetLength()));
-			Assert.Empty(SharedStringSnapshotLoader.Load(snapshotJson).HeaderMetadata!.OrderedChunkMetadata);
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("orderedChunkMetadata", exception.Message);
 		}
 
 		private static Client LoadIntoClient(string snapshotJson)

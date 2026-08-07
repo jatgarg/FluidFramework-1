@@ -243,6 +243,17 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			ArgumentException.ThrowIfNullOrEmpty(id);
 
+			// TS-parity: IntervalCollection.change requires both endpoints be defined or
+			// both undefined (packages/dds/sequence/src/intervalCollection.ts:1314). One-sided
+			// changes would serialize as a wire message missing one endpoint, which TS peers
+			// cannot correctly interpret.
+			if (newStart.HasValue != newEnd.HasValue)
+			{
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					"Change API requires both start and end to be defined or undefined.");
+			}
+
 			SequenceInterval? interval;
 			int? previousStart;
 			int? previousEnd;
@@ -308,10 +319,13 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
+				// TS-parity: exact-match on start position (intervalCollection.ts uses
+				// walkExactMatchesForward). Forward = ordered by end asc; ties broken by
+				// interval id for stability.
 				return SnapshotIntervals()
-					.Where(interval => interval.StartPosition is int position && position >= startPos)
-					.OrderBy(interval => interval.StartPosition)
-					.ThenBy(interval => interval.EndPosition)
+					.Where(interval => interval.StartPosition is int position && position == startPos)
+					.OrderBy(interval => interval.EndPosition)
+					.ThenBy(interval => interval.Id, System.StringComparer.Ordinal)
 					.ToArray();
 			}
 		}
@@ -320,10 +334,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
+				// TS-parity: exact-match on start position (walkExactMatchesBackward).
 				return SnapshotIntervals()
-					.Where(interval => interval.StartPosition is int position && position < startPos)
-					.OrderByDescending(interval => interval.StartPosition)
-					.ThenByDescending(interval => interval.EndPosition)
+					.Where(interval => interval.StartPosition is int position && position == startPos)
+					.OrderByDescending(interval => interval.EndPosition)
+					.ThenByDescending(interval => interval.Id, System.StringComparer.Ordinal)
 					.ToArray();
 			}
 		}
@@ -332,10 +347,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
+				// TS-parity: exact-match on end position.
 				return SnapshotIntervals()
-					.Where(interval => interval.EndPosition is int position && position >= endPos)
-					.OrderBy(interval => interval.EndPosition)
-					.ThenBy(interval => interval.StartPosition)
+					.Where(interval => interval.EndPosition is int position && position == endPos)
+					.OrderBy(interval => interval.StartPosition)
+					.ThenBy(interval => interval.Id, System.StringComparer.Ordinal)
 					.ToArray();
 			}
 		}
@@ -344,10 +360,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
+				// TS-parity: exact-match on end position.
 				return SnapshotIntervals()
-					.Where(interval => interval.EndPosition is int position && position < endPos)
-					.OrderByDescending(interval => interval.EndPosition)
-					.ThenByDescending(interval => interval.StartPosition)
+					.Where(interval => interval.EndPosition is int position && position == endPos)
+					.OrderByDescending(interval => interval.StartPosition)
+					.ThenByDescending(interval => interval.Id, System.StringComparer.Ordinal)
 					.ToArray();
 			}
 		}

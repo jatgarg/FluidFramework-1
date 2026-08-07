@@ -184,7 +184,13 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				totalSegmentCount: 1,
 				totalLength: 1,
 				catchupOpsBlobNamesJson: "[\"catchup_0\"]");
-			const string catchupOpsJson = "[\"{\\\"type\\\":0,\\\"pos1\\\":1,\\\"seg\\\":\\\"B\\\"}\",\"{\\\"type\\\":0,\\\"pos1\\\":2,\\\"seg\\\":\\\"C\\\"}\"]";
+			// TS-parity: catchup ops are a serialized ISequencedDocumentMessage[]
+			// (see packages/dds/merge-tree/src/snapshotlegacy.ts:187). Each entry must
+			// carry the full sequence numbering + clientId + contents fields.
+			const string catchupOpsJson = "[" +
+				"{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"remote-client\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}," +
+				"{\"sequenceNumber\":3,\"referenceSequenceNumber\":2,\"minimumSequenceNumber\":1,\"clientId\":\"remote-client\",\"contents\":{\"type\":0,\"pos1\":2,\"seg\":\"C\"}}" +
+				"]";
 
 			sharedString.LoadFromSnapshot(snapshotJson, blobName => catchupOpsJson);
 
@@ -208,6 +214,141 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("missing_chunk", exception.Message);
+		}
+
+		// -----------------------------------------------------------------
+		// Strict catchup ops regression tests.
+		// TS ref: packages/dds/merge-tree/src/snapshotlegacy.ts:187 —
+		//   builder.addBlob("catchupOps", JSON.stringify(catchUpMsgs));
+		// Each entry is an ISequencedDocumentMessage whose sequence numbering
+		// + clientId + contents fields are all required.
+		// -----------------------------------------------------------------
+
+		[Fact]
+		public void Load_CatchupOps_MissingSequenceNumber_Throws()
+		{
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"A\"]",
+				segmentCount: 1,
+				length: 1,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 1,
+				catchupOpsBlobNamesJson: "[\"catchup\"]");
+			const string catchupOpsJson = "[{\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"r\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}]";
+
+			OcsException exception = Assert.Throws<OcsException>(
+				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
+
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("sequenceNumber", exception.Message);
+		}
+
+		[Fact]
+		public void Load_CatchupOps_MissingReferenceSequenceNumber_Throws()
+		{
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"A\"]",
+				segmentCount: 1,
+				length: 1,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 1,
+				catchupOpsBlobNamesJson: "[\"catchup\"]");
+			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"minimumSequenceNumber\":1,\"clientId\":\"r\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}]";
+
+			OcsException exception = Assert.Throws<OcsException>(
+				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
+
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("referenceSequenceNumber", exception.Message);
+		}
+
+		[Fact]
+		public void Load_CatchupOps_MissingMinimumSequenceNumber_Throws()
+		{
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"A\"]",
+				segmentCount: 1,
+				length: 1,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 1,
+				catchupOpsBlobNamesJson: "[\"catchup\"]");
+			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"clientId\":\"r\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}]";
+
+			OcsException exception = Assert.Throws<OcsException>(
+				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
+
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("minimumSequenceNumber", exception.Message);
+		}
+
+		[Fact]
+		public void Load_CatchupOps_MissingClientId_Throws()
+		{
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"A\"]",
+				segmentCount: 1,
+				length: 1,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 1,
+				catchupOpsBlobNamesJson: "[\"catchup\"]");
+			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}]";
+
+			OcsException exception = Assert.Throws<OcsException>(
+				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
+
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("clientId", exception.Message);
+		}
+
+		[Fact]
+		public void Load_CatchupOps_MissingContents_Throws()
+		{
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"A\"]",
+				segmentCount: 1,
+				length: 1,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 1,
+				catchupOpsBlobNamesJson: "[\"catchup\"]");
+			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"r\"}]";
+
+			OcsException exception = Assert.Throws<OcsException>(
+				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
+
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("contents", exception.Message);
+		}
+
+		[Fact]
+		public void Load_CatchupOps_StringEntry_Rejected()
+		{
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"A\"]",
+				segmentCount: 1,
+				length: 1,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 1,
+				catchupOpsBlobNamesJson: "[\"catchup\"]");
+			// TS never emits strings inside the catchup array; each entry must be an
+			// ISequencedDocumentMessage object.
+			const string catchupOpsJson = "[\"{\\\"type\\\":0,\\\"pos1\\\":1,\\\"seg\\\":\\\"B\\\"}\"]";
+
+			OcsException exception = Assert.Throws<OcsException>(
+				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
+
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 		}
 
 		private static SharedStringSnapshotDto LoadFixture(string fileName)

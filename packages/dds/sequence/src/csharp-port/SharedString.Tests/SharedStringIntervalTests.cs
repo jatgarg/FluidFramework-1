@@ -73,7 +73,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			Assert.NotNull(removed);
 			Assert.Null(collection.GetIntervalById("c1"));
-			AssertIds(collection.CreateForwardIteratorWithStartPosition(0), "c2");
+			AssertIds(collection, "c2");
 		}
 
 		[Fact]
@@ -128,39 +128,51 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void CreateForwardIteratorWithStartPosition_ReturnsIntervalsInOrder()
+		public void CreateForwardIteratorWithStartPosition_ReturnsIntervalsWithExactStart()
 		{
+			// TS-parity: iterator is EXACT match, not range (intervalCollection.ts uses
+			// walkExactMatchesForward). Intervals: a=(8,9), b=(2,4), c=(5,10), d=(5,6).
 			IntervalCollection collection = CreateCollectionWithOrderedIntervals();
 
-			AssertIds(collection.CreateForwardIteratorWithStartPosition(0), "b", "d", "c", "a");
-			AssertIds(collection.CreateForwardIteratorWithStartPosition(5), "d", "c", "a");
+			// Both c and d start at 5; forward order = by end asc => d(6), c(10).
+			AssertIds(collection.CreateForwardIteratorWithStartPosition(5), "d", "c");
+			AssertIds(collection.CreateForwardIteratorWithStartPosition(2), "b");
+			AssertIds(collection.CreateForwardIteratorWithStartPosition(8), "a");
+			// No interval starts at 0 — empty result under exact-match semantics.
+			Assert.Empty(collection.CreateForwardIteratorWithStartPosition(0));
 		}
 
 		[Fact]
-		public void CreateBackwardIteratorWithStartPosition_ReturnsIntervalsInReverseOrder()
+		public void CreateBackwardIteratorWithStartPosition_ReturnsIntervalsWithExactStart()
 		{
+			// TS-parity: exact-match; backward order = by end desc.
 			IntervalCollection collection = CreateCollectionWithOrderedIntervals();
 
-			AssertIds(collection.CreateBackwardIteratorWithStartPosition(10), "a", "c", "d", "b");
-			AssertIds(collection.CreateBackwardIteratorWithStartPosition(5), "b");
+			AssertIds(collection.CreateBackwardIteratorWithStartPosition(5), "c", "d");
+			AssertIds(collection.CreateBackwardIteratorWithStartPosition(2), "b");
+			Assert.Empty(collection.CreateBackwardIteratorWithStartPosition(10));
 		}
 
 		[Fact]
-		public void CreateForwardIteratorWithEndPosition_ReturnsByEnd()
+		public void CreateForwardIteratorWithEndPosition_ReturnsIntervalsWithExactEnd()
 		{
+			// TS-parity: exact-match on end position.
 			IntervalCollection collection = CreateCollectionWithOrderedIntervals();
 
-			AssertIds(collection.CreateForwardIteratorWithEndPosition(0), "b", "d", "a", "c");
-			AssertIds(collection.CreateForwardIteratorWithEndPosition(6), "d", "a", "c");
+			AssertIds(collection.CreateForwardIteratorWithEndPosition(6), "d");
+			AssertIds(collection.CreateForwardIteratorWithEndPosition(10), "c");
+			AssertIds(collection.CreateForwardIteratorWithEndPosition(4), "b");
+			Assert.Empty(collection.CreateForwardIteratorWithEndPosition(0));
 		}
 
 		[Fact]
-		public void CreateBackwardIteratorWithEndPosition_ReturnsByEndDescending()
+		public void CreateBackwardIteratorWithEndPosition_ReturnsIntervalsWithExactEnd()
 		{
 			IntervalCollection collection = CreateCollectionWithOrderedIntervals();
 
-			AssertIds(collection.CreateBackwardIteratorWithEndPosition(11), "c", "a", "d", "b");
-			AssertIds(collection.CreateBackwardIteratorWithEndPosition(7), "d", "b");
+			AssertIds(collection.CreateBackwardIteratorWithEndPosition(9), "a");
+			AssertIds(collection.CreateBackwardIteratorWithEndPosition(10), "c");
+			Assert.Empty(collection.CreateBackwardIteratorWithEndPosition(11));
 		}
 
 		[Fact]
@@ -297,6 +309,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void TwoClients_ConcurrentChange_SameInterval_Converges()
 		{
+			// TS-parity: Change API requires both start and end (intervalCollection.ts:1314).
+			// Two-client convergence tested by each client passing full endpoint pairs; the
+			// last-writer's op wins on the shared endpoint.
 			var harness = new TwoClientHarness();
 			LoadInitialSharedText(harness, "abcdefghij");
 			IntervalCollection commentsA = harness.ClientA.GetIntervalCollection("comments");
@@ -307,9 +322,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			IntervalCollection commentsB = harness.ClientB.GetIntervalCollection("comments");
 			long refSeq = harness.CurrentServerSeq;
 
-			commentsA.Change("c1", newStart: 1, newEnd: null);
+			// Client A wants (1, 8). Client B concurrently wants (1, 8) with same intent.
+			commentsA.Change("c1", newStart: 1, newEnd: 8);
 			var sentA = Assert.Single(harness.SenderA.Sent);
-			commentsB.Change("c1", newStart: null, newEnd: 8);
+			commentsB.Change("c1", newStart: 1, newEnd: 8);
 			var sentB = Assert.Single(harness.SenderB.Sent);
 			harness.DeliverAtoB(sentA, refSeq);
 			harness.DeliverBtoA(sentB, refSeq);
@@ -317,6 +333,23 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			AssertCollectionsHaveSameInterval(harness, "comments", "c1");
 			AssertIntervalPositions(harness.ClientA.GetIntervalCollection("comments").GetIntervalById("c1")!, 1, 8);
 			AssertIntervalPositions(harness.ClientB.GetIntervalCollection("comments").GetIntervalById("c1")!, 1, 8);
+		}
+
+		[Fact]
+		public void Change_OneSided_Throws()
+		{
+			// TS-parity: one-sided change is rejected (intervalCollection.ts:1314-1319).
+			var sharedString = CreateSharedStringWithText("abcdefghij");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			collection.Add(2, 5, intervalId: "c1");
+
+			OcsException exceptionStart = Assert.Throws<OcsException>(
+				() => collection.Change("c1", newStart: 1, newEnd: null));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exceptionStart.ErrorCode);
+
+			OcsException exceptionEnd = Assert.Throws<OcsException>(
+				() => collection.Change("c1", newStart: null, newEnd: 8));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exceptionEnd.ErrorCode);
 		}
 
 		private static SharedString CreateSharedStringWithText(string text)

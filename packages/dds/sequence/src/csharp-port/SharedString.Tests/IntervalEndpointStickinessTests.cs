@@ -132,10 +132,14 @@ namespace Microsoft.Office.Web.Fluid.Tests
 						};
 
 						string json = SharedStringOpSerializer.Serialize(add);
+						// TS wire: op is wrapped in IntervalCollectionMap "act" envelope;
+						// stickiness/startSide/endSide live at value.value.* per
+						// intervalCollection.ts's serialized interval header.
 						using JsonDocument document = JsonDocument.Parse(json);
-						Assert.Equal((int)stickiness, document.RootElement.GetProperty("stickiness").GetInt32());
-						Assert.Equal((int)startSide, document.RootElement.GetProperty("startSide").GetInt32());
-						Assert.Equal((int)endSide, document.RootElement.GetProperty("endSide").GetInt32());
+						JsonElement payload = document.RootElement.GetProperty("value").GetProperty("value");
+						Assert.Equal((int)stickiness, payload.GetProperty("stickiness").GetInt32());
+						Assert.Equal((int)startSide, payload.GetProperty("startSide").GetInt32());
+						Assert.Equal((int)endSide, payload.GetProperty("endSide").GetInt32());
 
 						IntervalAddOpMsg roundTripped = Assert.IsType<IntervalAddOpMsg>(SharedStringOpSerializer.Deserialize(json));
 						Assert.Equal(stickiness, roundTripped.Stickiness);
