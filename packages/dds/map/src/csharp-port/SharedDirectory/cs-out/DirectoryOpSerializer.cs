@@ -120,6 +120,18 @@ namespace Microsoft.Office.Web.Fluid
 			writer.WriteEndObject();
 		}
 
+		/// <summary>
+		/// Reads a directory operation JSON object from <paramref name="reader"/>.
+		/// </summary>
+		/// <remarks>
+		/// Uses the standard <see cref="Utf8JsonReader"/> streaming pattern:
+		/// <c>StartObject → (PropertyName → value) × N → EndObject</c>. Each JSON
+		/// property is visited at most once (property names are unique within a
+		/// JSON object), so we accumulate the individual fields first and then
+		/// dispatch to the correct op subclass in <see cref="CreateOperation"/>
+		/// based on <c>typeString</c>. Unknown properties are skipped so the reader
+		/// is tolerant of forward-compat additions on the wire.
+		/// </remarks>
 		public static DirectoryOperation ReadFrom(ref Utf8JsonReader reader, IFluidDataObjectRegistry? registry = null)
 		{
 			if (reader.TokenType == JsonTokenType.None && !reader.Read())
@@ -137,6 +149,12 @@ namespace Microsoft.Office.Web.Fluid
 			string? key = null;
 			string? subdirName = null;
 			SerializableValue? value = null;
+			// Tracks whether the JSON object contained a `value` property. We can't
+			// just check `value != null`: `null` is a legal SerializableValue.Value
+			// (TS `any` allows null/undefined, and `{"type":"Plain","value":null}` is a
+			// valid wire shape). We need a separate flag so CreateOperation can throw
+			// specifically for a missing required `value` on a `set` op, without
+			// misidentifying "field present but null" as "field missing".
 			bool valueSeen = false;
 
 			while (reader.Read())
