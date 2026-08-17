@@ -1,0 +1,234 @@
+// -----------------------------------------------------------------------------
+// Event-shape regression tests for SharedDirectory.
+//
+// Covers findings SD-A03, SD-A04, and SD-A05 from the independent audit
+// (INDEPENDENT-AUDIT.md).
+//
+// SD-A03: nested subdirectory events must bubble a joined relative path
+//         (matching TS posix.join(subDirName, relativePath) in directory.ts).
+// SD-A04: remote delete of an absent key must still emit valueChanged with
+//         previousValue null (matching TS previousValue: undefined behavior).
+// SD-A05: OnValueChanged on a SubDirectory must fire only on the direct
+//         container (matching TS containedValueChanged semantics), not
+//         bubble through ancestor subdirectories. SharedDirectory-level
+//         OnValueChanged continues to see events from anywhere.
+// -----------------------------------------------------------------------------
+
+using System.Collections.Generic;
+using System.Linq;
+using Xunit;
+
+namespace Microsoft.Office.Web.Fluid.Tests
+{
+	public class DirectoryEventShapeTests
+	{
+		// -------------------------------------------------------------
+		// SD-A03: nested subdirectory events bubble the joined path
+		// -------------------------------------------------------------
+
+		[Fact]
+		public void OnSubDirectoryCreated_BubblesJoinedPath()
+		{
+			// TS ref: directory.ts:2621-2623 re-emits with posix.join(subDirName, relativePath).
+			// So when grandchild is created under /parent/child, the parent listener sees
+			// Path == "child/grandchild" (relative to itself), not just "grandchild".
+			var dir = new SharedDirectory();
+			IDirectory child = dir.CreateSubDirectory("child");
+
+			SubDirectoryEventArgs? capturedOnChild = null;
+			child.OnSubDirectoryCreated += (s, e) => capturedOnChild = e;
+
+			SubDirectoryEventArgs? capturedOnRoot = null;
+			dir.OnSubDirectoryCreated += (s, e) => capturedOnRoot = e;
+
+			child.CreateSubDirectory("grandchild");
+
+			Assert.NotNull(capturedOnChild);
+			Assert.Equal("grandchild", capturedOnChild!.Path);
+			Assert.Equal("grandchild", capturedOnChild.SubdirName);
+
+			Assert.NotNull(capturedOnRoot);
+			// SharedDirectory listener sees the fully-joined absolute-relative path.
+			Assert.Equal("child/grandchild", capturedOnRoot!.Path);
+			Assert.Equal("grandchild", capturedOnRoot.SubdirName);
+		}
+
+		[Fact]
+		public void OnSubDirectoryCreated_ThreeLevelsDeep_BubblesFullJoinedPath()
+		{
+			// TS ref: successive posix.join calls chain the path segments.
+			var dir = new SharedDirectory();
+			IDirectory a = dir.CreateSubDirectory("a");
+			IDirectory b = a.CreateSubDirectory("b");
+
+			SubDirectoryEventArgs? capturedOnA = null;
+			a.OnSubDirectoryCreated += (s, e) => capturedOnA = e;
+
+			SubDirectoryEventArgs? capturedOnRoot = null;
+			dir.OnSubDirectoryCreated += (s, e) => capturedOnRoot = e;
+
+			b.CreateSubDirectory("c");
+
+			// a sees Path == "b/c" (relative to a).
+			Assert.NotNull(capturedOnA);
+			Assert.Equal("b/c", capturedOnA!.Path);
+
+			// Root sees Path == "a/b/c".
+			Assert.NotNull(capturedOnRoot);
+			Assert.Equal("a/b/c", capturedOnRoot!.Path);
+		}
+
+		[Fact]
+		public void OnSubDirectoryDeleted_BubblesJoinedPath()
+		{
+			// TS ref: directory.ts:2624-2626 mirrors subDirectoryCreated with posix.join.
+			var dir = new SharedDirectory();
+			IDirectory child = dir.CreateSubDirectory("child");
+			child.CreateSubDirectory("grandchild");
+
+			SubDirectoryEventArgs? capturedOnChild = null;
+			child.OnSubDirectoryDeleted += (s, e) => capturedOnChild = e;
+
+			SubDirectoryEventArgs? capturedOnRoot = null;
+			dir.OnSubDirectoryDeleted += (s, e) => capturedOnRoot = e;
+
+			child.DeleteSubDirectory("grandchild");
+
+			Assert.NotNull(capturedOnChild);
+			Assert.Equal("grandchild", capturedOnChild!.Path);
+
+			Assert.NotNull(capturedOnRoot);
+			Assert.Equal("child/grandchild", capturedOnRoot!.Path);
+		}
+
+		// -------------------------------------------------------------
+		// SD-A04: remote delete of absent key emits valueChanged event
+		// -------------------------------------------------------------
+
+		[Fact]
+		public void RemoteDelete_AbsentKey_EmitsValueChangedEvent()
+		{
+			// TS ref: directory.ts:1985-2007. Even when the key isn't present locally,
+			// TS emits valueChanged with previousValue: undefined (subject to pending-op
+			// suppression). Previous C# only emitted when the key was present, silently
+			// dropping the event for absent-key deletes.
+			var dir = new SharedDirectory();
+
+			ValueChangedEventArgs? captured = null;
+			dir.OnValueChanged += (s, e) => captured = e;
+
+			// Send a remote delete for a key that was never set.
+			string op = "{\"type\":\"delete\",\"path\":\"/\",\"key\":\"never-existed\"}";
+			dir.ProcessDataObjectOp(RemoteMessage(refSeq: 0, seq: 1), op);
+
+			Assert.NotNull(captured);
+			Assert.Equal("never-existed", captured!.Key);
+			Assert.Null(captured.PreviousValue);
+			Assert.Equal("/", captured.Path);
+			Assert.False(captured.Local);
+		}
+
+		[Fact]
+		public void RemoteDelete_PresentKey_EmitsValueChangedWithPreviousValue()
+		{
+			// Sanity check: the present-key path still works after the SD-A04 fix.
+			var dir = new SharedDirectory();
+			dir.Set("k", "v");
+
+			ValueChangedEventArgs? captured = null;
+			dir.OnValueChanged += (s, e) => captured = e;
+
+			string op = "{\"type\":\"delete\",\"path\":\"/\",\"key\":\"k\"}";
+			dir.ProcessDataObjectOp(RemoteMessage(refSeq: 0, seq: 1), op);
+
+			Assert.NotNull(captured);
+			Assert.Equal("k", captured!.Key);
+			Assert.Equal("v", captured.PreviousValue);
+		}
+
+		// -------------------------------------------------------------
+		// SD-A05: OnValueChanged does NOT bubble through ancestor subdirs
+		// -------------------------------------------------------------
+
+		[Fact]
+		public void OnValueChanged_OnSubDirectory_FiresOnlyOnDirectContainer()
+		{
+			// TS ref: directory.ts:2003-2005. containedValueChanged fires only on the
+			// SubDirectory that directly contains the key. valueChanged fires on the
+			// root SharedDirectory. Previous C# bubbled OnValueChanged up every
+			// ancestor, so a listener on a mid-level subdirectory saw events from all
+			// its descendants — TS does NOT do that.
+			var dir = new SharedDirectory();
+			IDirectory a = dir.CreateSubDirectory("a");
+			IDirectory b = a.CreateSubDirectory("b");
+
+			int rootHits = 0;
+			int aHits = 0;
+			int bHits = 0;
+			dir.OnValueChanged += (s, e) => rootHits++;
+			a.OnValueChanged += (s, e) => aHits++;
+			b.OnValueChanged += (s, e) => bHits++;
+
+			// Set a key on `b`. Only b's OnValueChanged should fire (direct container),
+			// plus root's OnValueChanged (SharedDirectory sees all).
+			b.Set("k", "v");
+
+			Assert.Equal(1, bHits);
+			Assert.Equal(0, aHits);   // Was previously firing due to bubbling — bug.
+			Assert.Equal(1, rootHits);
+		}
+
+		[Fact]
+		public void OnValueChanged_RemoteSet_FiresOnlyOnDirectContainerAndRoot()
+		{
+			var dir = new SharedDirectory();
+			IDirectory a = dir.CreateSubDirectory("a");
+			IDirectory b = a.CreateSubDirectory("b");
+
+			int rootHits = 0;
+			int aHits = 0;
+			int bHits = 0;
+			dir.OnValueChanged += (s, e) => rootHits++;
+			a.OnValueChanged += (s, e) => aHits++;
+			b.OnValueChanged += (s, e) => bHits++;
+
+			string op = "{\"type\":\"set\",\"path\":\"/a/b\",\"key\":\"k\",\"value\":{\"type\":\"Plain\",\"value\":\"v\"}}";
+			dir.ProcessDataObjectOp(RemoteMessage(refSeq: 0, seq: 1), op);
+
+			Assert.Equal(1, bHits);
+			Assert.Equal(0, aHits);
+			Assert.Equal(1, rootHits);
+		}
+
+		[Fact]
+		public void OnValueChanged_OnRootDirectly_FiresOnceForRootKeys()
+		{
+			// Sanity: setting at root still hits both root SubDirectory's OnValueChanged
+			// (as the direct container is root itself) and SharedDirectory's OnValueChanged.
+			// These are two separate event sources so both should fire.
+			var dir = new SharedDirectory();
+
+			int rootHits = 0;
+			dir.OnValueChanged += (s, e) => rootHits++;
+
+			dir.Set("k", "v");
+
+			// Root fires once because dir (the SharedDirectory) IS the propagation target,
+			// AND it exposes OnValueChanged for its root SubDirectory. Set at root produces
+			// one event on the SharedDirectory-level.
+			Assert.Equal(1, rootHits);
+		}
+
+		// -------------------------------------------------------------
+		// Helpers
+		// -------------------------------------------------------------
+
+		private static SequencedDocumentMessageDescriptor RemoteMessage(long refSeq, long seq)
+		{
+			return new SequencedDocumentMessageDescriptor(
+				SequenceNumber.ForTesting(clientSeq: 0, refSeq: refSeq, seq: seq),
+				OpOrigin.Remote,
+				clientId: "remote-client");
+		}
+	}
+}

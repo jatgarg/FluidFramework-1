@@ -728,19 +728,22 @@ namespace Microsoft.Office.Web.Fluid
 					return;
 				}
 
-				if (_storage.TryGetValue(key, out object? previous))
+				// TS ref: directory.ts:1985-2007. TS emits valueChanged with
+				// previousValue: undefined even when the key isn't present locally,
+				// as long as no pending op suppresses it. The C# port previously
+				// only emitted when TryGetValue succeeded, which silently dropped
+				// the event for absent keys. Fixes SD-A04.
+				_storage.TryGetValue(key, out object? previous);
+				_storage.Remove(key);
+				if (!HasPendingStorageEntryForKeyOrClearNoLock(key))
 				{
-					_storage.Remove(key);
-					if (!HasPendingStorageEntryForKeyOrClearNoLock(key))
+					args = new ValueChangedEventArgs()
 					{
-						args = new ValueChangedEventArgs()
-						{
-							Key = key,
-							PreviousValue = previous,
-							Path = _absolutePath,
-							Local = false,
-						};
-					}
+						Key = key,
+						PreviousValue = previous,
+						Path = _absolutePath,
+						Local = false,
+					};
 				}
 			}
 
@@ -1497,16 +1500,16 @@ namespace Microsoft.Office.Web.Fluid
 
 		private void RaiseValueChanged(ValueChangedEventArgs args)
 		{
+			// TS ref: directory.ts:2003-2005. TS emits `containedValueChanged` only on
+			// the direct-container subdirectory (this.emit) and `valueChanged` directly
+			// on the SharedDirectory (this.directory.emit) — NOT via bubbling through
+			// subdirectory ancestors. Previous C# behavior bubbled OnValueChanged up
+			// every ancestor, so a listener on an ancestor saw events from all
+			// descendants. Fixes SD-A05.
 			ValueChangedEventHandler? raiseEvent = OnValueChanged;
 			if (raiseEvent != null)
 			{
 				raiseEvent(this, args);
-			}
-
-			if (_parent != null)
-			{
-				_parent.RaiseValueChanged(args);
-				return;
 			}
 
 			_root.PropagateValueChanged(args);
@@ -1522,7 +1525,21 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (_parent != null)
 			{
-				_parent.RaiseSubDirectoryCreated(args);
+				// TS ref: directory.ts:2621-2623 uses
+				//   this.emit("subDirectoryCreated", posix.join(subDirName, relativePath), ...)
+				// when re-emitting a child's event. So each ancestor sees the joined
+				// path relative to itself, not the raw name at the emission site.
+				// Previous C# passed the args reference up unchanged, so a root-level
+				// listener saw Path == "leaf" instead of "child/grandchild/leaf".
+				// Fixes SD-A03.
+				SubDirectoryEventArgs bubbledArgs = new SubDirectoryEventArgs()
+				{
+					SubdirName = args.SubdirName,
+					ParentPath = args.ParentPath,
+					Path = PosixPath.Join(GetLocalName(), args.Path),
+					Local = args.Local,
+				};
+				_parent.RaiseSubDirectoryCreated(bubbledArgs);
 				return;
 			}
 
@@ -1539,11 +1556,37 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (_parent != null)
 			{
-				_parent.RaiseSubDirectoryDeleted(args);
+				// TS ref: directory.ts:2624-2626 — same posix.join semantics as
+				// subDirectoryCreated above.
+				SubDirectoryEventArgs bubbledArgs = new SubDirectoryEventArgs()
+				{
+					SubdirName = args.SubdirName,
+					ParentPath = args.ParentPath,
+					Path = PosixPath.Join(GetLocalName(), args.Path),
+					Local = args.Local,
+				};
+				_parent.RaiseSubDirectoryDeleted(bubbledArgs);
 				return;
 			}
 
 			_root.PropagateSubDirectoryDeleted(args);
+		}
+
+		/// <summary>
+		/// Returns this subdirectory's name relative to its parent — the last
+		/// segment of <see cref="_absolutePath"/>. Empty for the root. Used when
+		/// bubbling subdirectory events so each ancestor sees a joined relative
+		/// path (matching TS <c>posix.join(subDirName, relativePath)</c>).
+		/// </summary>
+		private string GetLocalName()
+		{
+			if (_absolutePath == "/")
+			{
+				return string.Empty;
+			}
+
+			int lastSlash = _absolutePath.LastIndexOf('/');
+			return lastSlash < 0 ? _absolutePath : _absolutePath.Substring(lastSlash + 1);
 		}
 
 		private static void ValidateSubDirectoryName(string subdirName)
