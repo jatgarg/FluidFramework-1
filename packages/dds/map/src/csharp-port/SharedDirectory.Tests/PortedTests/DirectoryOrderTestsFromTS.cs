@@ -13,7 +13,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 	public class DirectoryOrderTestsFromTS
 	{
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts:101 — "create subdirectories"
+		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts — "create subdirectories"
 		public void CreateSubdirectories()
 		{
 			var directory = new SharedDirectory();
@@ -26,7 +26,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts:109 — "create nested subdirectories"
+		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts — "create nested subdirectories"
 		public void CreateNestedSubdirectories()
 		{
 			var directory = new SharedDirectory();
@@ -46,7 +46,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts:138 — "delete subdirectories"
+		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts — "delete subdirectories"
 		public void DeleteSubdirectories()
 		{
 			var directory = new SharedDirectory();
@@ -72,7 +72,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts:209 — "Remote messages have conflicts with the local pending ops"
+		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts — "Remote messages have conflicts with the local pending ops"
 		public void RemoteMessagesHaveConflictsWithTheLocalPendingOps()
 		{
 			ConnectedDirectory directory1 = CreateConnectedDirectory("directory1", "client-1");
@@ -114,7 +114,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts:262 — "can be compatible with the old format summary"
+		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts — "can be compatible with the old format summary"
 		public void CanBeCompatibleWithTheOldFormatSummary()
 		{
 			const string json = "{\"storage\":{\"key1\":{\"type\":\"Plain\",\"value\":\"val1\"},\"key2\":{\"type\":\"Plain\",\"value\":\"val2\"}},\"subdirectories\":{\"b\":{\"storage\":{\"testKey\":{\"type\":\"Plain\",\"value\":\"testValue\"},\"testKey2\":{\"type\":\"Plain\",\"value\":\"testValue2\"}}},\"c\":{\"storage\":{\"testKey3\":{\"type\":\"Plain\",\"value\":\"testValue3\"}}},\"a\":{\"storage\":{}}}}";
@@ -126,7 +126,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts:304 — "can be compatible with the new format summary"
+		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts — "can be compatible with the new format summary"
 		public void CanBeCompatibleWithTheNewFormatSummary()
 		{
 			const string json = "{\"storage\":{\"key1\":{\"type\":\"Plain\",\"value\":\"val1\"},\"key2\":{\"type\":\"Plain\",\"value\":\"val2\"}},\"subdirectories\":{\"b\":{\"storage\":{\"testKey\":{\"type\":\"Plain\",\"value\":\"testValue\"},\"testKey2\":{\"type\":\"Plain\",\"value\":\"testValue2\"}},\"ci\":{\"csn\":4,\"ccIds\":[\"client1\"]}},\"c\":{\"storage\":{\"testKey3\":{\"type\":\"Plain\",\"value\":\"testValue3\"}},\"subdirectories\":{\"c_b\":{\"storage\":{},\"ci\":{\"csn\":5,\"ccIds\":[\"client1\"]}},\"c_a\":{\"storage\":{},\"ci\":{\"csn\":6,\"ccIds\":[\"client1\"]}}},\"ci\":{\"csn\":2,\"ccIds\":[\"client2\"],\"ccsn\":1}},\"a\":{\"storage\":{},\"ci\":{\"csn\":4,\"ccIds\":[\"client2\"]}}},\"ci\":{\"csn\":1,\"ccIds\":[\"client1\",\"client2\"]}}";
@@ -139,7 +139,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts:384 — "serialize the contents, load it into another directory and maintain the order"
+		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts — "serialize the contents, load it into another directory and maintain the order"
 		public void SerializeTheContentsLoadItIntoAnotherDirectoryAndMaintainTheOrderLoadOnlyEquivalent()
 		{
 			const string json = "{\"subdirectories\":{\"c\":{\"ci\":{\"csn\":0,\"ccIds\":[]}},\"b\":{\"ci\":{\"csn\":0,\"ccIds\":[]}},\"a\":{\"ci\":{\"csn\":0,\"ccIds\":[]}}}}";
@@ -152,7 +152,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts:410 — "can be compatible with the detached scenario"
+		// Ported from packages/dds/map/src/test/mocha/directory.order.spec.ts — "can be compatible with the detached scenario"
 		public void CanBeCompatibleWithTheDetachedScenario()
 		{
 			const string json = "{\"blobs\":[],\"content\":{\"ci\":{\"csn\":0,\"ccIds\":[]},\"subdirectories\":{\"detached1\":{\"ci\":{\"csn\":0,\"ccIds\":[\"97cd0b77-34b1-46a8-bbe2-5fbefb3e014b\"]}},\"detached2\":{\"ci\":{\"csn\":0,\"ccIds\":[\"97cd0b77-34b1-46a8-bbe2-5fbefb3e014b\"]}},\"detached3\":{\"ci\":{\"csn\":-1,\"ccIds\":[\"97cd0b77-34b1-46a8-bbe2-5fbefb3e014b\"]}}}}}";

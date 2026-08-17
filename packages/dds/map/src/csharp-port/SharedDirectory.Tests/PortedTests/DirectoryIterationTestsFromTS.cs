@@ -13,7 +13,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 	public class DirectoryIterationTestsFromTS
 	{
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts:67 — "should have eventually consistent iteration order between clients when simultaneous set"
+		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts — "should have eventually consistent iteration order between clients when simultaneous set"
 		public void ShouldHaveEventuallyConsistentIterationOrderBetweenClientsWhenSimultaneousSet()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("shared-directory-1", "client-1");
@@ -36,7 +36,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts:95 — "should have eventually consistent iteration order between clients when suppressed delete"
+		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts — "should have eventually consistent iteration order between clients when suppressed delete"
 		public void ShouldHaveEventuallyConsistentIterationOrderBetweenClientsWhenSuppressedDelete()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("shared-directory-1", "client-1");
@@ -61,7 +61,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts:122 — "should have eventually consistent iteration order between clients when clear"
+		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts — "should have eventually consistent iteration order between clients when clear"
 		public void ShouldHaveEventuallyConsistentIterationOrderBetweenClientsWhenClear()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("shared-directory-1", "client-1");
@@ -88,7 +88,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts:151 — "should have eventually consistent iteration order with nested subdirectory operations"
+		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts — "should have eventually consistent iteration order with nested subdirectory operations"
 		public void ShouldHaveEventuallyConsistentIterationOrderWithNestedSubdirectoryOperations()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("shared-directory-1", "client-1");
@@ -129,7 +129,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts:203 — "should have eventually consistent subdirectory iteration order with multiple create/delete"
+		// Ported from packages/dds/map/src/test/mocha/directory.iteration.spec.ts — "should have eventually consistent subdirectory iteration order with multiple create/delete"
 		public void ShouldHaveEventuallyConsistentSubdirectoryIterationOrderWithMultipleCreateDelete()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("shared-directory-1", "client-1");

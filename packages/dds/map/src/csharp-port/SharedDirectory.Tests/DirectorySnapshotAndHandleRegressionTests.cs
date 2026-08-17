@@ -5,11 +5,11 @@
 // Areas covered:
 //   - Blob-split snapshot with an empty blobs array does not require a
 //     resolver (matches TS Promise.all over an empty array in
-//     directory.ts:700-715).
+//     directory.ts).
 //   - payloadPending handles are not resolved to a live IFluidDataObject
 //     through the registry — the flag would be silently dropped on
 //     re-emission. Matches TS RemoteFluidObjectHandle retention of
-//     payloadPending in serializer.ts:151-162.
+//     payloadPending in serializer.ts.
 //   - LoadFromSnapshot into a non-empty directory throws InvalidState and
 //     leaves pre-existing content unchanged.
 //   - A local-op ack whose client sequence is the zero/missing sentinel
@@ -23,7 +23,7 @@ using Xunit;
 
 namespace Microsoft.Office.Web.Fluid.Tests
 {
-	public class DirectoryAuditRegressionTests
+	public class DirectorySnapshotAndHandleRegressionTests
 	{
 		// -------------------------------------------------------------
 		// Empty blobs array does not require a resolver
@@ -32,7 +32,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void LoadFromSnapshot_BlobSplitFormat_EmptyBlobsArray_WithoutResolver_Succeeds()
 		{
-			// TS ref: directory.ts:700-715. Promise.all over an empty blobs array
+			// TS ref: directory.ts. Promise.all over an empty blobs array
 			// resolves immediately; storage.readBlob is never called.
 			var dir = new SharedDirectory();
 			const string snapshotJson = "{\"blobs\":[],\"content\":{}}";
@@ -73,7 +73,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RemoteSet_PayloadPendingHandle_ThroughRegistry_KeepsAsSerializedHandle()
 		{
-			// TS ref: serializer.ts:151-162 constructs RemoteFluidObjectHandle with
+			// TS ref: serializer.ts constructs RemoteFluidObjectHandle with
 			// payloadPending preserved on the resolved handle.
 			var registry = new FakeFluidDataObjectRegistry();
 			var handle = new TestFluidDataObject("target");
@@ -118,7 +118,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void LoadFromSnapshot_NonEmptyDirectory_ThrowsAndLeavesContentUnchanged()
 		{
-			// TS ref: directory.ts:700-715, 722-724. TS's loadCore is called once at
+			// TS ref: directory.ts. TS's loadCore is called once at
 			// construction; loading into an already-populated directory would be a
 			// program error. C# raises InvalidState. Verify that pre-existing content
 			// is unchanged after the throw.
@@ -159,7 +159,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void LocalAck_MissingClientSequenceNumber_ThrowsInvalidSequenceNumber()
 		{
-			// TS ref: directory.ts:76-83, 792-815. A local ack must carry a client
+			// TS ref: directory.ts. A local ack must carry a client
 			// sequence so the port can locate the matching pending entry. A zero /
 			// missing sentinel indicates a malformed ack from the runtime; C# throws
 			// InvalidSequenceNumber.

@@ -213,7 +213,7 @@ namespace Microsoft.Office.Web.Fluid
 
 		public static object ResolveSerializedHandle(string url, IFluidDataObjectRegistry? registry, bool payloadPending)
 		{
-			// TS ref: serializer.ts:151-162 constructs RemoteFluidObjectHandle with
+			// TS ref: serializer.ts constructs RemoteFluidObjectHandle with
 			// `value.payloadPending === true` — the flag is preserved on the resolved
 			// handle. A live IFluidDataObject has no place to carry payloadPending,
 			// so only resolve non-pending handles to a live object. Pending handles

@@ -52,7 +52,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Parse_UnknownTopLevelField_IgnoresField()
 		{
-			// TS ref: directory.ts:697-770 does not inspect root-level `ci` at all,
+			// TS ref: directory.ts does not inspect root-level `ci` at all,
 			// so a root `ci` with any shape should be ignored on load, not validated.
 			const string json = "{\"storage\":{},\"ci\":{\"csn\":42,\"ccIds\":[\"c1\"]}}";
 
@@ -65,7 +65,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Parse_CreateInfo_MissingCcIds_DefaultsToEmptyCreatorSet()
 		{
-			// TS ref: directory.ts:770 does `new Set<string>(createInfo.ccIds)`, and
+			// TS ref: directory.ts does `new Set<string>(createInfo.ccIds)`, and
 			// `new Set(undefined)` in JS/TS returns an empty Set. So a `ci` block
 			// missing ccIds must load with an empty creator set, not throw.
 			// Wire-tolerance policy: match TS runtime, not TS static type.
@@ -82,7 +82,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Parse_CreateInfo_MissingCsn_DefaultsToZero()
 		{
-			// TS ref: directory.ts:743 checks `createInfo.csn > 0`; a missing csn is
+			// TS ref: directory.ts checks `createInfo.csn > 0`; a missing csn is
 			// treated as falsy and falls through to the seq: 0 fallback branch.
 			const string json = "{\"subdirectories\":{\"foo\":{\"ci\":{\"ccIds\":[\"c1\"]}}}}";
 

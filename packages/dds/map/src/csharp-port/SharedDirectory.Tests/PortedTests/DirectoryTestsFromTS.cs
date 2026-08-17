@@ -15,7 +15,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 	public class DirectoryTestsFromTS
 	{
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:511 — "Should populate the directory from an empty JSON object (old format)"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Should populate the directory from an empty JSON object (old format)"
 		public void ShouldPopulateTheDirectoryFromAnEmptyJsonObjectOldFormat()
 		{
 			var directory = new SharedDirectory();
@@ -31,7 +31,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:522 — "Should populate the directory from a basic JSON object (old format)"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Should populate the directory from a basic JSON object (old format)"
 		public void ShouldPopulateTheDirectoryFromABasicJsonObjectOldFormat()
 		{
 			const string json = "{\"storage\":{\"testKey\":{\"type\":\"Plain\",\"value\":\"testValue4\"},\"testKey2\":{\"type\":\"Plain\",\"value\":\"testValue5\"}},\"subdirectories\":{\"foo\":{\"storage\":{\"testKey\":{\"type\":\"Plain\",\"value\":\"testValue\"},\"testKey2\":{\"type\":\"Plain\",\"value\":\"testValue2\"}}},\"bar\":{\"storage\":{\"testKey3\":{\"type\":\"Plain\",\"value\":\"testValue3\"}}}}}";
@@ -53,7 +53,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:573 — "Should populate the directory with undefined values (old format)"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Should populate the directory with undefined values (old format)"
 		public void ShouldPopulateTheDirectoryWithUndefinedValuesOldFormat()
 		{
 			const string json = "{\"storage\":{\"testKey\":{\"type\":\"Plain\",\"value\":\"testValue4\"},\"testKey2\":{\"type\":\"Plain\"}},\"subdirectories\":{\"foo\":{\"storage\":{\"testKey\":{\"type\":\"Plain\",\"value\":\"testValue\"},\"testKey2\":{\"type\":\"Plain\"}}},\"bar\":{\"storage\":{\"testKey3\":{\"type\":\"Plain\",\"value\":\"testValue3\"}}}}}";
@@ -72,7 +72,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:624 — "Should populate, serialize and de-serialize directory with long property values"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Should populate, serialize and de-serialize directory with long property values"
 		public void ShouldPopulateSerializeAndDeserializeDirectoryWithLongPropertyValuesLoadOnlyEquivalent()
 		{
 			string longWord = "0123456789";
@@ -102,7 +102,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:681 — "Should register subdirectory events on load"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Should register subdirectory events on load"
 		public void ShouldRegisterSubdirectoryEventsOnLoad()
 		{
 			const string json = "{\"subdirectories\":{\"child\":{}}}";
@@ -134,7 +134,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:728 — "Should lead to eventual consistency 1"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Should lead to eventual consistency 1"
 		public void ShouldLeadToEventualConsistency1DeleteRecreateNestedSubdirectory()
 		{
 			var sender = new FakeFluidDataObjectSender();
@@ -172,7 +172,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:1125 — "Shouldn't overwrite value if there is pending set"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Shouldn't overwrite value if there is pending set"
 		public void ShouldNotOverwriteValueIfThereIsPendingSet()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("directory1", "client-1");
@@ -197,7 +197,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:1173 — "Shouldn't set values when pending clear"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Shouldn't set values when pending clear"
 		public void ShouldNotSetValuesWhenPendingClear()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("directory1", "client-1");
@@ -237,7 +237,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:1244 — "Directories should ensure eventual consistency using LWW approach 1: Test 1"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Directories should ensure eventual consistency using LWW approach 1: Test 1"
 		public void DirectoriesShouldEnsureEventualConsistencyUsingLwwApproach1Test1()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("directory1", "client-1");
@@ -269,7 +269,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:1275 — "Directories should ensure eventual consistency using LWW approach 1: Test 2"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Directories should ensure eventual consistency using LWW approach 1: Test 2"
 		public void DirectoriesShouldEnsureEventualConsistencyUsingLwwApproach1Test2()
 		{
 			ConnectedDirectory client1 = CreateConnectedDirectory("directory1", "client-1");
@@ -297,7 +297,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts:454 — "Should serialize a directory without subdirectories as a JSON object"
+		// Ported from packages/dds/map/src/test/mocha/directory.spec.ts — "Should serialize a directory without subdirectories as a JSON object"
 		public void ShouldSerializeDirectoryWithoutSubdirectoriesHandleGetReturnsObject()
 		{
 			var sender = new FakeFluidDataObjectSender();

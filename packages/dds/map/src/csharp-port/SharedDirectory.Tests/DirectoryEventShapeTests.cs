@@ -27,7 +27,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OnSubDirectoryCreated_BubblesJoinedPath()
 		{
-			// TS ref: directory.ts:2621-2623 re-emits with posix.join(subDirName, relativePath).
+			// TS ref: directory.ts re-emits with posix.join(subDirName, relativePath).
 			// So when grandchild is created under /parent/child, the parent listener sees
 			// Path == "child/grandchild" (relative to itself), not just "grandchild".
 			var dir = new SharedDirectory();
@@ -79,7 +79,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OnSubDirectoryDeleted_BubblesJoinedPath()
 		{
-			// TS ref: directory.ts:2624-2626 mirrors subDirectoryCreated with posix.join.
+			// TS ref: directory.ts mirrors subDirectoryCreated with posix.join.
 			var dir = new SharedDirectory();
 			IDirectory child = dir.CreateSubDirectory("child");
 			child.CreateSubDirectory("grandchild");
@@ -106,10 +106,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RemoteDelete_AbsentKey_EmitsValueChangedEvent()
 		{
-			// TS ref: directory.ts:1985-2007. Even when the key isn't present locally,
-			// TS emits valueChanged with previousValue: undefined (subject to pending-op
-			// suppression). Previous C# only emitted when the key was present, silently
-			// dropping the event for absent-key deletes.
+			// TS ref: directory.ts. Even when the key isn't present locally, TS
+			// emits valueChanged with previousValue: undefined (subject to
+			// pending-op suppression).
 			var dir = new SharedDirectory();
 
 			ValueChangedEventArgs? captured = null;
@@ -151,11 +150,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OnValueChanged_OnSubDirectory_FiresOnlyOnDirectContainer()
 		{
-			// TS ref: directory.ts:2003-2005. containedValueChanged fires only on the
-			// SubDirectory that directly contains the key. valueChanged fires on the
-			// root SharedDirectory. Previous C# bubbled OnValueChanged up every
-			// ancestor, so a listener on a mid-level subdirectory saw events from all
-			// its descendants — TS does NOT do that.
+			// TS ref: directory.ts. containedValueChanged fires only on the
+			// SubDirectory that directly contains the key. valueChanged fires on
+			// the root SharedDirectory. It does NOT bubble through intermediate
+			// ancestor subdirectories.
 			var dir = new SharedDirectory();
 			IDirectory a = dir.CreateSubDirectory("a");
 			IDirectory b = a.CreateSubDirectory("b");
@@ -172,7 +170,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			b.Set("k", "v");
 
 			Assert.Equal(1, bHits);
-			Assert.Equal(0, aHits);   // Was previously firing due to bubbling — bug.
+			Assert.Equal(0, aHits);   // Ancestor subdir must NOT receive the event.
 			Assert.Equal(1, rootHits);
 		}
 

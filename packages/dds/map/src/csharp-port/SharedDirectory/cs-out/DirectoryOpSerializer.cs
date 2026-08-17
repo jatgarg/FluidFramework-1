@@ -392,7 +392,7 @@ namespace Microsoft.Office.Web.Fluid
 				throw new JsonException("Expected serializable value JSON object.");
 			}
 
-			// TS ref: localValues.ts:58-69, directory.ts:904-906.
+			// TS ref: localValues.ts, directory.ts.
 			// TS branches only on `type === "Shared"`. Any other type (including
 			// missing) falls through to the plain-value path and stores op.value.value
 			// directly. Match TS runtime tolerance: default missing type to "Plain".

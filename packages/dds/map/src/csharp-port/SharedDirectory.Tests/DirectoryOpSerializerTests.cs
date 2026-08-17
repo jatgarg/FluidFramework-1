@@ -174,7 +174,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Deserialize_SetOp_ValueMissingType_TreatsAsPlain()
 		{
-			// TS ref: localValues.ts:58-69, directory.ts:904-906. TS branches only on
+			// TS ref: localValues.ts, directory.ts. TS branches only on
 			// `type === "Shared"`. Missing type is treated as "not Shared" → plain value.
 			// Wire-tolerance policy: match TS runtime, not TS static type.
 			DirectorySetOperation op = Assert.IsType<DirectorySetOperation>(

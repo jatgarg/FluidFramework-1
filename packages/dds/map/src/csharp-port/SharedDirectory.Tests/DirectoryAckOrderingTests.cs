@@ -2,7 +2,7 @@
 // Tests SharedDirectory sibling ordering under remote acknowledgement of
 // an already-optimistic child.
 //
-// TS ref: packages/dds/map/src/directory.ts:2124-2167. When ApplyRemoteCreate
+// TS ref: packages/dds/map/src/directory.ts. When ApplyRemoteCreate
 // runs against a subdir that already exists (from a local pending create or a
 // previous remote create), TS assigns
 //   subDir.seqData.clientSeq = clientSequenceNumber
@@ -39,8 +39,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			dir.ProcessDataObjectOp(remoteX, "{\"type\":\"createSubDirectory\",\"path\":\"/\",\"subdirName\":\"X\"}");
 
 			// A remote message creates "Y" (already optimistically present). Goes through
-			// the else branch → MarkCreatedSubDirectorySequencedNoLock. The message has
-			// (seq=42, clientSeq=5). TS assigns Y.clientSeq = 5. Previous C# assigned -1.
+			// the else branch → MarkCreatedSubDirectorySequencedNoLock. The message
+			// has (seq=42, clientSeq=5). TS assigns Y.clientSeq = 5.
 			SequencedDocumentMessageDescriptor remoteY = new SequencedDocumentMessageDescriptor(
 				SequenceNumber.ForTesting(clientSeq: 5, refSeq: 0, seq: 42),
 				OpOrigin.Remote,

@@ -703,7 +703,7 @@ namespace Microsoft.Office.Web.Fluid
 					return;
 				}
 
-				// TS ref: directory.ts:1985-2007. TS emits valueChanged with
+				// TS ref: directory.ts. TS emits valueChanged with
 				// previousValue: undefined even when the key isn't present locally,
 				// as long as no pending op suppresses it.
 				_storage.TryGetValue(key, out object? previous);
@@ -1094,7 +1094,7 @@ namespace Microsoft.Office.Web.Fluid
 			if (SeqData.Seq != -1 && SeqData.Seq <= msg.Seq.sequenceNumber && subdir.SeqData.Seq == -1)
 			{
 				subdir.SeqData.Seq = msg.Seq.sequenceNumber;
-				// TS ref: directory.ts:2167 assigns clientSeq = clientSequenceNumber
+				// TS ref: directory.ts assigns clientSeq = clientSequenceNumber
 				// unconditionally. The message's clientSeq drives SeqDataComparator
 				// sibling ordering for grouped batches, so it must be preserved for
 				// both local and remote origins.
@@ -1479,7 +1479,7 @@ namespace Microsoft.Office.Web.Fluid
 
 		private void RaiseValueChanged(ValueChangedEventArgs args)
 		{
-			// TS ref: directory.ts:2003-2005. TS emits `containedValueChanged` only on
+			// TS ref: directory.ts. TS emits `containedValueChanged` only on
 			// the direct-container subdirectory (this.emit) and `valueChanged` directly
 			// on the SharedDirectory (this.directory.emit) — never via bubbling through
 			// subdirectory ancestors.
@@ -1502,7 +1502,7 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (_parent != null)
 			{
-				// TS ref: directory.ts:2621-2623 uses
+				// TS ref: directory.ts uses
 				//   this.emit("subDirectoryCreated", posix.join(subDirName, relativePath), ...)
 				// when re-emitting a child's event, so each ancestor sees the joined
 				// path relative to itself, not the raw name at the emission site.
@@ -1530,7 +1530,7 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (_parent != null)
 			{
-				// TS ref: directory.ts:2624-2626 — same posix.join semantics as
+				// TS ref: directory.ts — same posix.join semantics as
 				// subDirectoryCreated above.
 				SubDirectoryEventArgs bubbledArgs = new SubDirectoryEventArgs()
 				{

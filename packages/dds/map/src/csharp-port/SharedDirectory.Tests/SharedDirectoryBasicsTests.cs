@@ -378,6 +378,6 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("foo", captured.Path);
 		}
 
-		// TODO(w2c): op processing coverage lives in DirectoryOpProcessingTests.cs.
+		// Op processing coverage lives in DirectoryOpProcessingTests.cs.
 	}
 }

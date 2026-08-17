@@ -102,7 +102,7 @@ namespace Microsoft.Office.Web.Fluid
 			IDirectoryNewStorageFormat format = ReadNewStorageFormat(element, blobsElement, registry);
 			DirectorySnapshotDto snapshot = format.Content;
 
-			// TS ref: directory.ts:700-715 iterates newFormat.blobs and reads each via
+			// TS ref: directory.ts iterates newFormat.blobs and reads each via
 			// storage.readBlob. When blobs is empty, the resolver is never called, so
 			// only require it here when a blob actually needs to be read.
 			if (format.Blobs.Length > 0 && blobResolver == null)
@@ -217,7 +217,7 @@ namespace Microsoft.Office.Web.Fluid
 				ReadSubdirectories(subdirectoriesElement, dto.Subdirectories, path, registry);
 			}
 
-			// TS ref: directory.ts:697-770 does not inspect root-level `ci` at all;
+			// TS ref: directory.ts does not inspect root-level `ci` at all;
 			// only child `ci` blocks feed the seqData / creator-set logic. Skip root
 			// `ci` even when present to match TS runtime behavior.
 			if (element.TryGetProperty("ci", out JsonElement createInfoElement) && path != "root")
@@ -230,7 +230,7 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static DirectoryCreateInfo ReadCreateInfo(JsonElement createInfoElement, string path)
 		{
-			// TS ref: directory.ts:743-770. TS treats missing `csn` as falsy (falls
+			// TS ref: directory.ts. TS treats missing `csn` as falsy (falls
 			// through to the seq: 0 branch) and missing `ccIds` as an empty iterable
 			// (`new Set(undefined)`). Match TS runtime: allow both to be missing;
 			// enforce types only when the field IS present.
