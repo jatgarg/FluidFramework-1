@@ -304,12 +304,17 @@ namespace Microsoft.Office.Web.Fluid
 
 		private SubDirectory ResolveSubDirectoryByPath(string absolutePath)
 		{
-			if (absolutePath == "/" || absolutePath == string.Empty)
+			// TS ref: packages/dds/map/src/directory.ts uses posix.resolve('/', relativePath)
+			// then splits on posix.sep. Non-canonical wire paths (e.g. '/a/../b' or '/./x')
+			// must resolve to their canonical form before walking, otherwise the walk looks
+			// for a child literally named '.' or '..' and misses the target directory.
+			string canonical = PosixPath.ResolveAbsolute(absolutePath);
+			if (canonical == "/")
 			{
 				return _root;
 			}
 
-			string[] segments = absolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+			string[] segments = canonical.Split('/', StringSplitOptions.RemoveEmptyEntries);
 			SubDirectory cursor = _root;
 			foreach (string segment in segments)
 			{
@@ -328,12 +333,15 @@ namespace Microsoft.Office.Web.Fluid
 
 		private SubDirectory? TryResolveSubDirectoryByPath(string absolutePath)
 		{
-			if (absolutePath == "/" || absolutePath == string.Empty)
+			// TS ref: see ResolveSubDirectoryByPath. Same normalization is required so
+			// non-canonical wire paths don't miss existing directories.
+			string canonical = PosixPath.ResolveAbsolute(absolutePath);
+			if (canonical == "/")
 			{
 				return _root;
 			}
 
-			string[] segments = absolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+			string[] segments = canonical.Split('/', StringSplitOptions.RemoveEmptyEntries);
 			SubDirectory cursor = _root;
 			foreach (string segment in segments)
 			{

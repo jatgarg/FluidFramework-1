@@ -1597,7 +1597,10 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static string MakeChildAbsolutePath(string parentPath, string subdirName)
 		{
-			return parentPath == "/" ? $"/{subdirName}" : $"{parentPath}/{subdirName}";
+			// TS ref: packages/dds/map/src/directory.ts uses posix.join(this.absolutePath, subdirName).
+			// Literal concatenation would preserve '.' and '..' subdirectory names, so
+			// CreateSubDirectory(".") would yield '/.' locally but TS would emit '/' on the wire.
+			return PosixPath.Join(parentPath, subdirName);
 		}
 	}
 }
