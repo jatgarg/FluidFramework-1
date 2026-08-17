@@ -219,7 +219,11 @@ namespace Microsoft.Office.Web.Fluid
 				ReadSubdirectories(subdirectoriesElement, dto.Subdirectories, path, registry);
 			}
 
-			if (element.TryGetProperty("ci", out JsonElement createInfoElement))
+			// TS ref: directory.ts:697-770 does not inspect root-level `ci` at all. Only
+			// child `ci` blocks feed the seqData / creator-set logic. Following the port's
+			// wire-tolerance policy (match TS runtime, not TS type), skip root `ci` even
+			// if present.
+			if (element.TryGetProperty("ci", out JsonElement createInfoElement) && path != "root")
 			{
 				dto.CreateInfo = ReadCreateInfo(createInfoElement, path);
 			}
@@ -229,47 +233,68 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static DirectoryCreateInfo ReadCreateInfo(JsonElement createInfoElement, string path)
 		{
+			// TS ref: directory.ts:743-770.
+			//   const createInfo = subdirObject.ci;
+			//   if (createInfo !== undefined && createInfo.csn > 0) {
+			//     seqData = { seq: createInfo.csn, ... };
+			//   } else {
+			//     seqData = { seq: 0, clientSeq: ++currentSubDir.localCreationSeq };
+			//   }
+			//   new Set<string>(createInfo === undefined ? [] : createInfo.ccIds);
+			// TS treats:
+			//   - Missing `csn` as falsy → falls through to the `seq: 0` branch.
+			//   - Missing `ccIds` as `undefined`, which `new Set(undefined)` accepts as
+			//     an empty iterable (empty creator set).
+			// C# previously required both. Following the port's wire-tolerance policy,
+			// match TS runtime: allow missing csn (default 0), allow missing ccIds
+			// (default empty). Reject only on TYPE mismatch when the field is present.
 			if (createInfoElement.ValueKind != JsonValueKind.Object)
 			{
 				throw InvalidSnapshot($"Create info at {path}.ci must be a JSON object.");
 			}
 
-			if (!createInfoElement.TryGetProperty("csn", out JsonElement csnElement)
-				|| csnElement.ValueKind != JsonValueKind.Number
-				|| !csnElement.TryGetInt64(out long csn))
+			long csn = 0;
+			if (createInfoElement.TryGetProperty("csn", out JsonElement csnElement)
+				&& csnElement.ValueKind != JsonValueKind.Null
+				&& csnElement.ValueKind != JsonValueKind.Undefined)
 			{
-				throw InvalidSnapshot($"Create info at {path}.ci must contain a numeric 'csn' field.");
-			}
-
-			// TS ICreateInfo.ccIds is required. Reject missing rather than defaulting to
-			// an empty array (see packages/dds/map/src/directory.ts).
-			if (!createInfoElement.TryGetProperty("ccIds", out JsonElement ccIdsElement))
-			{
-				throw InvalidSnapshot($"Create info at {path}.ci must contain a 'ccIds' array.");
-			}
-
-			if (ccIdsElement.ValueKind != JsonValueKind.Array)
-			{
-				throw InvalidSnapshot($"Create info at {path}.ci.ccIds must be an array.");
-			}
-
-			var clientIds = new List<string>();
-			int index = 0;
-			foreach (JsonElement clientIdElement in ccIdsElement.EnumerateArray())
-			{
-				if (clientIdElement.ValueKind != JsonValueKind.String)
+				if (csnElement.ValueKind != JsonValueKind.Number
+					|| !csnElement.TryGetInt64(out csn))
 				{
-					throw InvalidSnapshot($"Create info client id at {path}.ci.ccIds[{index}] must be a string.");
+					throw InvalidSnapshot($"Create info at {path}.ci.csn, when present, must be a number.");
+				}
+			}
+
+			string[] ccIds = Array.Empty<string>();
+			if (createInfoElement.TryGetProperty("ccIds", out JsonElement ccIdsElement)
+				&& ccIdsElement.ValueKind != JsonValueKind.Null
+				&& ccIdsElement.ValueKind != JsonValueKind.Undefined)
+			{
+				if (ccIdsElement.ValueKind != JsonValueKind.Array)
+				{
+					throw InvalidSnapshot($"Create info at {path}.ci.ccIds, when present, must be an array.");
 				}
 
-				clientIds.Add(clientIdElement.GetString() ?? string.Empty);
-				index++;
+				var clientIds = new List<string>();
+				int index = 0;
+				foreach (JsonElement clientIdElement in ccIdsElement.EnumerateArray())
+				{
+					if (clientIdElement.ValueKind != JsonValueKind.String)
+					{
+						throw InvalidSnapshot($"Create info client id at {path}.ci.ccIds[{index}] must be a string.");
+					}
+
+					clientIds.Add(clientIdElement.GetString() ?? string.Empty);
+					index++;
+				}
+
+				ccIds = clientIds.ToArray();
 			}
 
 			return new DirectoryCreateInfo()
 			{
 				Csn = csn,
-				CcIds = clientIds.ToArray(),
+				CcIds = ccIds,
 			};
 		}
 

@@ -53,6 +53,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Parse_UnknownTopLevelField_IgnoresField()
 		{
+			// TS ref: directory.ts:697-770 does not inspect root-level `ci` at all,
+			// so a root `ci` with any shape should be ignored on load, not validated.
 			const string json = "{\"storage\":{},\"ci\":{\"csn\":42,\"ccIds\":[\"c1\"]}}";
 
 			DirectorySnapshotDto dto = DirectorySnapshotLoader.Parse(json);
@@ -62,13 +64,61 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void Parse_CreateInfo_MissingCcIds_Throws()
+		public void Parse_CreateInfo_MissingCcIds_DefaultsToEmptyCreatorSet()
 		{
-			// TS ICreateInfo requires ccIds (packages/dds/map/src/directory.ts).
-			const string json = "{\"storage\":{},\"ci\":{\"csn\":42}}";
+			// TS ref: directory.ts:770 does `new Set<string>(createInfo.ccIds)`, and
+			// `new Set(undefined)` in JS/TS returns an empty Set. So a `ci` block
+			// missing ccIds must load with an empty creator set, not throw.
+			// Wire-tolerance policy: match TS runtime, not TS static type.
+			const string json = "{\"subdirectories\":{\"foo\":{\"ci\":{\"csn\":42}}}}";
+
+			DirectorySnapshotDto dto = DirectorySnapshotLoader.Parse(json);
+
+			Assert.True(dto.Subdirectories.TryGetValue("foo", out DirectorySnapshotDto? foo));
+			Assert.NotNull(foo!.CreateInfo);
+			Assert.Equal(42L, foo.CreateInfo!.Csn);
+			Assert.Empty(foo.CreateInfo.CcIds);
+		}
+
+		[Fact]
+		public void Parse_CreateInfo_MissingCsn_DefaultsToZero()
+		{
+			// TS ref: directory.ts:743 checks `createInfo.csn > 0`; a missing csn is
+			// treated as falsy and falls through to the seq: 0 fallback branch.
+			const string json = "{\"subdirectories\":{\"foo\":{\"ci\":{\"ccIds\":[\"c1\"]}}}}";
+
+			DirectorySnapshotDto dto = DirectorySnapshotLoader.Parse(json);
+
+			Assert.True(dto.Subdirectories.TryGetValue("foo", out DirectorySnapshotDto? foo));
+			Assert.NotNull(foo!.CreateInfo);
+			Assert.Equal(0L, foo.CreateInfo!.Csn);
+			Assert.Single(foo.CreateInfo.CcIds);
+		}
+
+		[Fact]
+		public void Parse_CreateInfo_EmptyBlock_LoadsSuccessfully()
+		{
+			// TS accepts `{ci: {}}` — csn is falsy, ccIds is undefined → empty ccIds
+			// via the branch above. Loader must not throw.
+			const string json = "{\"subdirectories\":{\"foo\":{\"ci\":{}}}}";
+
+			DirectorySnapshotDto dto = DirectorySnapshotLoader.Parse(json);
+
+			Assert.True(dto.Subdirectories.TryGetValue("foo", out DirectorySnapshotDto? foo));
+			Assert.NotNull(foo!.CreateInfo);
+			Assert.Equal(0L, foo.CreateInfo!.Csn);
+			Assert.Empty(foo.CreateInfo.CcIds);
+		}
+
+		[Fact]
+		public void Parse_CreateInfo_NonNumericCsn_Throws()
+		{
+			// Type validation still applies: when csn IS present, it must be a number.
+			// This guards against malformed producers (not a TS runtime tolerance case
+			// since TS's number-vs-non-number type mismatch would throw at runtime too).
+			const string json = "{\"subdirectories\":{\"foo\":{\"ci\":{\"csn\":\"not-a-number\"}}}}";
 
 			OcsException exception = Assert.Throws<OcsException>(() => DirectorySnapshotLoader.Parse(json));
-
 			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 		}
 

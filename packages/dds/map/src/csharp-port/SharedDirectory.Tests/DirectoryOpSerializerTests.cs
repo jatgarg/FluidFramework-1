@@ -173,10 +173,17 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void Deserialize_SetOp_ValueMissingType_Throws()
+		public void Deserialize_SetOp_ValueMissingType_TreatsAsPlain()
 		{
-			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"set\",\"path\":\"/\",\"key\":\"k\",\"value\":{\"value\":1}}"));
-			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
+			// TS ref: localValues.ts:58-69, directory.ts:904-906. TS branches only on
+			// `type === "Shared"`. Missing type is treated as "not Shared" → plain value.
+			// Wire-tolerance policy: match TS runtime, not TS static type.
+			DirectorySetOperation op = Assert.IsType<DirectorySetOperation>(
+				DirectoryOpSerializer.Deserialize("{\"type\":\"set\",\"path\":\"/\",\"key\":\"k\",\"value\":{\"value\":1}}"));
+			Assert.Equal("k", op.Key);
+			Assert.Equal(ValueType.Plain, op.Value.Type);
+			// The numeric value round-trips as a materialized JSON number.
+			Assert.Equal(1, System.Convert.ToInt32(op.Value.Value));
 		}
 
 		[Fact]

@@ -5,6 +5,19 @@
 **Audited:** 2026-08-04T14:40:59-07:00
 **Method:** field-by-field comparison of all major data structures, DTOs, and enums. Static/read-only source audit; no build or tests run.
 
+## Wire-tolerance policy
+
+When TS's **static type** marks a field required but TS's **runtime** accepts it as missing with a defined fallback behavior, the port matches the TS **runtime** rather than the TS **type**.
+
+**Rationale.** Real production snapshots have been shown to hit these tolerant paths (`minSequenceNumber` fallback, WAC snapshots without `ccIds`, etc.). If the port is stricter than the TS runtime, we reject valid documents that TS peers already accept — an interop failure with no upside. If the port is stricter than the TS type but matches the TS runtime, we simply behave the same as any conforming TS client, which is what wire interop requires.
+
+**Contrast.** Where TS is *genuinely* strict (throws on the wire path) — e.g. missing `type` on an op envelope, missing `sequenceNumber` on a catchup message — the port stays strict to match.
+
+**How to apply this rule.** If a fresh audit flags "the C# port rejects field X but TS accepts it as missing":
+- Read the TS runtime path for that field (not just the TS type).
+- If TS silently defaults / falls through when X is missing, the port must too. Relax the port and add a regression test named after the failure mode.
+- If TS throws or explicitly rejects when X is missing, the port stays strict.
+
 ## Summary
 
 Counts below are row-level field/member comparisons, not pass/fail type counts. `Types` counts the major named structures audited in each category.

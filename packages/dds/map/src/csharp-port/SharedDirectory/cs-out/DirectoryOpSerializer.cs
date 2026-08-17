@@ -305,6 +305,13 @@ namespace Microsoft.Office.Web.Fluid
 				throw new JsonException("Expected serializable value JSON object.");
 			}
 
+			// TS ref: localValues.ts:58-69, directory.ts:904-906.
+			//   if (serializable.type === ValueType[ValueType.Shared]) { ... migrate ... }
+			//   const localValue: unknown = local ? undefined : op.value.value;
+			// TS branches only on `type === "Shared"`. Any other type (including missing)
+			// falls through to the plain-value path and stores op.value.value directly.
+			// Previous C# rejected missing type. Following the port's wire-tolerance
+			// policy, default missing type to "Plain" so the runtime behavior matches TS.
 			string? type = null;
 			object? value = null;
 
@@ -312,15 +319,12 @@ namespace Microsoft.Office.Web.Fluid
 			{
 				if (reader.TokenType == JsonTokenType.EndObject)
 				{
-					if (type == null)
-					{
-						// TS ISerializableValue.type is required (see internalInterfaces.ts).
-						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory serializable value is missing required 'type' field.");
-					}
-
 					return new SerializableValue()
 					{
-						Type = type,
+						// TS treats missing/absent type as "not Shared" → plain value. Default
+						// to the ValueType.Plain constant so any downstream consumer sees a
+						// well-formed value with a valid type discriminant.
+						Type = type ?? ValueType.Plain,
 						Value = value,
 					};
 				}
