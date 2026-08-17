@@ -1097,7 +1097,17 @@ namespace Microsoft.Office.Web.Fluid
 			if (SeqData.Seq != -1 && SeqData.Seq <= msg.Seq.sequenceNumber && subdir.SeqData.Seq == -1)
 			{
 				subdir.SeqData.Seq = msg.Seq.sequenceNumber;
-				subdir.SeqData.ClientSeq = msg.Origin == OpOrigin.Local && msg.Seq.HasClientSequenceNumber ? msg.Seq.clientSequenceNumber : -1;
+				// TS ref: directory.ts:2167 assigns clientSeq = clientSequenceNumber
+				// unconditionally — the message's clientSeq is what matters for
+				// SeqDataComparator ordering, regardless of whether the message came
+				// from us or from a remote client. Previous C# stored -1 for any
+				// non-local origin, silently losing sibling ordering under grouped
+				// batches (fresh-remote siblings would come through CreateRemoteSeqData
+				// with their correct clientSeq while an already-optimistic sibling
+				// would end up with -1, tie-breaking the wrong way). Fixes SD-A01.
+				subdir.SeqData.ClientSeq = msg.Seq.HasClientSequenceNumber
+					? msg.Seq.clientSequenceNumber
+					: -1;
 			}
 		}
 
