@@ -213,17 +213,13 @@ namespace Microsoft.Office.Web.Fluid
 
 		public static object ResolveSerializedHandle(string url, IFluidDataObjectRegistry? registry, bool payloadPending)
 		{
-			// TS ref: serializer.ts:151-162 constructs a RemoteFluidObjectHandle with
+			// TS ref: serializer.ts:151-162 constructs RemoteFluidObjectHandle with
 			// `value.payloadPending === true` — the flag is preserved on the resolved
-			// handle. Our C# resolves through the registry to a live IFluidDataObject,
-			// which has no place to carry the payloadPending flag. If we do that for a
-			// pending handle, the flag is silently dropped on any re-emission.
-			//
-			// Fix (SD-W07): only resolve non-pending handles to a live object. Pending
-			// handles stay as SerializedFluidHandle so the flag round-trips correctly.
-			// This matches the semantic of TS's RemoteFluidObjectHandle: a pending
-			// handle points to data that isn't ready yet, so it should not be
-			// dereferenced to a live object until the payload is available.
+			// handle. A live IFluidDataObject has no place to carry payloadPending,
+			// so only resolve non-pending handles to a live object. Pending handles
+			// stay as SerializedFluidHandle so the flag round-trips correctly. This
+			// also matches the semantic of a pending handle: the payload is not
+			// ready yet, so dereferencing to a live object would be premature.
 			if (!payloadPending && registry != null)
 			{
 				IFluidDataObject? dataObject = registry.FindDataObject(url);

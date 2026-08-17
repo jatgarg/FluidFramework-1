@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
-// Wave 2c tests for DirectoryOpSerializer. Structure-inspired by TS
-// packages/dds/map/src/test/mocha/directory.spec.ts; test bodies target
-// the C# port's Option B pending-change model.
+// Tests for DirectoryOpSerializer. Structure-inspired by TS
+// packages/dds/map/src/test/mocha/directory.spec.ts.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;
@@ -215,10 +214,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -----------------------------------------------------------------
-		// SD-W04 boundary validation: WriteTo / Serialize rejects DTOs whose
-		// required wire fields are empty/null. Prevents an uninitialized DTO
-		// from silently producing a wire message that TS SharedDirectory
-		// never emits (empty path, empty key, etc.).
+		// Boundary validation: WriteTo / Serialize rejects DTOs whose required
+		// wire fields are empty/null. Prevents an uninitialized DTO from
+		// silently producing a wire message that TS SharedDirectory never
+		// emits (empty path, empty key, etc.).
 		// -----------------------------------------------------------------
 
 		[Fact]

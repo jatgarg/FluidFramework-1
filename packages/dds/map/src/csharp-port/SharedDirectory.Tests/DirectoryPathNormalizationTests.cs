@@ -1,17 +1,14 @@
 // -----------------------------------------------------------------------------
-// Path-normalization regression tests for SharedDirectory.
+// Path-normalization tests for SharedDirectory. TS ref:
+// packages/dds/map/src/directory.ts (posix.join / posix.resolve).
 //
-// Covers findings SD-W05, SD-W06, and SD-T02 from the independent audit
-// (INDEPENDENT-AUDIT.md):
-//   - MakeChildAbsolutePath must match posix.join semantics for '.', '..',
-//     and other special names (not just literal concatenation).
-//   - Incoming op paths must be normalized via posix.resolve('/', path)
-//     before walking, so non-canonical wire paths still target the right
-//     directory.
-//   - GetWorkingDirectory must handle '.', '..', absolute reset, repeated
-//     slashes, and attempts to walk above root the same way as TS
-//     posix.resolve.
-// TS ref: packages/dds/map/src/directory.ts
+// Areas covered:
+//   - MakeChildAbsolutePath matches posix.join semantics for '.', '..', and
+//     other special names (not just literal concatenation).
+//   - Incoming op paths are normalized via posix.resolve('/', path) before
+//     walking, so non-canonical wire paths still target the right directory.
+//   - GetWorkingDirectory handles '.', '..', absolute reset, repeated slashes,
+//     and attempts to walk above root the same way as TS posix.resolve.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;
@@ -70,7 +67,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -------------------------------------------------------------
-		// SD-W05: CreateSubDirectory with special names emits canonical path
+		// CreateSubDirectory with special names emits canonical path
 		// -------------------------------------------------------------
 
 		[Fact]
@@ -106,7 +103,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -------------------------------------------------------------
-		// SD-W06: incoming op paths are normalized before walking
+		// Incoming op paths are normalized before walking
 		// -------------------------------------------------------------
 
 		[Fact]
@@ -162,7 +159,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -------------------------------------------------------------
-		// SD-T02: GetWorkingDirectory posix.resolve coverage
+		// GetWorkingDirectory posix.resolve coverage
 		// -------------------------------------------------------------
 
 		[Fact]

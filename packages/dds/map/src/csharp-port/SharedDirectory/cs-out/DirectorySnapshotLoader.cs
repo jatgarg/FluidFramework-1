@@ -1,9 +1,8 @@
 // -----------------------------------------------------------------------------
 // Parses SharedDirectory snapshot JSON (IDirectoryDataObject in TS) into an
-// intermediate DirectorySnapshotDto for later application by Wave 2b.
-// Supports the simple IDirectoryDataObject shape and the blob-split
-// IDirectoryNewStorageFormat load path.
-// Part of the SharedDirectory C# feasibility port — Wave 2a.
+// intermediate DirectorySnapshotDto for later application. Supports the simple
+// IDirectoryDataObject shape and the blob-split IDirectoryNewStorageFormat
+// load path.
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -103,10 +102,9 @@ namespace Microsoft.Office.Web.Fluid
 			IDirectoryNewStorageFormat format = ReadNewStorageFormat(element, blobsElement, registry);
 			DirectorySnapshotDto snapshot = format.Content;
 
-			// TS ref: directory.ts:700-715 iterates newFormat.blobs and reads each with
-			// storage.readBlob. When blobs is empty, TS never touches the resolver at all
-			// (Promise.all over an empty array resolves immediately). Only require a
-			// resolver if we actually need to read a blob. Fixes SD-W01.
+			// TS ref: directory.ts:700-715 iterates newFormat.blobs and reads each via
+			// storage.readBlob. When blobs is empty, the resolver is never called, so
+			// only require it here when a blob actually needs to be read.
 			if (format.Blobs.Length > 0 && blobResolver == null)
 			{
 				throw InvalidSnapshot("Blob-split IDirectoryNewStorageFormat snapshots with non-empty 'blobs' require a blob resolver callback.");
@@ -219,10 +217,9 @@ namespace Microsoft.Office.Web.Fluid
 				ReadSubdirectories(subdirectoriesElement, dto.Subdirectories, path, registry);
 			}
 
-			// TS ref: directory.ts:697-770 does not inspect root-level `ci` at all. Only
-			// child `ci` blocks feed the seqData / creator-set logic. Following the port's
-			// wire-tolerance policy (match TS runtime, not TS type), skip root `ci` even
-			// if present.
+			// TS ref: directory.ts:697-770 does not inspect root-level `ci` at all;
+			// only child `ci` blocks feed the seqData / creator-set logic. Skip root
+			// `ci` even when present to match TS runtime behavior.
 			if (element.TryGetProperty("ci", out JsonElement createInfoElement) && path != "root")
 			{
 				dto.CreateInfo = ReadCreateInfo(createInfoElement, path);
@@ -233,21 +230,10 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static DirectoryCreateInfo ReadCreateInfo(JsonElement createInfoElement, string path)
 		{
-			// TS ref: directory.ts:743-770.
-			//   const createInfo = subdirObject.ci;
-			//   if (createInfo !== undefined && createInfo.csn > 0) {
-			//     seqData = { seq: createInfo.csn, ... };
-			//   } else {
-			//     seqData = { seq: 0, clientSeq: ++currentSubDir.localCreationSeq };
-			//   }
-			//   new Set<string>(createInfo === undefined ? [] : createInfo.ccIds);
-			// TS treats:
-			//   - Missing `csn` as falsy → falls through to the `seq: 0` branch.
-			//   - Missing `ccIds` as `undefined`, which `new Set(undefined)` accepts as
-			//     an empty iterable (empty creator set).
-			// C# previously required both. Following the port's wire-tolerance policy,
-			// match TS runtime: allow missing csn (default 0), allow missing ccIds
-			// (default empty). Reject only on TYPE mismatch when the field is present.
+			// TS ref: directory.ts:743-770. TS treats missing `csn` as falsy (falls
+			// through to the seq: 0 branch) and missing `ccIds` as an empty iterable
+			// (`new Set(undefined)`). Match TS runtime: allow both to be missing;
+			// enforce types only when the field IS present.
 			if (createInfoElement.ValueKind != JsonValueKind.Object)
 			{
 				throw InvalidSnapshot($"Create info at {path}.ci must be a JSON object.");

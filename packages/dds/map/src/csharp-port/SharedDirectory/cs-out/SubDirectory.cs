@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/map/src/directory.ts (SubDirectory class subset).
-// Part of the SharedDirectory C# feasibility-demo port.
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -706,9 +705,7 @@ namespace Microsoft.Office.Web.Fluid
 
 				// TS ref: directory.ts:1985-2007. TS emits valueChanged with
 				// previousValue: undefined even when the key isn't present locally,
-				// as long as no pending op suppresses it. The C# port previously
-				// only emitted when TryGetValue succeeded, which silently dropped
-				// the event for absent keys. Fixes SD-A04.
+				// as long as no pending op suppresses it.
 				_storage.TryGetValue(key, out object? previous);
 				_storage.Remove(key);
 				if (!HasPendingStorageEntryForKeyOrClearNoLock(key))
@@ -1098,13 +1095,9 @@ namespace Microsoft.Office.Web.Fluid
 			{
 				subdir.SeqData.Seq = msg.Seq.sequenceNumber;
 				// TS ref: directory.ts:2167 assigns clientSeq = clientSequenceNumber
-				// unconditionally — the message's clientSeq is what matters for
-				// SeqDataComparator ordering, regardless of whether the message came
-				// from us or from a remote client. Previous C# stored -1 for any
-				// non-local origin, silently losing sibling ordering under grouped
-				// batches (fresh-remote siblings would come through CreateRemoteSeqData
-				// with their correct clientSeq while an already-optimistic sibling
-				// would end up with -1, tie-breaking the wrong way). Fixes SD-A01.
+				// unconditionally. The message's clientSeq drives SeqDataComparator
+				// sibling ordering for grouped batches, so it must be preserved for
+				// both local and remote origins.
 				subdir.SeqData.ClientSeq = msg.Seq.HasClientSequenceNumber
 					? msg.Seq.clientSequenceNumber
 					: -1;
@@ -1488,10 +1481,8 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			// TS ref: directory.ts:2003-2005. TS emits `containedValueChanged` only on
 			// the direct-container subdirectory (this.emit) and `valueChanged` directly
-			// on the SharedDirectory (this.directory.emit) — NOT via bubbling through
-			// subdirectory ancestors. Previous C# behavior bubbled OnValueChanged up
-			// every ancestor, so a listener on an ancestor saw events from all
-			// descendants. Fixes SD-A05.
+			// on the SharedDirectory (this.directory.emit) — never via bubbling through
+			// subdirectory ancestors.
 			ValueChangedEventHandler? raiseEvent = OnValueChanged;
 			if (raiseEvent != null)
 			{
@@ -1513,11 +1504,8 @@ namespace Microsoft.Office.Web.Fluid
 			{
 				// TS ref: directory.ts:2621-2623 uses
 				//   this.emit("subDirectoryCreated", posix.join(subDirName, relativePath), ...)
-				// when re-emitting a child's event. So each ancestor sees the joined
+				// when re-emitting a child's event, so each ancestor sees the joined
 				// path relative to itself, not the raw name at the emission site.
-				// Previous C# passed the args reference up unchanged, so a root-level
-				// listener saw Path == "leaf" instead of "child/grandchild/leaf".
-				// Fixes SD-A03.
 				SubDirectoryEventArgs bubbledArgs = new SubDirectoryEventArgs()
 				{
 					SubdirName = args.SubdirName,

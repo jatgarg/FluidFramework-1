@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
-// Wave 2c tests for op processing. Structure-inspired by TS
-// packages/dds/map/src/test/mocha/directory.spec.ts; test bodies target
-// the C# port's TypeScript-style per-op-lifetime pending-change model.
+// Tests for op processing. Structure-inspired by TS
+// packages/dds/map/src/test/mocha/directory.spec.ts.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;

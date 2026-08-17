@@ -1,15 +1,12 @@
 // -----------------------------------------------------------------------------
-// Feasibility-demo tests for SharedDirectory.
+// Basic API-surface tests for SharedDirectory.
 //
-// Covers the in-memory API surface delivered by Wave 1:
+// Covers:
 //   - set/get/has/delete/keys/count/clear
 //   - createSubDirectory/getSubDirectory/hasSubDirectory/deleteSubDirectory
 //   - countSubDirectory/subDirectories creation-order iteration
 //   - getWorkingDirectory posix-style path navigation
 //   - OnValueChanged / OnSubDirectoryCreated / OnSubDirectoryDeleted events
-//
-// Op processing, snapshot loading, and pending-change tracking are
-// intentionally out of scope for the demo and not tested here.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;

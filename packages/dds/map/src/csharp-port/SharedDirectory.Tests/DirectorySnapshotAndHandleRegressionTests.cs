@@ -1,21 +1,19 @@
 // -----------------------------------------------------------------------------
-// Regression tests for wire + snapshot fixes bundled into Commit 3.
+// Regression tests for SharedDirectory snapshot loader + handle-wire edge
+// cases. TS refs are inline.
 //
-// Covers findings SD-W01, SD-W07, SD-T01, and SD-T03 from the independent
-// audit (INDEPENDENT-AUDIT.md).
-//
-// SD-W01: blob-split snapshot with an empty blobs array must not require a
-//         resolver (matching TS Promise.all over an empty array in
-//         directory.ts:700-715).
-// SD-W07: payloadPending handles must NOT be resolved to a live
-//         IFluidDataObject through the registry — the flag would be
-//         silently dropped on re-emission. Matches TS RemoteFluidObjectHandle
-//         retention of payloadPending in serializer.ts:151-162.
-// SD-T01: LoadFromSnapshot into a non-empty directory must throw
-//         InvalidState and leave pre-existing content unchanged.
-// SD-T03: A local-op ack whose client sequence is the zero/missing
-//         sentinel must throw InvalidSequenceNumber with the pending
-//         entry left unchanged.
+// Areas covered:
+//   - Blob-split snapshot with an empty blobs array does not require a
+//     resolver (matches TS Promise.all over an empty array in
+//     directory.ts:700-715).
+//   - payloadPending handles are not resolved to a live IFluidDataObject
+//     through the registry — the flag would be silently dropped on
+//     re-emission. Matches TS RemoteFluidObjectHandle retention of
+//     payloadPending in serializer.ts:151-162.
+//   - LoadFromSnapshot into a non-empty directory throws InvalidState and
+//     leaves pre-existing content unchanged.
+//   - A local-op ack whose client sequence is the zero/missing sentinel
+//     throws InvalidSequenceNumber with the pending entry left unchanged.
 // -----------------------------------------------------------------------------
 
 using System;
@@ -28,15 +26,14 @@ namespace Microsoft.Office.Web.Fluid.Tests
 	public class DirectoryAuditRegressionTests
 	{
 		// -------------------------------------------------------------
-		// SD-W01: empty blobs array does not require a resolver
+		// Empty blobs array does not require a resolver
 		// -------------------------------------------------------------
 
 		[Fact]
 		public void LoadFromSnapshot_BlobSplitFormat_EmptyBlobsArray_WithoutResolver_Succeeds()
 		{
 			// TS ref: directory.ts:700-715. Promise.all over an empty blobs array
-			// resolves immediately; storage.readBlob is never called. C# previously
-			// threw regardless. Fixes SD-W01.
+			// resolves immediately; storage.readBlob is never called.
 			var dir = new SharedDirectory();
 			const string snapshotJson = "{\"blobs\":[],\"content\":{}}";
 
@@ -70,15 +67,14 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -------------------------------------------------------------
-		// SD-W07: payloadPending handles are not resolved to live objects
+		// payloadPending handles are not resolved to live objects
 		// -------------------------------------------------------------
 
 		[Fact]
 		public void RemoteSet_PayloadPendingHandle_ThroughRegistry_KeepsAsSerializedHandle()
 		{
 			// TS ref: serializer.ts:151-162 constructs RemoteFluidObjectHandle with
-			// payloadPending preserved. Previous C# resolved through the registry to a
-			// live IFluidDataObject, dropping the flag. Fixes SD-W07.
+			// payloadPending preserved on the resolved handle.
 			var registry = new FakeFluidDataObjectRegistry();
 			var handle = new TestFluidDataObject("target");
 			registry.Register(handle, "/dataObjects/target");
@@ -101,8 +97,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RemoteSet_NonPendingHandle_ThroughRegistry_StillResolvesToLiveObject()
 		{
-			// Sanity: the SD-W07 fix must not break the happy path — non-pending
-			// handles still resolve to their live IFluidDataObject.
+			// Sanity: non-pending handles still resolve to their live IFluidDataObject.
 			var registry = new FakeFluidDataObjectRegistry();
 			var handle = new TestFluidDataObject("target");
 			registry.Register(handle, "/dataObjects/target");
@@ -117,7 +112,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -------------------------------------------------------------
-		// SD-T01: LoadFromSnapshot into a non-empty directory throws
+		// LoadFromSnapshot into a non-empty directory throws
 		// -------------------------------------------------------------
 
 		[Fact]
@@ -158,7 +153,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -------------------------------------------------------------
-		// SD-T03: local ack with zero/missing client sequence throws
+		// Local ack with zero/missing client sequence throws
 		// -------------------------------------------------------------
 
 		[Fact]

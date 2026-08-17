@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
 // System.Text.Json (de)serialization for DirectoryOperation and its subclasses.
 // Wire format matches packages/dds/map/src/directory.ts (TS SharedDirectory).
-// Part of the SharedDirectory C# feasibility port — Wave 2a.
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -78,14 +77,12 @@ namespace Microsoft.Office.Web.Fluid
 			ArgumentNullException.ThrowIfNull(writer);
 			ArgumentNullException.ThrowIfNull(op);
 
-			// Boundary validation (SD-W04). Every TS directory op emits an absolute
-			// path (packages/dds/map/src/directory.ts always constructs op envelopes
-			// with `path: this.absolutePath`, which is never empty). Historically our
-			// DTOs default Path/Key/SubdirName to string.Empty for constructor
-			// convenience, which would let a caller hand an uninitialized DTO to the
-			// serializer and silently produce a wire message with empty required
-			// fields. Reject before we write, so the failure surfaces at the source
-			// instead of downstream at the receiver.
+			// Boundary validation. Every TS directory op emits an absolute path
+			// (packages/dds/map/src/directory.ts always constructs envelopes with
+			// `path: this.absolutePath`) and concrete key / subdirName values. DTOs
+			// default those fields to string.Empty for constructor convenience;
+			// validate before writing so an uninitialized DTO can't silently produce
+			// a wire message with empty required fields.
 			ValidateRequiredWireFields(op);
 
 			writer.WriteStartObject();
@@ -370,10 +367,10 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			ArgumentNullException.ThrowIfNull(value);
 
-			// SerializableValue.Type is required on the wire (see ValidateRequiredWireFields
-			// in the set-op branch, plus TS internalInterfaces.ts ISerializableValue).
-			// Boundary-validated here so a hand-constructed SerializableValue with a
-			// default empty Type never reaches the wire.
+			// SerializableValue.Type is required on the wire (matches TS
+			// ISerializableValue in internalInterfaces.ts). Boundary-validated here
+			// so a hand-constructed SerializableValue with a default empty Type
+			// never reaches the wire.
 			if (string.IsNullOrEmpty(value.Type))
 			{
 				throw new OcsException(
@@ -396,12 +393,9 @@ namespace Microsoft.Office.Web.Fluid
 			}
 
 			// TS ref: localValues.ts:58-69, directory.ts:904-906.
-			//   if (serializable.type === ValueType[ValueType.Shared]) { ... migrate ... }
-			//   const localValue: unknown = local ? undefined : op.value.value;
-			// TS branches only on `type === "Shared"`. Any other type (including missing)
-			// falls through to the plain-value path and stores op.value.value directly.
-			// Previous C# rejected missing type. Following the port's wire-tolerance
-			// policy, default missing type to "Plain" so the runtime behavior matches TS.
+			// TS branches only on `type === "Shared"`. Any other type (including
+			// missing) falls through to the plain-value path and stores op.value.value
+			// directly. Match TS runtime tolerance: default missing type to "Plain".
 			string? type = null;
 			object? value = null;
 
@@ -411,8 +405,7 @@ namespace Microsoft.Office.Web.Fluid
 				{
 					return new SerializableValue()
 					{
-						// TS treats missing/absent type as "not Shared" → plain value. Default
-						// to the ValueType.Plain constant so any downstream consumer sees a
+						// Missing/absent type defaults to Plain so downstream sees a
 						// well-formed value with a valid type discriminant.
 						Type = type ?? ValueType.Plain,
 						Value = value,

@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
-// Wave 2c tests for DirectorySnapshotLoader. Structure-inspired by TS
-// packages/dds/map/src/test/mocha/directory.snapshot.spec.ts; test bodies target
-// the C# port's Option B pending-change model.
+// Tests for DirectorySnapshotLoader. Structure-inspired by TS
+// packages/dds/map/src/test/mocha/directory.snapshot.spec.ts.
 // -----------------------------------------------------------------------------
 
 using System;

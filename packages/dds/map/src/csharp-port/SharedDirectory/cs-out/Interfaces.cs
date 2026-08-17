@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/map/src/interfaces.ts and internalInterfaces.ts
 // Op discriminated union ported from the top of packages/dds/map/src/directory.ts
-// Part of the SharedDirectory C# feasibility port.
 // -----------------------------------------------------------------------------
 
 using System;

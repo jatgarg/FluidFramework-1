@@ -1,17 +1,15 @@
 // -----------------------------------------------------------------------------
-// Event-shape regression tests for SharedDirectory.
+// Event-shape regression tests for SharedDirectory. TS refs are inline.
 //
-// Covers findings SD-A03, SD-A04, and SD-A05 from the independent audit
-// (INDEPENDENT-AUDIT.md).
-//
-// SD-A03: nested subdirectory events must bubble a joined relative path
-//         (matching TS posix.join(subDirName, relativePath) in directory.ts).
-// SD-A04: remote delete of an absent key must still emit valueChanged with
-//         previousValue null (matching TS previousValue: undefined behavior).
-// SD-A05: OnValueChanged on a SubDirectory must fire only on the direct
-//         container (matching TS containedValueChanged semantics), not
-//         bubble through ancestor subdirectories. SharedDirectory-level
-//         OnValueChanged continues to see events from anywhere.
+// Areas covered:
+//   - Nested subdirectory events bubble a joined relative path (matching TS
+//     posix.join(subDirName, relativePath) in directory.ts).
+//   - Remote delete of an absent key still emits valueChanged with
+//     previousValue null (matching TS previousValue: undefined behavior).
+//   - OnValueChanged on a SubDirectory fires only on the direct container
+//     (matching TS containedValueChanged semantics), not through ancestors.
+//     SharedDirectory-level OnValueChanged continues to see events from
+//     anywhere.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;
@@ -23,7 +21,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 	public class DirectoryEventShapeTests
 	{
 		// -------------------------------------------------------------
-		// SD-A03: nested subdirectory events bubble the joined path
+		// Nested subdirectory events bubble the joined path
 		// -------------------------------------------------------------
 
 		[Fact]
@@ -102,7 +100,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -------------------------------------------------------------
-		// SD-A04: remote delete of absent key emits valueChanged event
+		// Remote delete of absent key emits valueChanged event
 		// -------------------------------------------------------------
 
 		[Fact]
@@ -131,7 +129,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RemoteDelete_PresentKey_EmitsValueChangedWithPreviousValue()
 		{
-			// Sanity check: the present-key path still works after the SD-A04 fix.
+			// Sanity: the present-key path is unchanged.
 			var dir = new SharedDirectory();
 			dir.Set("k", "v");
 
@@ -147,7 +145,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -------------------------------------------------------------
-		// SD-A05: OnValueChanged does NOT bubble through ancestor subdirs
+		// OnValueChanged does NOT bubble through ancestor subdirs
 		// -------------------------------------------------------------
 
 		[Fact]

@@ -1,18 +1,15 @@
 // -----------------------------------------------------------------------------
-// SD-A01 repro test for SharedDirectory.
+// Tests SharedDirectory sibling ordering under remote acknowledgement of
+// an already-optimistic child.
 //
-// Tests the clientSeq preservation on the "already-optimistic child gets
-// sequenced" path — TS ref: directory.ts:2124-2167. When ApplyRemoteCreate
-// runs against a subdir that already exists (either from a local pending
-// create or from a previous remote create), TS unconditionally assigns
+// TS ref: packages/dds/map/src/directory.ts:2124-2167. When ApplyRemoteCreate
+// runs against a subdir that already exists (from a local pending create or a
+// previous remote create), TS assigns
 //   subDir.seqData.clientSeq = clientSequenceNumber
-// from the incoming message. C# previously stored -1 for any non-local
-// origin, losing the message's clientSeq. That matters for grouped-batch
-// sibling ordering, which SeqDataComparator breaks by clientSeq when seq
-// matches — the two orderings diverge whenever one sibling comes through
-// the MarkCreatedSubDirectorySequencedNoLock branch and another comes
-// through CreateRemoteSeqData with a smaller clientSeq than the "already
-// optimistic" sibling should have had.
+// from the incoming message unconditionally. That clientSeq drives
+// SeqDataComparator sibling ordering for grouped batches — a mismatch changes
+// enumeration order when two siblings share a sequenceNumber but arrive via
+// different code paths.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;
@@ -52,8 +49,6 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			// TS iteration order (both siblings at seq=42, sort by clientSeq):
 			//   X (clientSeq=3), then Y (clientSeq=5).
-			// With the SD-A01 bug (Y.clientSeq stored as -1):
-			//   Y (clientSeq=-1), then X (clientSeq=3). Different order — observable.
 			IReadOnlyList<string> order = dir.SubDirectories().Select(kvp => kvp.Key).ToList();
 			Assert.Equal(new[] { "X", "Y" }, order);
 		}

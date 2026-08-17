@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/map/src/directory.ts (SharedDirectory class subset).
-// Part of the SharedDirectory C# feasibility-demo port.
 // -----------------------------------------------------------------------------
 
 #nullable enable

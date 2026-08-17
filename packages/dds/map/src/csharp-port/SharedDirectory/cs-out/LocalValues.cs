@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/map/src/localValues.ts
-// Part of the SharedDirectory C# feasibility port.
 // Plain values and Fluid-handle values serialize via DirectoryOpSerializer.
 // Legacy Shared-value migration remains stubbed.
 // -----------------------------------------------------------------------------
@@ -51,9 +50,10 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			if (serializable.Type == ValueType.Shared)
 			{
-				// TODO(wave2): Build the legacy handle wire payload if WN needs pre-handle documents.
+				// TODO: Build the legacy handle wire payload if pre-handle documents
+				// need to be supported.
 				throw new NotImplementedException(
-					"LocalValues.MigrateIfSharedSerializable legacy Shared-value migration is a stub. Wave 2.");
+					"LocalValues.MigrateIfSharedSerializable legacy Shared-value migration is not implemented.");
 			}
 		}
 	}

@@ -298,6 +298,27 @@ Everything else in the TS `directory.ts` public surface is implemented.
 
 ---
 
+## 8a. Documented deviations from TS
+
+A fresh independent audit will re-flag the following as "wire drift" or "algorithm divergence" unless the reviewer knows the port's context. Each is deliberate — read this list before treating any of them as a bug.
+
+| Deviation | Where | Why deliberate |
+|---|---|---|
+| Relative handle URLs are not absolutized | `HandleWireFormat.ResolveSerializedHandle` | The port is a wire reader/writer, not a full `IFluidSerializer` implementation with handle context. TS `generateHandleContextPath` is a serializer responsibility that predates our port. Word Native writes absolute URLs; legacy relative-URL snapshots don't appear on our side. |
+| Malformed `{type:"__fluid_handle__"}` marker without `url` stored as plain object | `HandleWireFormat.TryReadHandleUrl` + `DirectoryOpSerializer.MaterializeJsonValue` | Intentional laxity — a malformed handle marker with no URL falls through to being stored as a dictionary. TS throws while reading `url.startsWith(...)`. Preserving our fragility here would only convert a receiver-side crash into a document that can't be loaded, which is worse. |
+| Remote createSubDirectory with `clientId == null` accepted | `SubDirectory.ApplyRemoteCreateSubDirectory` and `MarkCreatedSubDirectorySequencedNoLock` | Word Native's `SequencedDocumentMessageDescriptor.ClientId` can legitimately be null for system-emitted messages. TS `assertNonNullClientId` reflects TS runtime assumptions that don't hold on our side. |
+| `_sender != null` used as attach state instead of a full `isAttached()` / `isDetached()` lifecycle | `SubDirectory` (multiple sites) and `SharedDirectory` | The full TS attach lifecycle (attach event, deferred-op queue, detached-vs-attached-vs-loading state machine) is on the deferred list. `_sender != null` is a heuristic that maps cleanly to Word Native's integration. |
+| Iteration order after `Delete`+`Set` of the same key differs from TS `Map` | `SubDirectory.Entries()`, `Keys`, `Values` | .NET `Dictionary` slot reuse keeps a deleted/re-added key in its old iteration position; TS `Map` appends it. Ported tests already encode the C# ordering. Word Native consumers don't depend on TS-shaped iteration order after delete-and-readd. |
+
+If a future need makes one of these matter, the "effort to add" is roughly:
+- Handle context / relative URL absolutization: needs an `IFluidSerializer`-like context passed to the reader; ~4-6 hrs.
+- Strict handle-marker rejection: 5 minutes.
+- `assertNonNullClientId`: 30 minutes plus a decision on how Word Native marks system messages.
+- Full attach lifecycle: ~1-2 days.
+- TS-`Map`-shaped iteration order: replace the internal `Dictionary` with a linked-hash structure; ~2-3 hrs.
+
+---
+
 ## 9. Design decisions
 
 Full rationale in `README.md` (§ "Open questions", all four resolved).

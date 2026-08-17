@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/map/src/utils.ts
-// Part of the SharedDirectory C# feasibility port.
 // -----------------------------------------------------------------------------
 
 using System;
