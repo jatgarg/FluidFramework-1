@@ -540,30 +540,6 @@ namespace Microsoft.Office.Web.Fluid
 			return current;
 		}
 
-		internal bool ShouldApplyRemoteOpForKey(string key)
-		{
-			lock (_lock)
-			{
-				return !HasPendingStorageEntryForKeyOrClearNoLock(key);
-			}
-		}
-
-		internal bool ShouldApplyRemoteSubdirOp(string subdirName)
-		{
-			lock (_lock)
-			{
-				return !HasPendingSubDirectoryEntryNoLock(subdirName);
-			}
-		}
-
-		internal bool ShouldApplyRemoteClear()
-		{
-			lock (_lock)
-			{
-				return !HasPendingClearNoLock();
-			}
-		}
-
 		internal bool ProcessAckForKey(string key, SequencedDocumentMessageDescriptor msg, SubDirectory? targetSubdir)
 		{
 			lock (_lock)

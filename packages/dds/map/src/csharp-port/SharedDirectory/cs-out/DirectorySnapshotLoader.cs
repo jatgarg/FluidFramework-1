@@ -100,17 +100,21 @@ namespace Microsoft.Office.Web.Fluid
 			Func<string, string>? blobResolver,
 			IFluidDataObjectRegistry? registry)
 		{
-			if (blobResolver == null)
-			{
-				throw InvalidSnapshot("Blob-split IDirectoryNewStorageFormat snapshots require a blob resolver callback.");
-			}
-
 			IDirectoryNewStorageFormat format = ReadNewStorageFormat(element, blobsElement, registry);
 			DirectorySnapshotDto snapshot = format.Content;
 
+			// TS ref: directory.ts:700-715 iterates newFormat.blobs and reads each with
+			// storage.readBlob. When blobs is empty, TS never touches the resolver at all
+			// (Promise.all over an empty array resolves immediately). Only require a
+			// resolver if we actually need to read a blob. Fixes SD-W01.
+			if (format.Blobs.Length > 0 && blobResolver == null)
+			{
+				throw InvalidSnapshot("Blob-split IDirectoryNewStorageFormat snapshots with non-empty 'blobs' require a blob resolver callback.");
+			}
+
 			foreach (string blobName in format.Blobs)
 			{
-				string? blobJson = blobResolver(blobName);
+				string? blobJson = blobResolver!(blobName);
 				if (blobJson == null)
 				{
 					throw InvalidSnapshot($"Blob resolver returned null for blob '{blobName}'.");
