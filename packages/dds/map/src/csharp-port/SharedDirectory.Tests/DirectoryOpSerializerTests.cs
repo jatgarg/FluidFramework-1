@@ -213,5 +213,102 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			OcsException exception = Assert.Throws<OcsException>(() => DirectoryOpSerializer.Deserialize("{\"type\":\"clear\"}"));
 			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
 		}
+
+		// -----------------------------------------------------------------
+		// SD-W04 boundary validation: WriteTo / Serialize rejects DTOs whose
+		// required wire fields are empty/null. Prevents an uninitialized DTO
+		// from silently producing a wire message that TS SharedDirectory
+		// never emits (empty path, empty key, etc.).
+		// -----------------------------------------------------------------
+
+		[Fact]
+		public void Serialize_SetOp_UninitializedDto_Throws()
+		{
+			// Default construction leaves Path == "" via the base class initializer.
+			OcsException exception = Assert.Throws<OcsException>(
+				() => DirectoryOpSerializer.Serialize(new DirectorySetOperation()));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("path", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_SetOp_MissingKey_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(
+				() => DirectoryOpSerializer.Serialize(new DirectorySetOperation()
+				{
+					Path = "/",
+					// Key intentionally left as default "".
+					Value = new SerializableValue() { Type = "Plain", Value = 1 },
+				}));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("key", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_SetOp_MissingValueType_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(
+				() => DirectoryOpSerializer.Serialize(new DirectorySetOperation()
+				{
+					Path = "/",
+					Key = "k",
+					Value = new SerializableValue() { Value = 1 }, // Type defaults to ""
+				}));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("type", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_DeleteOp_MissingKey_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(
+				() => DirectoryOpSerializer.Serialize(new DirectoryDeleteOperation() { Path = "/" }));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("key", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_ClearOp_MissingPath_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(
+				() => DirectoryOpSerializer.Serialize(new DirectoryClearOperation()));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("path", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_CreateSubDirectoryOp_MissingSubdirName_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(
+				() => DirectoryOpSerializer.Serialize(new DirectoryCreateSubDirectoryOperation() { Path = "/" }));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("subdirName", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_DeleteSubDirectoryOp_MissingSubdirName_Throws()
+		{
+			OcsException exception = Assert.Throws<OcsException>(
+				() => DirectoryOpSerializer.Serialize(new DirectoryDeleteSubDirectoryOperation() { Path = "/" }));
+			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			Assert.Contains("subdirName", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_FullyInitializedDtos_Succeed()
+		{
+			// Sanity: the boundary validation must not reject the happy path.
+			DirectoryOpSerializer.Serialize(new DirectorySetOperation()
+			{
+				Path = "/foo",
+				Key = "k",
+				Value = new SerializableValue() { Type = "Plain", Value = 1 },
+			});
+			DirectoryOpSerializer.Serialize(new DirectoryDeleteOperation() { Path = "/foo", Key = "k" });
+			DirectoryOpSerializer.Serialize(new DirectoryClearOperation() { Path = "/foo" });
+			DirectoryOpSerializer.Serialize(new DirectoryCreateSubDirectoryOperation() { Path = "/", SubdirName = "sub" });
+			DirectoryOpSerializer.Serialize(new DirectoryDeleteSubDirectoryOperation() { Path = "/", SubdirName = "sub" });
+		}
 	}
 }

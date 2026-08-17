@@ -78,39 +78,49 @@ namespace Microsoft.Office.Web.Fluid
 			ArgumentNullException.ThrowIfNull(writer);
 			ArgumentNullException.ThrowIfNull(op);
 
+			// Boundary validation (SD-W04). Every TS directory op emits an absolute
+			// path (packages/dds/map/src/directory.ts always constructs op envelopes
+			// with `path: this.absolutePath`, which is never empty). Historically our
+			// DTOs default Path/Key/SubdirName to string.Empty for constructor
+			// convenience, which would let a caller hand an uninitialized DTO to the
+			// serializer and silently produce a wire message with empty required
+			// fields. Reject before we write, so the failure surfaces at the source
+			// instead of downstream at the receiver.
+			ValidateRequiredWireFields(op);
+
 			writer.WriteStartObject();
 
 			switch (op)
 			{
 				case DirectorySetOperation setOperation:
 					writer.WriteString(_typePropertyName, _setTypeName);
-					writer.WriteString(_pathPropertyName, setOperation.Path ?? string.Empty);
-					writer.WriteString(_keyPropertyName, setOperation.Key ?? string.Empty);
+					writer.WriteString(_pathPropertyName, setOperation.Path);
+					writer.WriteString(_keyPropertyName, setOperation.Key);
 					writer.WritePropertyName(_valuePropertyName);
 					WriteSerializableValue(writer, setOperation.Value, registry);
 					break;
 
 				case DirectoryDeleteOperation deleteOperation:
 					writer.WriteString(_typePropertyName, _deleteTypeName);
-					writer.WriteString(_pathPropertyName, deleteOperation.Path ?? string.Empty);
-					writer.WriteString(_keyPropertyName, deleteOperation.Key ?? string.Empty);
+					writer.WriteString(_pathPropertyName, deleteOperation.Path);
+					writer.WriteString(_keyPropertyName, deleteOperation.Key);
 					break;
 
 				case DirectoryClearOperation clearOperation:
 					writer.WriteString(_typePropertyName, _clearTypeName);
-					writer.WriteString(_pathPropertyName, clearOperation.Path ?? string.Empty);
+					writer.WriteString(_pathPropertyName, clearOperation.Path);
 					break;
 
 				case DirectoryCreateSubDirectoryOperation createSubDirectoryOperation:
 					writer.WriteString(_typePropertyName, _createSubDirectoryTypeName);
-					writer.WriteString(_pathPropertyName, createSubDirectoryOperation.Path ?? string.Empty);
-					writer.WriteString(_subdirNamePropertyName, createSubDirectoryOperation.SubdirName ?? string.Empty);
+					writer.WriteString(_pathPropertyName, createSubDirectoryOperation.Path);
+					writer.WriteString(_subdirNamePropertyName, createSubDirectoryOperation.SubdirName);
 					break;
 
 				case DirectoryDeleteSubDirectoryOperation deleteSubDirectoryOperation:
 					writer.WriteString(_typePropertyName, _deleteSubDirectoryTypeName);
-					writer.WriteString(_pathPropertyName, deleteSubDirectoryOperation.Path ?? string.Empty);
-					writer.WriteString(_subdirNamePropertyName, deleteSubDirectoryOperation.SubdirName ?? string.Empty);
+					writer.WriteString(_pathPropertyName, deleteSubDirectoryOperation.Path);
+					writer.WriteString(_subdirNamePropertyName, deleteSubDirectoryOperation.SubdirName);
 					break;
 
 				default:
@@ -118,6 +128,75 @@ namespace Microsoft.Office.Web.Fluid
 			}
 
 			writer.WriteEndObject();
+		}
+
+		/// <summary>
+		/// Rejects DTOs whose required wire fields are null or empty. Prevents an
+		/// uninitialized <see cref="DirectoryOperation"/> from being serialized
+		/// into a syntactically-valid wire message that targets the root path with
+		/// empty key / subdirName. TS SharedDirectory never emits any of these
+		/// shapes (see <c>directory.ts</c> — every op envelope is constructed with
+		/// concrete path and identifier values).
+		/// </summary>
+		private static void ValidateRequiredWireFields(DirectoryOperation op)
+		{
+			if (string.IsNullOrEmpty(op.Path))
+			{
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					$"Directory operation of type '{op.GetType().Name}' is missing required 'path' field.");
+			}
+
+			switch (op)
+			{
+				case DirectorySetOperation setOperation:
+					if (string.IsNullOrEmpty(setOperation.Key))
+					{
+						throw new OcsException(OcsGateErrorCode.InvalidOperation,
+							"DirectorySetOperation is missing required 'key' field.");
+					}
+
+					if (setOperation.Value is null)
+					{
+						throw new OcsException(OcsGateErrorCode.InvalidOperation,
+							"DirectorySetOperation is missing required 'value' field.");
+					}
+
+					if (string.IsNullOrEmpty(setOperation.Value.Type))
+					{
+						throw new OcsException(OcsGateErrorCode.InvalidOperation,
+							"DirectorySetOperation.Value is missing required 'type' discriminant.");
+					}
+
+					break;
+
+				case DirectoryDeleteOperation deleteOperation:
+					if (string.IsNullOrEmpty(deleteOperation.Key))
+					{
+						throw new OcsException(OcsGateErrorCode.InvalidOperation,
+							"DirectoryDeleteOperation is missing required 'key' field.");
+					}
+
+					break;
+
+				case DirectoryCreateSubDirectoryOperation createOperation:
+					if (string.IsNullOrEmpty(createOperation.SubdirName))
+					{
+						throw new OcsException(OcsGateErrorCode.InvalidOperation,
+							"DirectoryCreateSubDirectoryOperation is missing required 'subdirName' field.");
+					}
+
+					break;
+
+				case DirectoryDeleteSubDirectoryOperation deleteSubOperation:
+					if (string.IsNullOrEmpty(deleteSubOperation.SubdirName))
+					{
+						throw new OcsException(OcsGateErrorCode.InvalidOperation,
+							"DirectoryDeleteSubDirectoryOperation is missing required 'subdirName' field.");
+					}
+
+					break;
+			}
 		}
 
 		/// <summary>
@@ -291,8 +370,19 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			ArgumentNullException.ThrowIfNull(value);
 
+			// SerializableValue.Type is required on the wire (see ValidateRequiredWireFields
+			// in the set-op branch, plus TS internalInterfaces.ts ISerializableValue).
+			// Boundary-validated here so a hand-constructed SerializableValue with a
+			// default empty Type never reaches the wire.
+			if (string.IsNullOrEmpty(value.Type))
+			{
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					"SerializableValue is missing required 'type' discriminant.");
+			}
+
 			writer.WriteStartObject();
-			writer.WriteString(_typePropertyName, value.Type ?? string.Empty);
+			writer.WriteString(_typePropertyName, value.Type);
 			writer.WritePropertyName(_valuePropertyName);
 			JsonSerializer.Serialize(writer, MakeHandlesSerializable(value.Value, registry), _serializerOptions);
 			writer.WriteEndObject();
