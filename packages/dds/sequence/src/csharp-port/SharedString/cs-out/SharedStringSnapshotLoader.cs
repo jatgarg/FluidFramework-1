@@ -350,7 +350,7 @@ namespace Microsoft.Office.Web.Fluid
 				if (minimumSequenceNumber < target.CollabWindowMinSeq
 					|| referenceSequenceNumber < target.CollabWindowMinSeq
 					|| sequenceNumber <= target.CollabWindowMinSeq
-					|| sequenceNumber <= target.CollabWindowCurrentSeq)
+					|| sequenceNumber < target.CollabWindowCurrentSeq)
 				{
 					throw InvalidSnapshot($"Invalid SharedString catchup operation sequence numbers at index {index}.");
 				}

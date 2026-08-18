@@ -198,6 +198,38 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void Load_CatchupOps_GroupedBatchSharesSequenceNumber()
+		{
+			// TS ref: packages/dds/sequence/src/sequence.ts (loadCatchupOps validation).
+			// TS uses `m.sequenceNumber < collabWindow.currentSeq` — messages in the
+			// same grouped batch share a sequence number, so equality must be
+			// permitted. The port previously used `<=`, which rejected the second
+			// message of a grouped catchup batch as an invalid snapshot.
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"A\"]",
+				segmentCount: 1,
+				length: 1,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 1,
+				catchupOpsBlobNamesJson: "[\"catchup_0\"]");
+			// Both catchup ops carry sequenceNumber=2 (same grouped batch). They
+			// use pos:0 so both are valid against the shared refSeq=1 perspective.
+			const string catchupOpsJson = "[" +
+				"{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"remote-client\",\"contents\":{\"type\":0,\"pos1\":0,\"seg\":\"B\"}}," +
+				"{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"remote-client\",\"contents\":{\"type\":0,\"pos1\":0,\"seg\":\"C\"}}" +
+				"]";
+
+			sharedString.LoadFromSnapshot(snapshotJson, blobName => catchupOpsJson);
+
+			// The important assertion: no InvalidSnapshot thrown, and both segments
+			// were applied. Merge-tree ordering under identical-seq inserts is a
+			// separate concern; here we care only that the sequence check accepted.
+			Assert.Equal(3, sharedString.GetLength());
+		}
+
+		[Fact]
 		public void Load_MissingChunk_ResolverReturnsNull_Throws()
 		{
 			var sharedString = new SharedString();

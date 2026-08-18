@@ -47,8 +47,14 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void Load_CatchupOps_DuplicateSnapshotSequence_Throws()
+		public void Load_CatchupOps_SnapshotSequenceEqualsCatchupSequence_Accepted()
 		{
+			// TS ref: packages/dds/sequence/src/sequence.ts (loadCatchupOps).
+			// TS validates `sequenceNumber < collabWindow.currentSeq` (strict). A
+			// catchup message whose sequence number equals the snapshot's own
+			// sequence number is legal — it represents the last message of the
+			// grouped batch captured by the snapshot being replayed. The port
+			// previously used `<=` and rejected this valid case.
 			string snapshotJson = CreateV1Snapshot(
 				"[\"A\"]",
 				segmentCount: 1,
@@ -59,11 +65,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"referenceSequenceNumber\":2,\"minimumSequenceNumber\":0,\"clientId\":\"remote\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"!\"}}]";
 			SharedString sharedString = new();
 
-			OcsException exception = Assert.Throws<OcsException>(() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
+			sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson);
 
-			// TS-parity: catchup messages must be strictly after the snapshot sequence (Finding S3).
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
-			Assert.Contains("catchup operation sequence numbers", exception.Message);
+			Assert.Equal("A!", sharedString.GetText());
 		}
 
 		[Fact]
