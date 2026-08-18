@@ -118,6 +118,42 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void InsertText_EmptyText_EmitsNoOpAndNoEvent()
+		{
+			// TS ref: packages/dds/merge-tree/src/client.ts insertSegmentLocal —
+			// empty segments early-return undefined; TS emits neither a wire op
+			// nor a sequence-delta event.
+			var sender = new FakeFluidDataObjectSender();
+			SharedString sharedString = new("shared-string", sender);
+			int eventCount = 0;
+			sharedString.OnSequenceDelta += (_, _) => eventCount++;
+
+			sharedString.InsertText(0, string.Empty);
+
+			Assert.Equal(0, sharedString.GetLength());
+			Assert.Empty(sender.Sent);
+			Assert.Equal(0, eventCount);
+		}
+
+		[Fact]
+		public void ReplaceText_EmptyText_IsNoOp_DoesNotDelete()
+		{
+			// TS ref: packages/dds/sequence/src/sequence.ts replaceRange — the
+			// remove is guarded by the insert op's truthiness. Empty text
+			// produces no insert op, so no remove is issued. The whole
+			// replaceText call is a no-op instead of a delete.
+			var sender = new FakeFluidDataObjectSender();
+			SharedString sharedString = new("shared-string", sender);
+			sharedString.InsertText(0, "hello");
+			sender.Sent.Clear();
+
+			sharedString.ReplaceText(1, 4, string.Empty);
+
+			Assert.Equal("hello", sharedString.GetText());
+			Assert.Empty(sender.Sent);
+		}
+
+		[Fact]
 		public void ReplaceText_WithProperties_AppliesReplacementProperties()
 		{
 			SharedString sharedString = new();

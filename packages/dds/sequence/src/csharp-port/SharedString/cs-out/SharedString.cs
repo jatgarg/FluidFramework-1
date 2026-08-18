@@ -309,6 +309,14 @@ namespace Microsoft.Office.Web.Fluid
 				throw new ArgumentNullException(nameof(text));
 			}
 
+			// TS ref: packages/dds/merge-tree/src/client.ts insertSegmentLocal —
+			// empty segments early-return undefined, so TS emits neither a wire op
+			// nor a sequence-delta event. Match the TS semantics here.
+			if (text.Length == 0)
+			{
+				return;
+			}
+
 			using IDisposable mutation = EnterLocalMutation();
 			IMergeTreeInsertMsg insertMsg;
 			IReadOnlyList<SequenceDeltaRange> ranges;
@@ -380,8 +388,18 @@ namespace Microsoft.Office.Web.Fluid
 
 		public void ReplaceText(int start, int end, string text, PropertySet? props = null)
 		{
+			if (text is null)
+			{
+				throw new ArgumentNullException(nameof(text));
+			}
+
 			InsertText(Math.Max(start, end), text, props);
-			if (start < end)
+
+			// TS ref: packages/dds/sequence/src/sequence.ts replaceRange — the
+			// remove is guarded by the truthiness of the insert op. When TS's
+			// insertSegmentLocal returns undefined (empty segment), TS skips the
+			// remove. Empty replaceText is therefore a no-op, not a delete.
+			if (text.Length > 0 && start < end)
 			{
 				RemoveText(start, end);
 			}
