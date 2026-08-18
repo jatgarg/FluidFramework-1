@@ -12,30 +12,30 @@ using System.Linq;
 
 namespace Microsoft.Office.Web.Fluid.Intervals
 {
-	public sealed class EndpointInRangeIndex : IIntervalIndex
-	{
-		private readonly List<SequenceInterval> _intervals = new();
+    public sealed class EndpointInRangeIndex : IIntervalIndex
+    {
+        private readonly List<SequenceInterval> _intervals = new();
 
-		public void Add(SequenceInterval interval) =>
-			IntervalIndexComparers.Put(_intervals, interval, IntervalIndexComparers.CompareByEndThenId);
+        public void Add(SequenceInterval interval) =>
+            IntervalIndexComparers.Put(_intervals, interval, IntervalIndexComparers.CompareByEndThenId);
 
-		public void Remove(SequenceInterval interval) =>
-			IntervalIndexComparers.Remove(_intervals, interval, IntervalIndexComparers.CompareByEndThenId);
+        public void Remove(SequenceInterval interval) =>
+            IntervalIndexComparers.Remove(_intervals, interval, IntervalIndexComparers.CompareByEndThenId);
 
-		/// <summary>Returns intervals whose end position is in [start, end].</summary>
-		public IEnumerable<SequenceInterval> FindEndpointsInRange(int start, int end)
-		{
-			if (start <= 0 || start > end || _intervals.Count == 0)
-			{
-				return Enumerable.Empty<SequenceInterval>();
-			}
+        /// <summary>Returns intervals whose end position is in [start, end].</summary>
+        public IEnumerable<SequenceInterval> FindEndpointsInRange(int start, int end)
+        {
+            if (start <= 0 || start > end || _intervals.Count == 0)
+            {
+                return Enumerable.Empty<SequenceInterval>();
+            }
 
-			return _intervals.Where(
-				interval => !interval.HasDetachedEndpoint
-					&& interval.EndPosition is int position
-					&& position >= start
-					&& position <= end)
-				.OrderBy(interval => interval, IntervalIndexComparers.EndpointComparer);
-		}
-	}
+            return _intervals.Where(
+                interval => !interval.HasDetachedEndpoint
+                    && interval.EndPosition is int position
+                    && position >= start
+                    && position <= end)
+                .OrderBy(interval => interval, IntervalIndexComparers.EndpointComparer);
+        }
+    }
 }

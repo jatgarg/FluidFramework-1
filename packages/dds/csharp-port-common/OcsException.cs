@@ -9,29 +9,29 @@ using System;
 
 namespace Microsoft.Office.Web.Fluid
 {
-	public enum OcsGateErrorCode
-	{
-		UnknownOp,
-		InvalidSequenceNumber,
-		OutOfOrderSequenceNumber,
-		InvalidOperation,
-		InvalidState,
-	}
+    public enum OcsGateErrorCode
+    {
+        UnknownOp,
+        InvalidSequenceNumber,
+        OutOfOrderSequenceNumber,
+        InvalidOperation,
+        InvalidState,
+    }
 
-	public class OcsException : Exception
-	{
-		public OcsGateErrorCode ErrorCode { get; }
+    public class OcsException : Exception
+    {
+        public OcsGateErrorCode ErrorCode { get; }
 
-		public OcsException(OcsGateErrorCode errorCode, string message)
-			: base(message)
-		{
-			ErrorCode = errorCode;
-		}
+        public OcsException(OcsGateErrorCode errorCode, string message)
+            : base(message)
+        {
+            ErrorCode = errorCode;
+        }
 
-		public OcsException(OcsGateErrorCode errorCode, string message, Exception innerException)
-			: base(message, innerException)
-		{
-			ErrorCode = errorCode;
-		}
-	}
+        public OcsException(OcsGateErrorCode errorCode, string message, Exception innerException)
+            : base(message, innerException)
+        {
+            ErrorCode = errorCode;
+        }
+    }
 }

@@ -13,38 +13,38 @@ using System.Linq;
 
 namespace Microsoft.Office.Web.Fluid.Intervals
 {
-	public sealed class IdIntervalIndex : IIntervalIndex
-	{
-		private readonly Dictionary<string, SequenceInterval> _byId = new();
+    public sealed class IdIntervalIndex : IIntervalIndex
+    {
+        private readonly Dictionary<string, SequenceInterval> _byId = new();
 
-		public void Add(SequenceInterval interval)
-		{
-			ArgumentNullException.ThrowIfNull(interval);
-			if (interval.Id is null)
-			{
-				throw new ArgumentException("Interval ID must exist before adding interval to the ID index.", nameof(interval));
-			}
+        public void Add(SequenceInterval interval)
+        {
+            ArgumentNullException.ThrowIfNull(interval);
+            if (interval.Id is null)
+            {
+                throw new ArgumentException("Interval ID must exist before adding interval to the ID index.", nameof(interval));
+            }
 
-			_byId[interval.Id] = interval;
-		}
+            _byId[interval.Id] = interval;
+        }
 
-		public void Remove(SequenceInterval interval)
-		{
-			ArgumentNullException.ThrowIfNull(interval);
-			if (interval.Id is null)
-			{
-				throw new ArgumentException("Interval ID must exist before removing interval from the ID index.", nameof(interval));
-			}
+        public void Remove(SequenceInterval interval)
+        {
+            ArgumentNullException.ThrowIfNull(interval);
+            if (interval.Id is null)
+            {
+                throw new ArgumentException("Interval ID must exist before removing interval from the ID index.", nameof(interval));
+            }
 
-			_byId.Remove(interval.Id);
-		}
+            _byId.Remove(interval.Id);
+        }
 
-		public SequenceInterval? GetIntervalById(string id) =>
-			_byId.TryGetValue(id, out SequenceInterval? interval) && !interval.HasDetachedEndpoint ? interval : null;
+        public SequenceInterval? GetIntervalById(string id) =>
+            _byId.TryGetValue(id, out SequenceInterval? interval) && !interval.HasDetachedEndpoint ? interval : null;
 
-		internal SequenceInterval? GetStoredIntervalById(string id) =>
-			_byId.TryGetValue(id, out SequenceInterval? interval) ? interval : null;
+        internal SequenceInterval? GetStoredIntervalById(string id) =>
+            _byId.TryGetValue(id, out SequenceInterval? interval) ? interval : null;
 
-		public IEnumerable<SequenceInterval> All => _byId.Values.Where(interval => !interval.HasDetachedEndpoint);
-	}
+        public IEnumerable<SequenceInterval> All => _byId.Values.Where(interval => !interval.HasDetachedEndpoint);
+    }
 }

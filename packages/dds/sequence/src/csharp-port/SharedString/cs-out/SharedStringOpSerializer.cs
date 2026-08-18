@@ -109,9 +109,7 @@ namespace Microsoft.Office.Web.Fluid
 			ArgumentNullException.ThrowIfNull(writer);
 			ArgumentNullException.ThrowIfNull(op);
 
-			// Interval ops go on the wire as the TS IntervalCollectionMap "act" envelope
-			// (see packages/dds/sequence/src/intervalCollectionMap.ts). WriteIntervalCollectionMapOperation
-			// manages its own outer object, so route here before writer.WriteStartObject.
+			// Interval ops go out as their own outer object; route before WriteStartObject.
 			if (op is MergeTree.IntervalOpMsg intervalOp)
 			{
 				WriteIntervalCollectionMapOperation(writer, intervalOp, registry, currentSequenceNumber);
@@ -636,10 +634,8 @@ namespace Microsoft.Office.Web.Fluid
 			Intervals.Side? startSide = null,
 			Intervals.Side? endSide = null)
 		{
-			// TS-parity: sequenceNumber in serialized interval ops carries the client's
-			// current known sequence number at serialize time
-			// (packages/dds/sequence/src/intervals/sequenceInterval.ts:468 uses
-			// this.client.getCurrentSeq()). Reconnect/rebase logic reads this.
+			// Serialized interval ops carry the client's current known sequence number;
+			// reconnect/rebase logic reads it back.
 			writer.WriteNumber(_sequenceNumberPropertyName, currentSequenceNumber ?? 0);
 			writer.WriteNumber(_intervalTypePropertyName, (int)intervalType);
 			if (stickiness.HasValue)
@@ -804,9 +800,7 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static bool IsMergeTreeGroupMember(MergeTree.MergeTreeOp op)
 		{
-			// TS group ops (MergeTreeDeltaType.GROUP) only contain merge-tree delta ops
-			// (see packages/dds/merge-tree/src/ops.ts IMergeTreeGroupMsg.ops). Interval
-			// ops go out as individual IntervalCollectionMap acts, never in a group.
+			// Group ops carry merge-tree delta ops only; interval ops go out individually.
 			return op.Type == MergeTree.MergeTreeDeltaType.Insert
 				|| op.Type == MergeTree.MergeTreeDeltaType.Remove
 				|| op.Type == MergeTree.MergeTreeDeltaType.Annotate
@@ -1583,8 +1577,7 @@ namespace Microsoft.Office.Web.Fluid
 				&& urlValue is string urlString)
 			{
 				url = urlString;
-				// TS ISerializedHandle.payloadPending is optional and only set to true; treat
-				// any other shape (missing / false / non-bool) as "not pending".
+				// payloadPending is optional and only ever set to true; any other shape is "not pending".
 				payloadPending = properties.TryGetValue(HandleWireFormat.PayloadPendingPropertyName, out object? pendingValue)
 					&& pendingValue is bool pendingBool
 					&& pendingBool;

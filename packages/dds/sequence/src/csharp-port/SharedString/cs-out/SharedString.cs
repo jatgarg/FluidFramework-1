@@ -13,6 +13,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+
 using Microsoft.Office.Web.Fluid.Intervals;
 using Microsoft.Office.Web.Fluid.MergeTree;
 
@@ -583,6 +584,12 @@ namespace Microsoft.Office.Web.Fluid
 			LoadFromSnapshot(SharedStringSnapshotLoader.Load(snapshotJson, blobResolver, _registry));
 		}
 
+		// Not part of tranpiled output. Added later for testing.
+		public string Z_GenerateSnapshot()
+		{
+			return "{todo:true}";
+		}
+
 		public void RegeneratePendingOps()
 		{
 			if (_sender is null)
@@ -602,7 +609,7 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		public void ProcessDataObjectOp(SequencedDocumentMessageDescriptor descriptor, string opJson)
+		public IMergeTreeOp ParseOp(string opJson)
 		{
 			if (opJson is null)
 			{
@@ -610,6 +617,12 @@ namespace Microsoft.Office.Web.Fluid
 			}
 
 			IMergeTreeOp op = SharedStringOpSerializer.Deserialize(opJson, _registry);
+			return op;
+		}
+
+		public void ProcessDataObjectOp(SequencedDocumentMessageDescriptor descriptor, string opJson)
+		{
+			IMergeTreeOp op = ParseOp(opJson);
 			long? minimumSequenceNumber = TryGetMinimumSequenceNumber(descriptor);
 			if (descriptor.Origin == OpOrigin.Local)
 			{
@@ -1198,10 +1211,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			ArgumentNullException.ThrowIfNull(op);
 
-			// Interval ops always go on the wire as individual IntervalCollectionMap
-			// "act" ops (see packages/dds/sequence/src/intervalCollection.ts submitDelta).
-			// They must never be added to a MergeTreeGroupMsg batch, whose members are
-			// merge-tree delta ops only per TS IMergeTreeGroupMsg.
+			// Interval ops go on the wire individually and cannot be members of a group batch.
 			if (op is IntervalOpMsg)
 			{
 				SendLocalOp(op, opTypeName);

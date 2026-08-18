@@ -243,10 +243,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			ArgumentException.ThrowIfNullOrEmpty(id);
 
-			// TS-parity: IntervalCollection.change requires both endpoints be defined or
-			// both undefined (packages/dds/sequence/src/intervalCollection.ts:1314). One-sided
-			// changes would serialize as a wire message missing one endpoint, which TS peers
-			// cannot correctly interpret.
+			// Both endpoints must be defined or both undefined — one-sided changes
+			// serialize as a wire message peers cannot correctly interpret.
 			if (newStart.HasValue != newEnd.HasValue)
 			{
 				throw new OcsException(
@@ -319,9 +317,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
-				// TS-parity: exact-match on start position (intervalCollection.ts uses
-				// walkExactMatchesForward). Forward = ordered by end asc; ties broken by
-				// interval id for stability.
 				return SnapshotIntervals()
 					.Where(interval => interval.StartPosition is int position && position == startPos)
 					.OrderBy(interval => interval.EndPosition)
@@ -334,7 +329,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
-				// TS-parity: exact-match on start position (walkExactMatchesBackward).
 				return SnapshotIntervals()
 					.Where(interval => interval.StartPosition is int position && position == startPos)
 					.OrderByDescending(interval => interval.EndPosition)
@@ -347,7 +341,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
-				// TS-parity: exact-match on end position.
 				return SnapshotIntervals()
 					.Where(interval => interval.EndPosition is int position && position == endPos)
 					.OrderBy(interval => interval.StartPosition)
@@ -360,7 +353,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
-				// TS-parity: exact-match on end position.
 				return SnapshotIntervals()
 					.Where(interval => interval.EndPosition is int position && position == endPos)
 					.OrderByDescending(interval => interval.StartPosition)

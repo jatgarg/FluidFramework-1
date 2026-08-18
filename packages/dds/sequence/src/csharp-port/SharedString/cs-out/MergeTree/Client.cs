@@ -16,6 +16,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+
 using Microsoft.Office.Web.Fluid.Intervals;
 
 namespace Microsoft.Office.Web.Fluid.MergeTree
@@ -1450,10 +1451,8 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return;
 			}
 
-			// Interval ops go on the wire individually as IntervalCollectionMap "act"
-			// envelopes, never inside a MergeTreeGroupMsg (see TS IMergeTreeGroupMsg
-			// which only carries merge-tree delta ops). Peel them off so the group
-			// only holds insert/remove/annotate/obliterate members.
+			// Peel interval ops out — they go on the wire individually and cannot be
+			// members of a MergeTreeGroupMsg (whose members are merge-tree delta ops only).
 			MergeTreeGroupMsg groupOp = new();
 			List<IMergeTreeOp> intervalOps = new();
 			foreach (IMergeTreeOp op in batchOps)

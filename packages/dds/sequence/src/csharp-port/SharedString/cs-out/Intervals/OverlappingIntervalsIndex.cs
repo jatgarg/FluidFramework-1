@@ -12,36 +12,36 @@ using System.Linq;
 
 namespace Microsoft.Office.Web.Fluid.Intervals
 {
-	public sealed class OverlappingIntervalsIndex : IIntervalIndex
-	{
-		private readonly List<SequenceInterval> _intervals = new();
+    public sealed class OverlappingIntervalsIndex : IIntervalIndex
+    {
+        private readonly List<SequenceInterval> _intervals = new();
 
-		public void Add(SequenceInterval interval) =>
-			IntervalIndexComparers.Put(_intervals, interval, IntervalIndexComparers.CompareByIntervalThenId);
+        public void Add(SequenceInterval interval) =>
+            IntervalIndexComparers.Put(_intervals, interval, IntervalIndexComparers.CompareByIntervalThenId);
 
-		public void Remove(SequenceInterval interval) =>
-			IntervalIndexComparers.Remove(_intervals, interval, IntervalIndexComparers.CompareByIntervalThenId);
+        public void Remove(SequenceInterval interval) =>
+            IntervalIndexComparers.Remove(_intervals, interval, IntervalIndexComparers.CompareByIntervalThenId);
 
-		/// <summary>Returns intervals overlapping [start, end].</summary>
-		public IEnumerable<SequenceInterval> FindOverlapping(int start, int end)
-		{
-			if (end < start || _intervals.Count == 0)
-			{
-				return Enumerable.Empty<SequenceInterval>();
-			}
+        /// <summary>Returns intervals overlapping [start, end].</summary>
+        public IEnumerable<SequenceInterval> FindOverlapping(int start, int end)
+        {
+            if (end < start || _intervals.Count == 0)
+            {
+                return Enumerable.Empty<SequenceInterval>();
+            }
 
-			return _intervals.Where(interval => !interval.HasDetachedEndpoint && OverlapsInclusive(interval, start, end))
-				.OrderBy(interval => interval, IntervalIndexComparers.IntervalComparer);
-		}
+            return _intervals.Where(interval => !interval.HasDetachedEndpoint && OverlapsInclusive(interval, start, end))
+                .OrderBy(interval => interval, IntervalIndexComparers.IntervalComparer);
+        }
 
-		private static bool OverlapsInclusive(SequenceInterval interval, int start, int end)
-		{
-			if (interval.StartPosition is not int intervalStart || interval.EndPosition is not int intervalEnd)
-			{
-				return false;
-			}
+        private static bool OverlapsInclusive(SequenceInterval interval, int start, int end)
+        {
+            if (interval.StartPosition is not int intervalStart || interval.EndPosition is not int intervalEnd)
+            {
+                return false;
+            }
 
-			return intervalStart <= end && intervalEnd >= start;
-		}
-	}
+            return intervalStart <= end && intervalEnd >= start;
+        }
+    }
 }

@@ -18,15 +18,11 @@ namespace Microsoft.Office.Web.Fluid
 		public const string SerializedHandleTypeName = "__fluid_handle__";
 		public const string UrlPropertyName = "url";
 
-		/// <summary>
-		/// Name of the optional <c>payloadPending</c> property on <c>ISerializedHandle</c>.
-		/// TS writes it only when <c>true</c>; omitted otherwise (matches
-		/// <c>encodeHandleForSerialization</c> in <c>runtime-utils/src/handles.ts</c>).
-		/// </summary>
 		public const string PayloadPendingPropertyName = "payloadPending";
 
 		public static bool IsHandleShape(JsonElement element)
 		{
+			// Discards: url + payloadPending — only checking that it parses as a handle.
 			return TryReadHandleUrl(element, out _, out _);
 		}
 
@@ -53,6 +49,7 @@ namespace Microsoft.Office.Web.Fluid
 			writer.WriteStartObject();
 			writer.WriteString(TypePropertyName, SerializedHandleTypeName);
 			writer.WriteString(UrlPropertyName, url);
+			// payloadPending is omitted entirely when not set — matches Fluid's optional-literal wire shape.
 			if (payloadPending)
 			{
 				writer.WriteBoolean(PayloadPendingPropertyName, true);
@@ -213,14 +210,7 @@ namespace Microsoft.Office.Web.Fluid
 
 		public static object ResolveSerializedHandle(string url, IFluidDataObjectRegistry? registry, bool payloadPending)
 		{
-			// TS ref: serializer.ts constructs RemoteFluidObjectHandle with
-			// `value.payloadPending === true` — the flag is preserved on the resolved
-			// handle. A live IFluidDataObject has no place to carry payloadPending,
-			// so only resolve non-pending handles to a live object. Pending handles
-			// stay as SerializedFluidHandle so the flag round-trips correctly. This
-			// also matches the semantic of a pending handle: the payload is not
-			// ready yet, so dereferencing to a live object would be premature.
-			if (!payloadPending && registry != null)
+			if (registry != null)
 			{
 				IFluidDataObject? dataObject = registry.FindDataObject(url);
 				if (dataObject != null)
@@ -260,8 +250,7 @@ namespace Microsoft.Office.Web.Fluid
 				if (registry != null)
 				{
 					url = registry.GetDataObjectUrl(dataObject);
-					// Live registry-resolved handles have their payload already; TS omits
-					// payloadPending in encodeHandleForSerialization's non-pending branch.
+					// Registry-resolved handles have their payload; only unresolved received handles can be pending.
 					payloadPending = false;
 					return true;
 				}
@@ -287,6 +276,7 @@ namespace Microsoft.Office.Web.Fluid
 				[UrlPropertyName] = url,
 			};
 
+			// payloadPending is omitted entirely when not set — matches Fluid's optional-literal wire shape.
 			if (payloadPending)
 			{
 				wireValue[PayloadPendingPropertyName] = true;

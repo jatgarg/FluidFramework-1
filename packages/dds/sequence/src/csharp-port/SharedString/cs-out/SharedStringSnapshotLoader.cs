@@ -336,9 +336,8 @@ namespace Microsoft.Office.Web.Fluid
 			int index = 0;
 			foreach (CatchupOpDto catchupOp in snapshot.CatchupOps)
 			{
-				// TS-parity: all sequence-numbering + clientId fields are required on each
-				// ISequencedDocumentMessage and set by ReadCatchupOp above. Assert non-null
-				// rather than defaulting to synthetic values that mask malformed snapshots.
+				// All sequence-numbering + clientId fields are required — reject rather than
+				// default to synthetic values that would mask malformed snapshots.
 				long sequenceNumber = catchupOp.SequenceNumber
 					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'sequenceNumber'.");
 				long referenceSequenceNumber = catchupOp.ReferenceSequenceNumber
@@ -651,11 +650,7 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static CatchupOpDto ReadCatchupOp(JsonElement element, string path)
 		{
-			// TS-parity: catchup ops are serialized as ISequencedDocumentMessage[]
-			// (see packages/dds/merge-tree/src/snapshotlegacy.ts:187 which does
-			// JSON.stringify(catchUpMsgs)). Each entry must be an object with the
-			// full sequence-numbering + clientId + contents fields — reject strings
-			// and reject missing required fields rather than defaulting.
+			// Each catchup entry must be an object with full sequence-numbering + clientId + contents.
 			if (element.ValueKind != JsonValueKind.Object)
 			{
 				throw InvalidSnapshot($"SharedString catchup op at {path} must be a JSON object (an ISequencedDocumentMessage).");
@@ -684,13 +679,12 @@ namespace Microsoft.Office.Web.Fluid
 				throw InvalidSnapshot($"SharedString catchup op at {path} must contain 'clientId'.");
 			}
 
-			string? clientId = clientIdElement.ValueKind switch
+			if (clientIdElement.ValueKind != JsonValueKind.String)
 			{
-				JsonValueKind.String => clientIdElement.GetString(),
-				// TS ISequencedDocumentMessage.clientId is `string | null` (null only for
-				// system-emitted messages, which cannot appear in catchup snapshots).
-				_ => throw InvalidSnapshot($"SharedString catchup op at {path}.clientId must be a string."),
-			};
+				throw InvalidSnapshot($"SharedString catchup op at {path}.clientId must be a string.");
+			}
+
+			string clientId = clientIdElement.GetString()!;
 
 			if (!element.TryGetProperty("contents", out JsonElement contentsElement))
 			{
@@ -909,9 +903,6 @@ namespace Microsoft.Office.Web.Fluid
 				|| orderedChunkMetadataElement.ValueKind == JsonValueKind.Null
 				|| orderedChunkMetadataElement.ValueKind == JsonValueKind.Undefined)
 			{
-				// TS ref: packages/dds/merge-tree/src/snapshotChunks.ts MergeTreeHeaderMetadata
-				// declares orderedChunkMetadata as a required array. The writer always emits
-				// at least [{id: "header"}] (see snapshotV1.ts:196).
 				throw InvalidSnapshot($"JSON property {path}.orderedChunkMetadata is required.");
 			}
 
