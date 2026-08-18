@@ -2221,8 +2221,8 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
 		private IReadOnlyList<MergeTreeDelta> ApplyRemoteAnnotate(MergeTreeAnnotateMsg op, long seq, long refSeq, string clientId, long? perspectiveSeq = null)
 		{
-			int start = RequirePosition(op.Pos1, nameof(op.Pos1));
-			int end = RequirePosition(op.Pos2, nameof(op.Pos2));
+			int start = ResolvePosition(op.Pos1, op.RelativePos1, nameof(op.Pos1));
+			int end = ResolvePosition(op.Pos2, op.RelativePos2, nameof(op.Pos2));
 			PropertySet props = CloneAnnotateProps(op.Props);
 			List<ISegment> deltaSegments = MergeTree.AnnotateRange(start, end, props, refSeq, seq, clientId, perspectiveSeq);
 			IReadOnlyList<MergeTreeDelta> deltas = CreateRemoteDelta(MergeTreeDeltaType.Annotate, op, deltaSegments, clientId);
@@ -2236,11 +2236,10 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			long perspectiveSeq = seq == long.MaxValue ? seq : seq + 1;
 			foreach (MergeTreeOp memberOp in op.Ops)
 			{
-				if (memberOp.Type == MergeTreeDeltaType.Group)
-				{
-					throw new NotSupportedException("Nested merge-tree group operations are not supported.");
-				}
-
+				// TS ref: packages/dds/merge-tree/src/client.ts applyRemoteOp.
+				// TS runtime recursively applies nested group operations even
+				// though the static union type excludes them. Match the TS
+				// runtime tolerance and recurse.
 				deltas.AddRange(ApplyRemoteOp(memberOp, seq, refSeq, clientId, perspectiveSeq));
 			}
 

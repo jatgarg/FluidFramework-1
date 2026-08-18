@@ -77,6 +77,70 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void RemoteAnnotate_RelativeToMarker_ResolvesRange()
+		{
+			// TS ref: packages/dds/merge-tree/src/client.ts applyAnnotate.
+			// TS resolves relativePos1/relativePos2 via posFromRelativePos when
+			// pos1/pos2 are undefined. The port previously required numeric
+			// positions and threw ArgumentException on valid relative annotate
+			// operations.
+			Client client = CreateClientWithAckedMarker();
+
+			client.ApplyOp(
+				new MergeTreeAnnotateMsg()
+				{
+					RelativePos1 = new PropertySet()
+					{
+						["id"] = "marker-1",
+						["before"] = true,
+					},
+					RelativePos2 = new PropertySet()
+					{
+						["id"] = "marker-1",
+					},
+					Props = new PropertySet()
+					{
+						["color"] = "red",
+					},
+				},
+				seq: 3,
+				refSeq: 2,
+				clientId: "remote");
+
+			// The marker segment received the annotation.
+			Marker? marker = client.GetMarkerFromId("marker-1");
+			Assert.NotNull(marker);
+			Assert.Equal("red", marker!.Properties?["color"]);
+		}
+
+		[Fact]
+		public void RemoteGroup_NestedGroups_AreAppliedRecursively()
+		{
+			// TS ref: packages/dds/merge-tree/src/client.ts applyRemoteOp.
+			// TS's runtime recursively applies nested group operations even
+			// though the static IMergeTreeGroupMsg.ops union excludes them
+			// (runtime-tolerance policy). The port previously threw
+			// NotSupportedException on the same input shape.
+			SharedString sharedString = CreateSharedStringWithAckedText("abc", out _);
+
+			MergeTreeGroupMsg inner = new();
+			inner.Ops.Add(new MergeTreeInsertMsg()
+			{
+				Pos1 = 3,
+				Seg = "X",
+			});
+
+			MergeTreeGroupMsg outer = new();
+			outer.Ops.Add(inner);
+
+			sharedString.ProcessDataObjectOp(
+				RemoteMessage(refSeq: 1, seq: 2, clientId: "remote"),
+				SharedStringOpSerializer.Serialize(outer));
+
+			Assert.Equal("abcX", sharedString.GetText());
+		}
+
+		[Fact]
 		public void RemoteGroup_MixedOps_EmitsPerMemberEventsInOrder()
 		{
 			SharedString sharedString = CreateSharedStringWithAckedText("abcdef", out _);
@@ -291,12 +355,12 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				sent.OpJson);
 		}
 
-		private static SequencedDocumentMessageDescriptor RemoteMessage(long refSeq, long seq)
+		private static SequencedDocumentMessageDescriptor RemoteMessage(long refSeq, long seq, string clientId = "remote-client")
 		{
 			return new SequencedDocumentMessageDescriptor(
 				SequenceNumber.ForTesting(clientSeq: 0, refSeq: refSeq, seq: seq),
 				OpOrigin.Remote,
-				"remote-client");
+				clientId);
 		}
 	}
 }
