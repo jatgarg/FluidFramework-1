@@ -210,11 +210,19 @@ namespace Microsoft.Office.Web.Fluid
 		/// Returns null if the segment has no properties.
 		/// </summary>
 		/// <param name="position">The current local-view position.</param>
-		/// <returns>The segment properties, or <see langword="null" /> if none are present.</returns>
+		/// <returns>The segment properties, or <see langword="null" /> if none are present or the position is outside content.</returns>
 		public PropertySet? GetPropertiesAtPosition(int position)
 		{
 			lock (_lock)
 			{
+				// TS ref: packages/dds/merge-tree/src/client.ts getPropertiesAtPosition —
+				// TS returns undefined for positions outside content (position < 0 or
+				// position >= length). The port previously threw.
+				if (position < 0 || position >= _client.GetLength())
+				{
+					return null;
+				}
+
 				var (segment, _) = _client.GetContainingSegment(position);
 				return segment.Properties;
 			}
@@ -337,6 +345,7 @@ namespace Microsoft.Office.Web.Fluid
 				Length = text.Length,
 				Text = text,
 				Local = true,
+				ClientId = _client.ClientId,
 				Ranges = ranges,
 			});
 		}
@@ -367,6 +376,7 @@ namespace Microsoft.Office.Web.Fluid
 				IsMarker = true,
 				Marker = marker,
 				Local = true,
+				ClientId = _client.ClientId,
 				Ranges = ranges,
 			});
 		}
@@ -427,6 +437,7 @@ namespace Microsoft.Office.Web.Fluid
 				Length = end - start,
 				Text = null,
 				Local = true,
+				ClientId = _client.ClientId,
 				Ranges = ranges,
 			});
 		}
@@ -458,6 +469,7 @@ namespace Microsoft.Office.Web.Fluid
 				Length = end - start,
 				Text = null,
 				Local = true,
+				ClientId = _client.ClientId,
 				Ranges = ranges,
 			});
 		}
@@ -506,6 +518,7 @@ namespace Microsoft.Office.Web.Fluid
 				Length = Math.Max(0, eventEnd - eventStart),
 				Text = null,
 				Local = true,
+				ClientId = _client.ClientId,
 				Ranges = ranges,
 			});
 		}
@@ -579,6 +592,7 @@ namespace Microsoft.Office.Web.Fluid
 				Length = end - start,
 				Text = null,
 				Local = true,
+				ClientId = _client.ClientId,
 				AnnotatedProperties = CloneAnnotateProps(props),
 				Ranges = ranges,
 			});

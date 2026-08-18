@@ -149,6 +149,38 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void OnSequenceDelta_LocalEvent_ExposesLocalClientId()
+		{
+			// TS ref: packages/dds/sequence/src/sequenceDeltaEvent.ts —
+			// SequenceDeltaEvent carries the local client id on local events
+			// once the runtime has assigned one. The port previously left
+			// ClientId null on all local event emissions.
+			var sharedString = new SharedString("local-client");
+			SequenceDeltaEventArgs? captured = null;
+			sharedString.OnSequenceDelta += (_, e) => captured = e;
+
+			sharedString.InsertText(0, "hi");
+
+			Assert.NotNull(captured);
+			Assert.True(captured!.Local);
+			Assert.Equal("local-client", captured.ClientId);
+		}
+
+		[Fact]
+		public void GetPropertiesAtPosition_OutsideContent_ReturnsNull()
+		{
+			// TS ref: packages/dds/merge-tree/src/client.ts getPropertiesAtPosition —
+			// TS returns undefined for positions outside content instead of
+			// throwing. Port previously threw ArgumentOutOfRangeException.
+			var sharedString = new SharedString();
+			sharedString.InsertText(0, "abc");
+
+			Assert.Null(sharedString.GetPropertiesAtPosition(-1));
+			Assert.Null(sharedString.GetPropertiesAtPosition(3));   // end position
+			Assert.Null(sharedString.GetPropertiesAtPosition(100));
+		}
+
+		[Fact]
 		public void InsertText_WithSender_EmitsOp()
 		{
 			var sender = new FakeFluidDataObjectSender();
