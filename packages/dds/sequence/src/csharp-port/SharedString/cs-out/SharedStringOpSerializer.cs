@@ -1543,6 +1543,19 @@ namespace Microsoft.Office.Web.Fluid
 				return HandleWireFormat.ResolveSerializedHandle(url, registry, payloadPending);
 			}
 
+			// If the type marker is present but url is missing/invalid, this is
+			// a malformed handle. TS identifies handles by the type marker alone
+			// and would fail on dereference; reject here rather than silently
+			// pass the object through as ordinary property data.
+			if (properties.TryGetValue(HandleWireFormat.TypePropertyName, out object? typeMarker)
+				&& typeMarker is string typeMarkerStr
+				&& typeMarkerStr == HandleWireFormat.SerializedHandleTypeName)
+			{
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					"Serialized Fluid handle is missing required 'url' property.");
+			}
+
 			return properties;
 		}
 

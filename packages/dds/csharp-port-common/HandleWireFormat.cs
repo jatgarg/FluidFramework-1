@@ -22,14 +22,33 @@ namespace Microsoft.Office.Web.Fluid
 
 		public static bool IsHandleShape(JsonElement element)
 		{
-			// Discards: url + payloadPending — only checking that it parses as a handle.
-			return TryReadHandleUrl(element, out _, out _);
+			// TS ref: packages/runtime/runtime-utils/src/handles.ts isSerializedHandle.
+			// TS identifies a handle purely by the type marker. Match that so a
+			// malformed handle (type marker without url) is recognized here and
+			// rejected via ReadHandleFromShape rather than silently passing
+			// through as ordinary property data.
+			return element.ValueKind == JsonValueKind.Object
+				&& element.TryGetProperty(TypePropertyName, out JsonElement typeElement)
+				&& typeElement.ValueKind == JsonValueKind.String
+				&& typeElement.GetString() == SerializedHandleTypeName;
 		}
 
 		public static object ReadHandleFromShape(JsonElement element, IFluidDataObjectRegistry? registry)
 		{
 			if (!TryReadHandleUrl(element, out string url, out bool payloadPending))
 			{
+				// If the type marker is present, this is a handle that failed url
+				// validation — reject rather than pass through as data. TS accepts
+				// the type marker as identifying a handle and fails only at
+				// dereference; failing here is stricter but preserves wire
+				// integrity across a retransmit.
+				if (IsHandleShape(element))
+				{
+					throw new OcsException(
+						OcsGateErrorCode.InvalidOperation,
+						"Serialized Fluid handle is missing required 'url' property.");
+				}
+
 				throw new JsonException("Expected Fluid handle JSON object.");
 			}
 

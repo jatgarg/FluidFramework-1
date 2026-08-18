@@ -86,6 +86,25 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void RemoteInsert_HandleShape_MissingUrl_Rejected()
+		{
+			// TS ref: packages/runtime/runtime-utils/src/handles.ts isSerializedHandle
+			// identifies a handle purely by `type === "__fluid_handle__"`. TS would
+			// then fail at dereference when reading `value.url`. The port previously
+			// accepted the malformed handle as ordinary property data and could
+			// re-emit it, causing a TS peer to reject during processing. Match TS's
+			// handle-identification but reject at ingestion to keep the wire clean.
+			var receiverString = new SharedString();
+
+			OcsException exception = Assert.Throws<OcsException>(() =>
+				receiverString.ProcessDataObjectOp(
+					RemoteMessage(refSeq: 0, seq: 1),
+					"{\"type\":0,\"pos1\":0,\"seg\":{\"props\":{\"target\":{\"type\":\"__fluid_handle__\"}}}}"));
+
+			Assert.Contains("Serialized Fluid handle is missing required 'url' property", exception.Message);
+		}
+
+		[Fact]
 		public void IntervalAddAndPropertyChanged_HandleProps_RoundTrip()
 		{
 			var sender = new FakeFluidDataObjectSender();
