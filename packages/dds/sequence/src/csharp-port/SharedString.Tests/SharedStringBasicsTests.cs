@@ -1,8 +1,9 @@
 // -----------------------------------------------------------------------------
-// Wave 8 tests for SharedString POC.
+// SharedString basics tests.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;
+using Microsoft.Office.Web.Fluid.MergeTree;
 using Xunit;
 
 namespace Microsoft.Office.Web.Fluid.Tests
@@ -164,6 +165,38 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.NotNull(captured);
 			Assert.True(captured!.Local);
 			Assert.Equal("local-client", captured.ClientId);
+		}
+
+		[Fact]
+		public void OnSequenceDelta_LocalListenerMutatingOp_DoesNotAffectWire()
+		{
+			// TS ref: sequence.ts / opBuilder.ts — TS's SequenceDeltaEvent
+			// exposes a live op reference; a listener that mutates it corrupts
+			// the on-wire message. The port hands the listener a defensive
+			// clone so mutations stay inside the event args.
+			var sender = new FakeFluidDataObjectSender();
+			var sharedString = new SharedString("s", sender);
+			sharedString.InsertText(0, "seed");
+			sender.Sent.Clear();
+
+			sharedString.OnSequenceDelta += (_, e) =>
+			{
+				if (e.Local && e.Op is MergeTreeInsertMsg insertMsg)
+				{
+					// A malicious/buggy listener rewrites the position.
+					insertMsg.Pos1 = 999;
+				}
+			};
+
+			sharedString.RunInBatch(() =>
+			{
+				sharedString.InsertText(4, "X");
+			});
+
+			var sent = Assert.Single(sender.Sent);
+			using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(sent.OpJson);
+			// Wire op preserves the original pos1 (4) despite the listener's mutation.
+			Assert.Equal(4, doc.RootElement.GetProperty("pos1").GetInt32());
 		}
 
 		[Fact]

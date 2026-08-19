@@ -1267,6 +1267,16 @@ namespace Microsoft.Office.Web.Fluid
 			SendLocalOp(op, opTypeName);
 		}
 
+		private static IMergeTreeOp CloneOpForEvent(IMergeTreeOp op)
+		{
+			// TS ref: sequence.ts / opBuilder.ts — TS's SequenceDeltaEvent exposes
+			// a live op reference; a listener that mutates it corrupts subsequent
+			// consumers. We insulate the port by handing the listener a serialized
+			// round-trip clone. ClientSeq is intentionally local-only and does not
+			// need to survive the clone (the wire path retains the original).
+			return SharedStringOpSerializer.Deserialize(SharedStringOpSerializer.Serialize(op));
+		}
+
 		private void FlushBatchOps(IReadOnlyList<MergeTreeOp> ops)
 		{
 			if (ops.Count == 0)
@@ -1374,10 +1384,37 @@ namespace Microsoft.Office.Web.Fluid
 		private void RaiseSequenceDelta(SequenceDeltaEventArgs args)
 		{
 			SequenceDeltaEventHandler? raiseEvent = OnSequenceDelta;
-			if (raiseEvent != null)
+			if (raiseEvent is null)
 			{
-				raiseEvent(this, args);
+				return;
 			}
+
+			// Insulate the wire path from listener mutations of the exposed op:
+			// SendLocalOp / batch flush and the resubmit path all hold the
+			// canonical op reference; a listener that mutates args.Op could
+			// alter the wire message. Hand the listener a fresh clone for
+			// local events (where mutation risk exists — remote events come
+			// from a wire read and are already independent).
+			if (args.Local && args.Op is IMergeTreeOp originalOp)
+			{
+				args = new SequenceDeltaEventArgs()
+				{
+					OpType = args.OpType,
+					DeltaOperation = args.DeltaOperation,
+					Op = CloneOpForEvent(originalOp),
+					Position = args.Position,
+					Length = args.Length,
+					Text = args.Text,
+					Local = args.Local,
+					ClientId = args.ClientId,
+					Ranges = args.Ranges,
+					IsMarker = args.IsMarker,
+					Marker = args.Marker,
+					AnnotatedProperties = args.AnnotatedProperties,
+				};
+			}
+
+			raiseEvent(this, args);
 		}
 
 		private void EnsureIntervalCollectionOutboundHandlers(IntervalCollection collection)
