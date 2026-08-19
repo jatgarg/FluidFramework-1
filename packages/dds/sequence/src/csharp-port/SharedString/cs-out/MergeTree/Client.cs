@@ -91,6 +91,15 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 		public int Position { get; init; }
 
 		public int Length { get; init; }
+
+		/// <summary>
+		/// For annotate deltas: the previous value of each property mutated by
+		/// the annotate op, keyed by property name. Null for non-annotate deltas.
+		/// TS ref: sequenceDeltaEvent.ts propertyDeltas — TS's remote annotate
+		/// events carry the property values that were replaced (so listeners
+		/// can compute what changed).
+		/// </summary>
+		public PropertySet? PreviousProperties { get; init; }
 	}
 
 	/// <summary>
@@ -2224,10 +2233,136 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			int start = ResolvePosition(op.Pos1, op.RelativePos1, nameof(op.Pos1));
 			int end = ResolvePosition(op.Pos2, op.RelativePos2, nameof(op.Pos2));
 			PropertySet props = CloneAnnotateProps(op.Props);
+
+			// TS ref: sequenceDeltaEvent.ts — the propertyDeltas on a remote
+			// annotate carry the *previous* values of each mutated key so
+			// listeners can compute what changed. Snapshot the pre-annotate
+			// props on each affected segment before AnnotateRange mutates them.
+			Dictionary<ISegment, PropertySet> previousBySegment = SnapshotPropertiesForAnnotate(start, end, props);
+
 			List<ISegment> deltaSegments = MergeTree.AnnotateRange(start, end, props, refSeq, seq, clientId, perspectiveSeq);
-			IReadOnlyList<MergeTreeDelta> deltas = CreateRemoteDelta(MergeTreeDeltaType.Annotate, op, deltaSegments, clientId);
+			IReadOnlyList<MergeTreeDelta> deltas = CreateRemoteAnnotateDelta(op, deltaSegments, clientId, props, previousBySegment);
 			ReapplyPendingAnnotates();
 			return deltas;
+		}
+
+		private Dictionary<ISegment, PropertySet> SnapshotPropertiesForAnnotate(int start, int end, PropertySet mutatedKeys)
+		{
+			// The annotate start/end may be expressed in a perspective (e.g.
+			// remote's view) that predates local pending edits, so clamp to
+			// the current visible length before snapshotting. AnnotateRange
+			// itself performs the perspective-aware walk; we only need the
+			// pre-annotate props on the segments whose properties are about
+			// to be mutated.
+			int currentLength = MergeTree.GetLength();
+			if (start < 0)
+			{
+				start = 0;
+			}
+
+			if (end > currentLength)
+			{
+				end = currentLength;
+			}
+
+			Dictionary<ISegment, PropertySet> snapshots = new();
+			if (start >= end)
+			{
+				return snapshots;
+			}
+
+			foreach ((ISegment segment, int _, int _) in MergeTree.GetSegments(start, end))
+			{
+				if (segment.CachedLength == 0 || snapshots.ContainsKey(segment))
+				{
+					continue;
+				}
+
+				PropertySet previous = new();
+				foreach (string key in mutatedKeys.Keys)
+				{
+					previous[key] = segment.Properties is not null && segment.Properties.TryGetValue(key, out object? value)
+						? value
+						: null;
+				}
+
+				snapshots[segment] = previous;
+			}
+
+			return snapshots;
+		}
+
+		private IReadOnlyList<MergeTreeDelta> CreateRemoteAnnotateDelta(
+			MergeTreeAnnotateMsg op,
+			IReadOnlyList<ISegment> segments,
+			string clientId,
+			PropertySet appliedProps,
+			Dictionary<ISegment, PropertySet> previousBySegment)
+		{
+			List<MergeTreeDeltaRange> ranges = new();
+			foreach (ISegment segment in segments)
+			{
+				int? position = MergeTree.GetPositionOfSegmentInCurrentView(segment);
+				if (position is not int segmentPosition || segment.CachedLength == 0)
+				{
+					continue;
+				}
+
+				// A segment may have been split by AnnotateRange — locate the
+				// pre-annotate snapshot via the segment reference we recorded
+				// on the same or ancestor segment. Split children inherit their
+				// parent's pre-annotate props for delta purposes.
+				PropertySet? previous = FindPreviousPropsForSegment(segment, previousBySegment, appliedProps);
+
+				ranges.Add(new MergeTreeDeltaRange()
+				{
+					Segment = segment,
+					Position = segmentPosition,
+					Length = segment.CachedLength,
+					PreviousProperties = previous,
+				});
+			}
+
+			if (ranges.Count == 0)
+			{
+				return Array.Empty<MergeTreeDelta>();
+			}
+
+			return new List<MergeTreeDelta>()
+			{
+				new()
+				{
+					Operation = MergeTreeDeltaType.Annotate,
+					Op = op,
+					Segments = segments,
+					Ranges = ranges,
+					ClientId = clientId,
+				},
+			};
+		}
+
+		private static PropertySet? FindPreviousPropsForSegment(
+			ISegment segment,
+			Dictionary<ISegment, PropertySet> previousBySegment,
+			PropertySet appliedProps)
+		{
+			if (previousBySegment.TryGetValue(segment, out PropertySet? direct))
+			{
+				return direct;
+			}
+
+			// AnnotateRange may split a segment at range boundaries; the
+			// child slice inherits its properties from the pre-split parent.
+			// If we can't locate the parent snapshot, fall back to null
+			// (matches TS behavior: propertyDeltas[key] is undefined for
+			// segments the annotate did not observe before mutation).
+			PropertySet previous = new();
+			foreach (string key in appliedProps.Keys)
+			{
+				previous[key] = null;
+			}
+
+			return previous;
 		}
 
 		private IReadOnlyList<MergeTreeDelta> ApplyRemoteGroup(MergeTreeGroupMsg op, long seq, long refSeq, string clientId)

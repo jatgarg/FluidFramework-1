@@ -168,6 +168,65 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void OnSequenceDelta_RemoteAnnotate_PropertyDeltas_CarryPreviousValues()
+		{
+			// TS ref: sequenceDeltaEvent.ts — remote annotate events carry the
+			// property values that were replaced (previous values), so listeners
+			// can compute what changed. The port previously carried the new
+			// values (a copy of the annotate op's props).
+			var sender = new FakeFluidDataObjectSender();
+			var sharedString = new SharedString("s", sender);
+			sharedString.InsertText(0, "abc");
+			ProcessLocalAck(sharedString, Assert.Single(sender.Sent), refSeq: 0, seq: 1);
+			sender.Sent.Clear();
+
+			// Seed the range with an initial color.
+			sharedString.AnnotateRange(0, 3, new PropertySet() { ["color"] = "blue" });
+			ProcessLocalAck(sharedString, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			SequenceDeltaEventArgs? captured = null;
+			sharedString.OnSequenceDelta += (_, e) =>
+			{
+				if (!e.Local && e.OpType == "annotate")
+				{
+					captured = e;
+				}
+			};
+
+			// Remote annotate replaces color: blue -> red on the whole range.
+			string wire = "{\"type\":2,\"pos1\":0,\"pos2\":3,\"props\":{\"color\":\"red\"}}";
+			sharedString.ProcessDataObjectOp(RemoteMessage(refSeq: 2, seq: 3), wire);
+
+			Assert.NotNull(captured);
+			SequenceDeltaRange range = Assert.Single(captured!.Ranges);
+			Assert.NotNull(range.PropertyDeltas);
+			// Previous value was "blue" (not the new "red" from the op).
+			Assert.Equal("blue", Assert.IsType<string>(range.PropertyDeltas!["color"]));
+		}
+
+		private static SequencedDocumentMessageDescriptor RemoteMessage(long refSeq, long seq, string clientId = "remote-client")
+		{
+			return new SequencedDocumentMessageDescriptor(
+				SequenceNumber.ForTesting(clientSeq: 0, refSeq: refSeq, seq: seq),
+				OpOrigin.Remote,
+				clientId);
+		}
+
+		private static void ProcessLocalAck(
+			SharedString sharedString,
+			(string Address, string OpTypeName, string OpJson, long ClientSeq) sent,
+			long refSeq,
+			long seq)
+		{
+			sharedString.ProcessDataObjectOp(
+				new SequencedDocumentMessageDescriptor(
+					SequenceNumber.ForTesting(clientSeq: sent.ClientSeq, refSeq: refSeq, seq: seq),
+					OpOrigin.Local),
+				sent.OpJson);
+		}
+
+		[Fact]
 		public void OnSequenceDelta_LocalListenerMutatingOp_DoesNotAffectWire()
 		{
 			// TS ref: sequence.ts / opBuilder.ts — TS's SequenceDeltaEvent

@@ -756,8 +756,13 @@ namespace Microsoft.Office.Web.Fluid
 					continue;
 				}
 
-				PropertySet? propertyDeltas = delta.Op is MergeTreeAnnotateMsg annotateMsg
-					? CloneAnnotateProps(annotateMsg.Props)
+				// TS ref: sequenceDeltaEvent.ts — for annotate deltas, TS carries
+				// the *previous* property values so listeners can compute the
+				// change. The remote-annotate path in Client populates
+				// deltaRange.PreviousProperties; local paths supply their own
+				// per-range property deltas via CreateAnnotateEventRanges.
+				PropertySet? propertyDeltas = delta.Operation == MergeTreeDeltaType.Annotate
+					? deltaRange.PreviousProperties
 					: null;
 				if (ShouldMergeRange(delta.Operation, ranges, deltaRange.Position, propertyDeltas))
 				{
