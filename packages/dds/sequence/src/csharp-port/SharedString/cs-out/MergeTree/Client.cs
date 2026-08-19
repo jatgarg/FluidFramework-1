@@ -2859,7 +2859,8 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				int? end,
 				IntervalStickiness stickiness,
 				Microsoft.Office.Web.Fluid.Intervals.Side startSide,
-				Microsoft.Office.Web.Fluid.Intervals.Side endSide)
+				Microsoft.Office.Web.Fluid.Intervals.Side endSide,
+				PropertySet? props = null)
 			{
 				_client.EmitIntervalOp(new IntervalChangeOpMsg()
 				{
@@ -2870,6 +2871,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 					Stickiness = stickiness,
 					StartSide = startSide,
 					EndSide = endSide,
+					Props = PropertyMap.ClonePropertySet(props),
 				});
 			}
 

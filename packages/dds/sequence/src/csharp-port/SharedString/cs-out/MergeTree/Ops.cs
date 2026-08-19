@@ -496,6 +496,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         public Microsoft.Office.Web.Fluid.Intervals.Side? StartSide { get; set; }
 
         public Microsoft.Office.Web.Fluid.Intervals.Side? EndSide { get; set; }
+
+        // TS ref: packages/dds/sequence/src/intervalCollection.ts changeInterval —
+        // TS emits a single op carrying both endpoint delta and property delta.
+        // Nullable so property-only or endpoint-only wire shapes remain valid.
+        public PropertySet? Props { get; set; }
     }
 
     public sealed class IntervalPropertyChangedOpMsg : IntervalOpMsg

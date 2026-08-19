@@ -6,6 +6,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Microsoft.Office.Web.Fluid.Intervals;
 using Microsoft.Office.Web.Fluid.MergeTree;
 using Xunit;
@@ -111,18 +112,15 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(0, changeEvent.PreviousStart);
 			Assert.Equal(3, changeEvent.PreviousEnd);
 
-			Assert.Collection(
-				changedEvents,
-				propertyChanged =>
-				{
-					Assert.DoesNotContain(propertyChanged.PropertyDeltas, property => property.Key == "unused");
-					Assert.Null(propertyChanged.PreviousStart);
-				},
-				endpointChanged =>
-				{
-					Assert.Equal(0, endpointChanged.PreviousStart);
-					Assert.Equal(3, endpointChanged.PreviousEnd);
-				});
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeInterval —
+			// TS emits a single combined "changed" event with both endpoint delta
+			// and property delta when both change together.
+			IntervalUpdatedEventArgs combinedChanged = Assert.Single(changedEvents);
+			Assert.Equal(0, combinedChanged.PreviousStart);
+			Assert.Equal(3, combinedChanged.PreviousEnd);
+			Assert.Equal(1, Assert.IsType<int>(combinedChanged.PropertyDeltas["a"]));
+			Assert.Equal("old", Assert.IsType<string>(combinedChanged.PropertyDeltas["remove"]));
+			Assert.Null(combinedChanged.PropertyDeltas["added"]);
 		}
 
 		[Fact]
@@ -260,6 +258,65 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			IntervalDeletedEventArgs deleteEvent = Assert.Single(deleteEvents);
 			Assert.True(deleteEvent.Local);
 			Assert.Equal("t1", deleteEvent.Interval.Id);
+		}
+
+		[Fact]
+		public void Change_SideOnly_WithoutPositions_Throws()
+		{
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts change() —
+			// TS's change API is defined in terms of positions; side-only changes
+			// would not have a coherent wire shape (positions are required for
+			// the receiver's dispatch). Reject at the API boundary.
+			SharedString sharedString = CreateSharedStringWithText("abcdef");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			collection.Add(1, 3, intervalId: "i1");
+
+			OcsException ex = Assert.Throws<OcsException>(
+				() => collection.Change("i1", newStart: null, newEnd: null, newStartSide: Intervals.Side.After, newEndSide: Intervals.Side.Before));
+			Assert.Contains("positions", ex.Message);
+		}
+
+		[Fact]
+		public void Change_ReferenceRangeLabels_Rejected()
+		{
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeProperties —
+			// TS throws UsageError when a caller tries to overwrite
+			// reservedRangeLabelsKey (the collection label). The port previously
+			// updated the local props bag while the wire path canonicalized to
+			// the collection name, leaving peers divergent.
+			SharedString sharedString = CreateSharedStringWithText("abcdef");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			collection.Add(1, 3, intervalId: "i1");
+
+			OcsException ex = Assert.Throws<OcsException>(
+				() => collection.ChangeProperties("i1", new PropertySet() { ["referenceRangeLabels"] = new[] { "evil" } }));
+			Assert.Contains("referenceRangeLabels", ex.Message);
+		}
+
+		[Fact]
+		public void Change_CombinedEndpointsAndProps_EmitsSingleWireOp()
+		{
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeInterval —
+			// TS emits ONE op carrying both endpoint delta and property delta.
+			// The port previously emitted two ops (change + propertyChanged),
+			// and receivers of the TS combined form dropped user properties.
+			var sender = new FakeFluidDataObjectSender();
+			SharedString sharedString = new("s", sender);
+			sharedString.InsertText(0, "abcdef");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			collection.Add(1, 3, intervalId: "i1", properties: new PropertySet() { ["color"] = "blue" });
+			sender.Sent.Clear();
+
+			collection.Change("i1", newStart: 2, newEnd: 4, props: new PropertySet() { ["color"] = "red" });
+
+			// Exactly one wire op — the combined change form.
+			var sent = Assert.Single(sender.Sent);
+			using JsonDocument doc = JsonDocument.Parse(sent.OpJson);
+			JsonElement value = doc.RootElement.GetProperty("value").GetProperty("value");
+			Assert.Equal("change", doc.RootElement.GetProperty("value").GetProperty("opName").GetString());
+			Assert.Equal(2, value.GetProperty("start").GetInt32());
+			Assert.Equal(4, value.GetProperty("end").GetInt32());
+			Assert.Equal("red", value.GetProperty("properties").GetProperty("color").GetString());
 		}
 
 		private static SharedString CreateSharedStringWithText(string text)

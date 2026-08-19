@@ -404,12 +404,28 @@ namespace Microsoft.Office.Web.Fluid
 						break;
 
 					case _startPropertyName:
-						start = ReadNullableInt32(ref reader, _startPropertyName);
+					{
+						(int? pos, int? impliedSide) = ReadEndpointPositionOrSentinel(ref reader, _startPropertyName);
+						start = pos;
+						if (impliedSide.HasValue && !startSide.HasValue)
+						{
+							startSide = impliedSide;
+						}
+
 						break;
+					}
 
 					case _endPropertyName:
-						end = ReadNullableInt32(ref reader, _endPropertyName);
+					{
+						(int? pos, int? impliedSide) = ReadEndpointPositionOrSentinel(ref reader, _endPropertyName);
+						end = pos;
+						if (impliedSide.HasValue && !endSide.HasValue)
+						{
+							endSide = impliedSide;
+						}
+
 						break;
+					}
 
 					case _intervalTypePropertyName:
 						intervalType = ReadInt32(ref reader, _intervalTypePropertyName);
@@ -599,7 +615,9 @@ namespace Microsoft.Office.Web.Fluid
 					WriteNullableIntervalEndpoint(writer, _startPropertyName, changeOperation.Start);
 					WriteNullableIntervalEndpoint(writer, _endPropertyName, changeOperation.End);
 					writer.WritePropertyName(_propertiesPropertyName);
-					WriteIntervalMapProperties(writer, changeOperation.CollectionName, changeOperation.IntervalId, null, registry);
+					// Pass Props so combined endpoint+property changes serialize
+					// as a single op (matches TS intervalCollection.ts changeInterval).
+					WriteIntervalMapProperties(writer, changeOperation.CollectionName, changeOperation.IntervalId, changeOperation.Props, registry);
 					writer.WriteEndObject();
 					break;
 
@@ -901,14 +919,30 @@ namespace Microsoft.Office.Web.Fluid
 				switch (propertyName)
 				{
 					case _startPropertyName:
-						start = ReadNullableInt32(ref reader, _startPropertyName);
+					{
+						(int? pos, int? impliedSide) = ReadEndpointPositionOrSentinel(ref reader, _startPropertyName);
+						start = pos;
 						hasStart = true;
+						if (impliedSide.HasValue && !startSide.HasValue)
+						{
+							startSide = impliedSide;
+						}
+
 						break;
+					}
 
 					case _endPropertyName:
-						end = ReadNullableInt32(ref reader, _endPropertyName);
+					{
+						(int? pos, int? impliedSide) = ReadEndpointPositionOrSentinel(ref reader, _endPropertyName);
+						end = pos;
 						hasEnd = true;
+						if (impliedSide.HasValue && !endSide.HasValue)
+						{
+							endSide = impliedSide;
+						}
+
 						break;
+					}
 
 					case _intervalTypePropertyName:
 						intervalType = ReadInt32(ref reader, _intervalTypePropertyName);
@@ -996,6 +1030,12 @@ namespace Microsoft.Office.Web.Fluid
 						Stickiness = payload.Stickiness.HasValue ? (Intervals.IntervalStickiness)payload.Stickiness.Value : (Intervals.IntervalStickiness?)null,
 						StartSide = payload.StartSide.HasValue ? (Intervals.Side)payload.StartSide.Value : (Intervals.Side?)null,
 						EndSide = payload.EndSide.HasValue ? (Intervals.Side)payload.EndSide.Value : (Intervals.Side?)null,
+						// TS ref: packages/dds/sequence/src/intervalCollection.ts —
+						// TS emits combined ops carrying both endpoints and user
+						// props. Preserve any non-empty user props from the wire
+						// so the receive path applies them alongside the endpoint
+						// change.
+						Props = userProperties.Count > 0 ? userProperties : null,
 					};
 
 				case _intervalChangeOpName:
@@ -1460,6 +1500,36 @@ namespace Microsoft.Office.Web.Fluid
 					writer.WriteNumberValue(decimalValue);
 					break;
 
+				// TS ref: packages/dds/merge-tree/src/properties.ts PropertySet —
+				// TS treats all numeric properties as ordinary JSON numbers. CLR
+				// small-integer types (short, byte, sbyte, ushort, uint, ulong)
+				// represent the same value space; widen them to the appropriate
+				// JSON number instead of throwing after the local tree has
+				// already been mutated.
+				case short shortValue:
+					writer.WriteNumberValue(shortValue);
+					break;
+
+				case ushort ushortValue:
+					writer.WriteNumberValue(ushortValue);
+					break;
+
+				case byte byteValue:
+					writer.WriteNumberValue(byteValue);
+					break;
+
+				case sbyte sbyteValue:
+					writer.WriteNumberValue(sbyteValue);
+					break;
+
+				case uint uintValue:
+					writer.WriteNumberValue(uintValue);
+					break;
+
+				case ulong ulongValue:
+					writer.WriteNumberValue(ulongValue);
+					break;
+
 				case IReadOnlyDictionary<string, object?> dictionary:
 					WritePropertySet(writer, dictionary, registry);
 					break;
@@ -1660,6 +1730,35 @@ namespace Microsoft.Office.Web.Fluid
 			}
 
 			return ReadInt32(ref reader, propertyName);
+		}
+
+		// TS ref: packages/dds/merge-tree/src/sequencePlace.ts normalizePlace —
+		// TS interval endpoints on the wire may be a number OR a string sentinel:
+		//   "start" → { pos: -1, side: Side.After }   (points before position 0)
+		//   "end"   → { pos: -1, side: Side.Before }  (points after last position)
+		// The port previously accepted only numbers, throwing on valid TS wire
+		// with sentinel endpoints. Reads either a number (via ReadNullableInt32)
+		// or one of the two sentinel strings; on sentinel returns (-1, impliedSide).
+		// impliedSide is null when the value was a plain number.
+		private static (int? position, int? impliedSide) ReadEndpointPositionOrSentinel(ref Utf8JsonReader reader, string propertyName)
+		{
+			if (reader.TokenType == JsonTokenType.String)
+			{
+				string? sentinel = reader.GetString();
+				if (sentinel == "start")
+				{
+					return (-1, (int)Intervals.Side.After);
+				}
+
+				if (sentinel == "end")
+				{
+					return (-1, (int)Intervals.Side.Before);
+				}
+
+				throw new JsonException($"Invalid endpoint sentinel '{sentinel}' for property '{propertyName}'.");
+			}
+
+			return (ReadNullableInt32(ref reader, propertyName), null);
 		}
 
 		private static int RequireInt32(int? value, string propertyName)

@@ -243,13 +243,26 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			ArgumentException.ThrowIfNullOrEmpty(id);
 
-			// Both endpoints must be defined or both undefined — one-sided changes
-			// serialize as a wire message peers cannot correctly interpret.
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts change() —
+			// TS enforces that both endpoints are either defined together or
+			// undefined together. One-sided changes serialize as a wire message
+			// peers cannot correctly interpret.
 			if (newStart.HasValue != newEnd.HasValue)
 			{
 				throw new OcsException(
 					OcsGateErrorCode.InvalidOperation,
 					"Change API requires both start and end to be defined or undefined.");
+			}
+
+			// TS ref: same. Side-only changes (no positions) are ambiguous — the
+			// wire message carries no endpoints and the receiver's dispatch
+			// silently ignores it. The port previously mutated locally and
+			// diverged from remote peers. Reject them at the API boundary.
+			if (!newStart.HasValue && (newStartSide.HasValue || newEndSide.HasValue))
+			{
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					"Change API requires positions when sides are specified.");
 			}
 
 			SequenceInterval? interval;
@@ -273,6 +286,12 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 					(changedProps, propertyDeltas) = ApplyPropertyChanges(interval, props);
 				}
 
+				// TS ref: packages/dds/sequence/src/intervalCollection.ts changeInterval —
+				// TS emits a single op carrying both endpoint delta and property
+				// delta when both are provided. The port previously emitted two
+				// separate ops (Change + PropertyChanged); receivers of the TS
+				// combined form dispatched only the endpoint branch and
+				// silently dropped the property change.
 				if (hasEndpointChange)
 				{
 					_opSender.SendIntervalChange(
@@ -282,25 +301,36 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 						newEnd,
 						interval.Stickiness,
 						interval.StartSide,
-						interval.EndSide);
+						interval.EndSide,
+						props: changedProps is { Count: > 0 } ? changedProps : null);
 				}
-
-				if (changedProps is { Count: > 0 })
+				else if (changedProps is { Count: > 0 })
 				{
 					_opSender.SendIntervalPropertyChanged(Name, id, props!);
 				}
 			}
 
-			if (changedProps is { Count: > 0 } && propertyDeltas is not null)
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeInterval —
+			// TS emits a single combined "change" event carrying both endpoint
+			// delta and property delta when both are provided. The port
+			// previously fired two "changed" events (one for props with null
+			// previous endpoints, another for endpoints with empty prop delta),
+			// causing listeners to see the property change before the endpoint
+			// change instead of atomically.
+			MergeTree.PropertySet combinedDeltas = propertyDeltas ?? new MergeTree.PropertySet();
+			if (hasEndpointChange || (changedProps is { Count: > 0 } && propertyDeltas is not null))
 			{
-				RaisePropertyChanged(interval, changedProps, propertyDeltas, local: true, operation: null);
-				RaiseChanged(interval, propertyDeltas, previousStart: null, previousEnd: null, slide: false, local: true, operation: null);
-			}
+				if (hasEndpointChange)
+				{
+					RaiseChange(interval, previousStart, previousEnd, slide: false, local: true, operation: null);
+				}
 
-			if (hasEndpointChange)
-			{
-				RaiseChange(interval, previousStart, previousEnd, slide: false, local: true, operation: null);
-				RaiseChanged(interval, new MergeTree.PropertySet(), previousStart, previousEnd, slide: false, local: true, operation: null);
+				RaiseChanged(interval, combinedDeltas, previousStart, previousEnd, slide: false, local: true, operation: null);
+
+				if (changedProps is { Count: > 0 } && propertyDeltas is not null)
+				{
+					RaisePropertyChanged(interval, changedProps, propertyDeltas, local: true, operation: null);
+				}
 			}
 
 			return interval;
@@ -536,15 +566,36 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			SequenceInterval? interval;
 			int? previousStart;
 			int? previousEnd;
+			MergeTree.PropertySet changedProps = new();
+			MergeTree.PropertySet propertyDeltas = new();
 			lock (_lock)
 			{
 				(interval, previousStart, previousEnd) = ChangeCore(op.IntervalId, op.Start, op.End, op.StartSide, op.EndSide);
+
+				// TS ref: packages/dds/sequence/src/intervalCollection.ts —
+				// TS's changeInterval carries both endpoint delta and property
+				// delta in one op. Apply properties alongside the endpoint
+				// change so remote peers see the full change atomically.
+				if (interval is not null && op.Props is { Count: > 0 })
+				{
+					(changedProps, propertyDeltas) = ApplyPropertyChanges(interval, op.Props);
+				}
 			}
 
-			if (interval is not null)
+			if (interval is null)
 			{
-				RaiseChange(interval, previousStart, previousEnd, slide: false, local: false, operation: op);
-				RaiseChanged(interval, new MergeTree.PropertySet(), previousStart, previousEnd, slide: false, local: false, operation: op);
+				return;
+			}
+
+			// TS ref: intervalCollection.ts — TS's first event on a combined
+			// interval change carries the previous endpoints supplied by the
+			// change flow. Property-only re-emissions get null previous endpoints.
+			RaiseChange(interval, previousStart, previousEnd, slide: false, local: false, operation: op);
+			RaiseChanged(interval, propertyDeltas, previousStart, previousEnd, slide: false, local: false, operation: op);
+
+			if (changedProps.Count > 0)
+			{
+				RaisePropertyChanged(interval, changedProps, propertyDeltas, local: false, operation: op);
 			}
 		}
 
@@ -843,6 +894,18 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				return (changedProps, propertyDeltas);
 			}
 
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeProperties —
+			// TS throws if the caller tries to mutate reservedRangeLabelsKey.
+			// The port previously updated the local props bag with the caller's
+			// value while the wire path silently canonicalized to the collection
+			// name, leaving peers divergent.
+			if (props.ContainsKey("referenceRangeLabels"))
+			{
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					"The 'referenceRangeLabels' property cannot be modified once an interval is inserted into a collection.");
+			}
+
 			MergeTree.PropertySet? current = interval.Properties;
 			foreach (KeyValuePair<string, object?> property in props)
 			{
@@ -1009,7 +1072,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			int? end,
 			IntervalStickiness stickiness,
 			Side startSide,
-			Side endSide);
+			Side endSide,
+			MergeTree.PropertySet? props = null);
 
 		void SendIntervalPropertyChanged(string collectionName, string intervalId, MergeTree.PropertySet props);
 	}

@@ -235,5 +235,96 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			JsonElement payload = document.RootElement.GetProperty("value").GetProperty("value");
 			Assert.Equal(0, payload.GetProperty("sequenceNumber").GetInt64());
 		}
+
+		[Fact]
+		public void PropertySet_CLRSmallNumericTypes_SerializeAsNumbers()
+		{
+			// TS ref: packages/dds/merge-tree/src/properties.ts PropertySet — TS
+			// treats all numeric properties as ordinary JSON numbers. CLR small
+			// integer types (short, byte, sbyte, ushort, uint, ulong) are
+			// numerically identical to their JSON representation. Previously the
+			// serializer only handled int/long/double/float/decimal and threw for
+			// the others AFTER the local tree had already been mutated.
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "x", new PropertySet()
+			{
+				["s"] = (short)1,
+				["us"] = (ushort)2,
+				["b"] = (byte)3,
+				["sb"] = (sbyte)4,
+				["ui"] = (uint)5,
+				["ul"] = (ulong)6,
+			});
+
+			// If any small-numeric type had thrown, InsertText would have thrown
+			// too. Just reaching this point verifies the fix.
+			Assert.Equal("x", sharedString.GetText());
+		}
+
+		[Fact]
+		public void IntervalAddOp_SentinelEndpoints_Deserialize()
+		{
+			// TS ref: packages/dds/merge-tree/src/sequencePlace.ts normalizePlace —
+			// "start" -> {pos: -1, side: After}; "end" -> {pos: -1, side: Before}.
+			// The port previously rejected string endpoints with a JsonException.
+			// The `act` envelope wire form: value.value has start:"start", end:"end".
+			const string wire =
+				"{\"type\":\"act\",\"key\":\"comments\",\"value\":{\"opName\":\"add\",\"value\":{" +
+				"\"sequenceNumber\":0,\"intervalType\":2," +
+				"\"start\":\"start\",\"end\":\"end\"," +
+				"\"properties\":{\"intervalId\":\"whole\",\"referenceRangeLabels\":[\"comments\"]}}}}";
+
+			IMergeTreeOp op = SharedStringOpSerializer.Deserialize(wire);
+			IntervalAddOpMsg add = Assert.IsType<IntervalAddOpMsg>(op);
+			Assert.Equal(-1, add.Start);
+			Assert.Equal(-1, add.End);
+			Assert.Equal(Intervals.Side.After, add.StartSide);
+			Assert.Equal(Intervals.Side.Before, add.EndSide);
+		}
+
+		[Fact]
+		public void IntervalChangeOp_CombinedEndpointsAndProps_DeserializePreservesUserProps()
+		{
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeInterval —
+			// TS emits one op carrying both endpoint delta and property delta.
+			// The port previously picked only the endpoint branch and discarded
+			// the user props on the combined form.
+			const string wire =
+				"{\"type\":\"act\",\"key\":\"comments\",\"value\":{\"opName\":\"change\",\"value\":{" +
+				"\"sequenceNumber\":0,\"intervalType\":2," +
+				"\"start\":2,\"end\":4," +
+				"\"properties\":{\"intervalId\":\"i1\",\"color\":\"red\",\"referenceRangeLabels\":[\"comments\"]}}}}";
+
+			IMergeTreeOp op = SharedStringOpSerializer.Deserialize(wire);
+			IntervalChangeOpMsg change = Assert.IsType<IntervalChangeOpMsg>(op);
+			Assert.Equal(2, change.Start);
+			Assert.Equal(4, change.End);
+			Assert.NotNull(change.Props);
+			Assert.Equal("red", change.Props!["color"]);
+		}
+
+		[Fact]
+		public void IntervalChangeOp_CombinedEndpointsAndProps_SerializesAsSingleOp()
+		{
+			IntervalChangeOpMsg change = new()
+			{
+				CollectionName = "comments",
+				IntervalId = "i1",
+				Start = 2,
+				End = 4,
+				Props = new PropertySet()
+				{
+					["color"] = "red",
+				},
+			};
+
+			string json = SharedStringOpSerializer.Serialize(change);
+
+			using JsonDocument doc = JsonDocument.Parse(json);
+			JsonElement value = doc.RootElement.GetProperty("value").GetProperty("value");
+			Assert.Equal(2, value.GetProperty("start").GetInt32());
+			Assert.Equal(4, value.GetProperty("end").GetInt32());
+			Assert.Equal("red", value.GetProperty("properties").GetProperty("color").GetString());
+		}
 	}
 }
