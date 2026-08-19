@@ -173,6 +173,50 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void Load_TsLegacyCatchupOpsBlob_DiscoveredByWellKnownName()
+		{
+			// TS ref: merge-tree/src/snapshotlegacy.ts SnapshotLegacy.catchupOps —
+			// TS's canonical legacy layout stores catchup ops in an unnamed
+			// blob (default name "catchupOps") and TS discovers it via
+			// storage.list. The header does NOT carry a catchupOpsBlobNames
+			// list. The port has no list API, so it probes the well-known
+			// name via the resolver.
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"Hello\"]",
+				segmentCount: 1,
+				length: 5,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 5);
+			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"remote-client\",\"contents\":{\"type\":0,\"pos1\":5,\"seg\":\"!\"}}]";
+
+			sharedString.LoadFromSnapshot(snapshotJson, blobName => blobName == "catchupOps" ? catchupOpsJson : null!);
+
+			Assert.Equal("Hello!", sharedString.GetText());
+		}
+
+		[Fact]
+		public void Load_NoCatchupBlob_ResolverReturnsNullForProbe_LoadsBase()
+		{
+			// The TS-legacy probe must be silent — if the resolver has no
+			// "catchupOps" blob, snapshot load must complete with just the
+			// header content and not throw.
+			var sharedString = new SharedString();
+			string snapshotJson = CreateHeaderSnapshotJson(
+				segmentsJson: "[\"Hello\"]",
+				segmentCount: 1,
+				length: 5,
+				orderedChunkMetadataJson: "[{\"id\":\"header\"}]",
+				totalSegmentCount: 1,
+				totalLength: 5);
+
+			sharedString.LoadFromSnapshot(snapshotJson, blobName => null!);
+
+			Assert.Equal("Hello", sharedString.GetText());
+		}
+
+		[Fact]
 		public void Load_CatchupOps_OrderPreserved()
 		{
 			var sharedString = new SharedString();

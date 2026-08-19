@@ -601,24 +601,108 @@ namespace Microsoft.Office.Web.Fluid
 		private static void LoadCatchupOps(SharedStringSnapshotDto snapshot, Func<string, string>? blobResolver)
 		{
 			SharedStringSnapshotHeaderMetadata? headerMetadata = snapshot.HeaderMetadata;
-			if (headerMetadata is null || headerMetadata.CatchupOpsBlobNames.Count == 0)
+			if (headerMetadata is null)
 			{
 				return;
 			}
 
-			if (blobResolver is null)
+			if (headerMetadata.CatchupOpsBlobNames.Count > 0)
 			{
-				throw InvalidSnapshot("SharedString catchup ops snapshot requires a blobResolver.");
+				if (blobResolver is null)
+				{
+					throw InvalidSnapshot("SharedString catchup ops snapshot requires a blobResolver.");
+				}
+
+				foreach (string blobName in headerMetadata.CatchupOpsBlobNames)
+				{
+					string blobJson = ResolveBlob(blobResolver, blobName);
+					CatchupOpsBlobDto catchupOpsBlob = ReadCatchupOpsBlob(blobJson, $"blob '{blobName}'");
+					foreach (CatchupOpDto catchupOp in catchupOpsBlob.Ops)
+					{
+						snapshot.CatchupOps.Add(catchupOp);
+					}
+				}
+
+				return;
 			}
 
-			foreach (string blobName in headerMetadata.CatchupOpsBlobNames)
+			// TS ref: merge-tree/src/snapshotLoader.ts loadBodyAndCatchupOps —
+			// TS's canonical legacy format does not carry catchupOpsBlobNames;
+			// TS discovers the catchup blob by listing storage and finding the
+			// unnamed extra blob (default name "catchupOps" per snapshotlegacy.ts).
+			// The port has no storage-list API, so probe the well-known name
+			// via the caller's resolver. The probe stays silent: if the
+			// resolver returns null / throws / returns a non-catchup shape,
+			// treat it as "no catchup blob" and continue.
+			if (blobResolver is null)
 			{
-				string blobJson = ResolveBlob(blobResolver, blobName);
-				CatchupOpsBlobDto catchupOpsBlob = ReadCatchupOpsBlob(blobJson, $"blob '{blobName}'");
-				foreach (CatchupOpDto catchupOp in catchupOpsBlob.Ops)
+				return;
+			}
+
+			string? probedJson;
+			try
+			{
+				probedJson = blobResolver(LegacyCatchupOpsBlobName);
+			}
+			catch
+			{
+				return;
+			}
+
+			if (string.IsNullOrEmpty(probedJson) || !TryReadCatchupOpsBlob(probedJson!, out CatchupOpsBlobDto? probedBlob))
+			{
+				return;
+			}
+
+			foreach (CatchupOpDto catchupOp in probedBlob!.Ops)
+			{
+				snapshot.CatchupOps.Add(catchupOp);
+			}
+		}
+
+		// TS ref: merge-tree/src/snapshotlegacy.ts SnapshotLegacy.catchupOps —
+		// well-known blob name TS uses for the pre-name-list catchup ops layout.
+		private const string LegacyCatchupOpsBlobName = "catchupOps";
+
+		private static bool TryReadCatchupOpsBlob(string json, out CatchupOpsBlobDto? blob)
+		{
+			blob = null;
+			try
+			{
+				using JsonDocument document = JsonDocument.Parse(json);
+				JsonElement opsElement = document.RootElement;
+				if (opsElement.ValueKind == JsonValueKind.Object
+					&& opsElement.TryGetProperty("ops", out JsonElement nestedOpsElement))
 				{
-					snapshot.CatchupOps.Add(catchupOp);
+					opsElement = nestedOpsElement;
 				}
+
+				if (opsElement.ValueKind != JsonValueKind.Array)
+				{
+					return false;
+				}
+
+				var dto = new CatchupOpsBlobDto();
+				int index = 0;
+				foreach (JsonElement opElement in opsElement.EnumerateArray())
+				{
+					// Each entry must be an object with the required catchup fields;
+					// otherwise this isn't a catchup blob.
+					if (opElement.ValueKind != JsonValueKind.Object)
+					{
+						return false;
+					}
+
+					dto.Ops.Add(ReadCatchupOp(opElement, $"probe[{index}]"));
+					index++;
+				}
+
+				blob = dto;
+				return true;
+			}
+			catch
+			{
+				return false;
 			}
 		}
 
