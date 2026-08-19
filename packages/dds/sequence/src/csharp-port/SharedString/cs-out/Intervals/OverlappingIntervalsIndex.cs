@@ -30,8 +30,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return Enumerable.Empty<SequenceInterval>();
             }
 
+            // Materialize at call time to match TS's snapshot semantics
+            // (intervalIndex/overlappingIntervalsIndex.ts).
             return _intervals.Where(interval => !interval.HasDetachedEndpoint && OverlapsInclusive(interval, start, end))
-                .OrderBy(interval => interval, IntervalIndexComparers.IntervalComparer);
+                .OrderBy(interval => interval, IntervalIndexComparers.IntervalComparer)
+                .ToArray();
         }
 
         private static bool OverlapsInclusive(SequenceInterval interval, int start, int end)

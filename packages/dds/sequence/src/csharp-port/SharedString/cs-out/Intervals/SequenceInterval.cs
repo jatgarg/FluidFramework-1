@@ -112,7 +112,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         internal bool HasDetachedEndpoint => Start.IsDetached || End.IsDetached;
 
         /// <summary>
-        /// Compares this interval to another interval by start position and then end position.
+        /// Compares this interval to another interval by start position and then start side.
         /// </summary>
         /// <param name="other">The interval to compare with this interval.</param>
         /// <returns>A standard comparison result.</returns>
@@ -120,23 +120,21 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         {
             ArgumentNullException.ThrowIfNull(other);
 
+            // TS ref: packages/dds/sequence/src/intervals/sequenceInterval.ts compareStart —
+            // TS compares only start position, then start side. The port
+            // previously fell through to end-position comparison, producing
+            // ordering where TS returns equality.
             int startComparison = IntervalUtils.ComparePositions(StartPosition, other.StartPosition);
             if (startComparison != 0)
             {
                 return startComparison;
             }
 
-            int startSideComparison = IntervalUtils.CompareSides(StartSide, other.StartSide);
-            if (startSideComparison != 0)
-            {
-                return startSideComparison;
-            }
-
-            return IntervalUtils.ComparePositions(EndPosition, other.EndPosition);
+            return IntervalUtils.CompareSides(StartSide, other.StartSide);
         }
 
         /// <summary>
-        /// Compares this interval to another interval by end position and then start position.
+        /// Compares this interval to another interval by end position and then end side.
         /// </summary>
         /// <param name="other">The interval to compare with this interval.</param>
         /// <returns>A standard comparison result.</returns>
@@ -144,19 +142,17 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         {
             ArgumentNullException.ThrowIfNull(other);
 
+            // TS ref: packages/dds/sequence/src/intervals/sequenceInterval.ts compareEnd —
+            // TS compares only end position, then end side. The port previously
+            // fell through to start-position comparison, producing ordering
+            // where TS returns equality.
             int endComparison = IntervalUtils.ComparePositions(EndPosition, other.EndPosition);
             if (endComparison != 0)
             {
                 return endComparison;
             }
 
-            int endSideComparison = IntervalUtils.CompareSides(other.EndSide, EndSide);
-            if (endSideComparison != 0)
-            {
-                return endSideComparison;
-            }
-
-            return IntervalUtils.ComparePositions(StartPosition, other.StartPosition);
+            return IntervalUtils.CompareSides(other.EndSide, EndSide);
         }
 
         internal void SetStart(MergeTree.LocalReferencePosition newStart, Side newStartSide)

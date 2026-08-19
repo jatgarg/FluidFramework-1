@@ -30,12 +30,17 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return Enumerable.Empty<SequenceInterval>();
             }
 
+            // TS ref: packages/dds/sequence/src/intervalIndex/endpointInRangeIndex.ts —
+            // TS builds and returns a snapshot array at call time. Materialize
+            // the LINQ query so callers get a stable snapshot and are safe
+            // against subsequent index mutations while enumerating.
             return _intervals.Where(
                 interval => !interval.HasDetachedEndpoint
                     && interval.EndPosition is int position
                     && position >= start
                     && position <= end)
-                .OrderBy(interval => interval, IntervalIndexComparers.EndpointComparer);
+                .OrderBy(interval => interval, IntervalIndexComparers.EndpointComparer)
+                .ToArray();
         }
     }
 }

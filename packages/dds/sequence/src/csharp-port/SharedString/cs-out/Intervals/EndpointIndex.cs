@@ -48,12 +48,15 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return Enumerable.Empty<SequenceInterval>();
             }
 
+            // Materialize at call time to match TS's snapshot semantics
+            // (intervalIndex/endpointIndex.ts).
             return _intervals.Where(
                 interval =>
                     !interval.HasDetachedEndpoint &&
                     ((interval.StartPosition is int startPosition && startPosition >= start && startPosition <= end) ||
                         (interval.EndPosition is int endPosition && endPosition >= start && endPosition <= end)))
-                .OrderBy(interval => interval, IntervalIndexComparers.IntervalComparer);
+                .OrderBy(interval => interval, IntervalIndexComparers.IntervalComparer)
+                .ToArray();
         }
     }
 }

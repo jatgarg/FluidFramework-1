@@ -154,6 +154,100 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Throws<ArgumentException>(() => index.Remove(withoutId));
 		}
 
+		[Fact]
+		public void IdIntervalIndex_DetachedNormalInterval_IsStillAddressableById()
+		{
+			// TS ref: packages/dds/sequence/src/intervalIndex/idIntervalIndex.ts —
+			// TS keeps detached intervals addressable via getIntervalById; the
+			// interval reports -1 endpoints but stays reachable. The port
+			// previously filtered detached intervals out of lookup and iteration.
+			// Transient intervals still auto-remove on detach (a port-specific
+			// interval type not present in TS).
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "abcdef");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			SequenceInterval interval = collection.Add(2, 4, intervalId: "i1");
+
+			sharedString.DeleteText(2, 3);
+
+			// Regular sliding intervals detach (endpoints slide to -1) but remain
+			// addressable — Transient behavior is not the SlideOnRemove default.
+			Assert.NotNull(collection.GetIntervalById("i1"));
+			Assert.Same(interval, collection.GetIntervalById("i1"));
+		}
+
+		[Fact]
+		public void SequenceInterval_CompareStart_ReturnsEqualityWhenNamedEndpointMatches()
+		{
+			// TS ref: packages/dds/sequence/src/intervals/sequenceInterval.ts
+			// compareStart / compareEnd — TS returns 0 once start (or end) position
+			// and side match. The port previously fell through to compare the
+			// OTHER endpoint, producing non-zero ordering where TS returns 0.
+			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
+			SequenceInterval same = collection.Add(2, 4, intervalId: "same");
+			SequenceInterval sameStartDifferentEnd = collection.Add(2, 6, intervalId: "sameStart");
+
+			Assert.Equal(0, same.CompareStart(sameStartDifferentEnd));
+			Assert.Equal(0, sameStartDifferentEnd.CompareStart(same));
+
+			SequenceInterval sameEndDifferentStart = collection.Add(3, 6, intervalId: "sameEnd");
+			SequenceInterval endTwin = collection.Add(1, 6, intervalId: "sameEnd2");
+
+			Assert.Equal(0, sameEndDifferentStart.CompareEnd(endTwin));
+			Assert.Equal(0, endTwin.CompareEnd(sameEndDifferentStart));
+		}
+
+		[Fact]
+		public void PropertyMap_MatchProperties_DeepComparesArrayValues()
+		{
+			// TS ref: packages/dds/merge-tree/src/properties.ts matchProperties —
+			// TS deep-compares array property values. Equal-content arrays with
+			// different references must compare equal. The port previously fell
+			// through to Object.Equals, which uses reference equality for arrays
+			// and Lists.
+			MergeTree.PropertySet a = new()
+			{
+				["tags"] = new List<object?> { "one", "two", "three" },
+			};
+			MergeTree.PropertySet b = new()
+			{
+				["tags"] = new List<object?> { "one", "two", "three" },
+			};
+
+			Assert.True(MergeTree.PropertyMap.MatchProperties(a, b));
+
+			MergeTree.PropertySet c = new()
+			{
+				["tags"] = new List<object?> { "one", "two", "four" },
+			};
+
+			Assert.False(MergeTree.PropertyMap.MatchProperties(a, c));
+		}
+
+		[Fact]
+		public void OverlappingIntervalsIndex_ResultsSurviveIndexMutationDuringEnumeration()
+		{
+			// TS ref: packages/dds/sequence/src/intervalIndex/overlappingIntervalsIndex.ts —
+			// TS returns a snapshot array. Deferred LINQ views over a mutable
+			// backing structure would surface subsequent adds/removes as
+			// iteration mutations; materializing at call time makes the result
+			// snapshot-stable.
+			IntervalCollection collection = CreateCollectionWithText("abcdefghij");
+			SequenceInterval a = collection.Add(1, 3, intervalId: "a");
+			SequenceInterval b = collection.Add(4, 6, intervalId: "b");
+			OverlappingIntervalsIndex index = new();
+			index.Add(a);
+			index.Add(b);
+
+			IEnumerable<SequenceInterval> results = index.FindOverlapping(0, 10);
+			// Mutate the index AFTER capturing the query but BEFORE enumerating.
+			index.Add(collection.Add(7, 9, intervalId: "c"));
+
+			SequenceInterval[] snapshot = results.ToArray();
+
+			Assert.Equal(new[] { "a", "b" }, snapshot.Select(interval => interval.Id).ToArray());
+		}
+
 		private static IntervalCollection CreateCollectionWithText(string text)
 		{
 			SharedString sharedString = new();

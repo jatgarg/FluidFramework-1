@@ -219,6 +219,23 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return true;
             }
 
+            // Fast paths for common primitive/string values — avoid the expensive
+            // dictionary/list shape probes below when neither operand needs them.
+            if (valueA is null || valueB is null)
+            {
+                return valueA is null && valueB is null;
+            }
+
+            if (valueA is string || valueB is string)
+            {
+                return valueA is string && valueB is string && (string)valueA == (string)valueB;
+            }
+
+            if (valueA is System.ValueType && valueB is System.ValueType)
+            {
+                return valueA.Equals(valueB);
+            }
+
             bool isDictionaryA = TryAsPropertyDictionary(valueA, out IReadOnlyDictionary<string, object?>? dictionaryA);
             bool isDictionaryB = TryAsPropertyDictionary(valueB, out IReadOnlyDictionary<string, object?>? dictionaryB);
             if (isDictionaryA || isDictionaryB)
@@ -226,7 +243,37 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return isDictionaryA && isDictionaryB && MatchProperties(dictionaryA, dictionaryB);
             }
 
+            // TS ref: packages/dds/merge-tree/src/properties.ts matchProperties —
+            // TS deep-compares array/object property values. Object.is on
+            // different array references returns false, so JS uses element-wise
+            // comparison. Match that here so equal-content arrays/lists don't
+            // report as unequal via CLR object-identity fallback.
+            IList? listA = valueA as IList;
+            IList? listB = valueB as IList;
+            if (listA is not null || listB is not null)
+            {
+                return listA is not null && listB is not null && MatchPropertyLists(listA, listB);
+            }
+
             return Equals(valueA, valueB);
+        }
+
+        private static bool MatchPropertyLists(IList a, IList b)
+        {
+            if (a.Count != b.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < a.Count; i++)
+            {
+                if (!MatchPropertyValue(a[i], b[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool TryAsPropertyDictionary(
