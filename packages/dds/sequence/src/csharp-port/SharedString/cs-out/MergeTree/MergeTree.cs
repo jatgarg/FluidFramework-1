@@ -3102,6 +3102,13 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
             if (int.TryParse(clientId, out int parsedClientId))
             {
+                // Reserve parsed numeric ids in the allocator so a later
+                // non-numeric client cannot be assigned the same integer.
+                if (parsedClientId >= _nextClientId)
+                {
+                    _nextClientId = parsedClientId + 1;
+                }
+
                 return parsedClientId;
             }
 

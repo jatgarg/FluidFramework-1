@@ -133,6 +133,35 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void ClientIdAllocator_NumericIdReservesShortId_NonNumericCannotCollide()
+		{
+			// TS ref: merge-tree/src/client.ts client-id allocator — TS reserves
+			// numeric-parseable ids so a later non-numeric client never receives
+			// the same short id. Without the reservation, a numeric id like "5"
+			// is used verbatim, and the allocator later hands out short id 5 to
+			// a non-numeric client, causing the two clients' stamps to be
+			// indistinguishable.
+			MergeTreeModel tree = new();
+			tree.InsertSegments(0, SegmentArray("a"), refSeq: 0, seq: 1, clientId: "5");
+			// Any allocator counter that hadn't reserved 5 would soon reach it.
+			tree.InsertSegments(1, SegmentArray("b"), refSeq: 1, seq: 2, clientId: "alice");
+			tree.InsertSegments(2, SegmentArray("c"), refSeq: 2, seq: 3, clientId: "bob");
+			tree.InsertSegments(3, SegmentArray("d"), refSeq: 3, seq: 4, clientId: "charlie");
+			tree.InsertSegments(4, SegmentArray("e"), refSeq: 4, seq: 5, clientId: "dan");
+			tree.InsertSegments(5, SegmentArray("f"), refSeq: 5, seq: 6, clientId: "eve");
+
+			int? numericClientShortId = SegmentWithText(tree, "a").InsertionStamp?.ClientId;
+			HashSet<int> nonNumericShortIds = new();
+			foreach (string letter in new[] { "b", "c", "d", "e", "f" })
+			{
+				int? shortId = SegmentWithText(tree, letter).InsertionStamp?.ClientId;
+				Assert.NotNull(shortId);
+				Assert.NotEqual(numericClientShortId, shortId);
+				Assert.True(nonNumericShortIds.Add(shortId!.Value));
+			}
+		}
+
+		[Fact]
 		public void M4_IntervalEndpointSurvivesAnnotateBoundarySplit()
 		{
 			SharedString sharedString = CreateSharedStringWithText("abcdefghijklmnop");
