@@ -88,6 +88,30 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void AnnotateRange_NullValue_WirePreservesDeletionKey()
+		{
+			// TS ref: packages/dds/merge-tree/src/opBuilder.ts createAnnotateRangeOp —
+			// TS emits the null property value on the wire so remote peers can
+			// apply the deletion. The T03 audit finding flagged this end-to-end
+			// path as untested.
+			var sender = new FakeFluidDataObjectSender();
+			var sharedString = new SharedString("s", sender);
+			sharedString.InsertText(0, "hello world");
+			sender.Sent.Clear();
+
+			sharedString.AnnotateRange(0, 5, new PropertySet()
+			{
+				["color"] = null,
+			});
+
+			var sent = Assert.Single(sender.Sent);
+			using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(sent.OpJson);
+			System.Text.Json.JsonElement props = doc.RootElement.GetProperty("props");
+			Assert.True(props.TryGetProperty("color", out System.Text.Json.JsonElement colorValue));
+			Assert.Equal(System.Text.Json.JsonValueKind.Null, colorValue.ValueKind);
+		}
+
+		[Fact]
 		public void AnnotateRange_SplitsSegmentsAtBoundaries()
 		{
 			MergeTree.MergeTree tree = new MergeTree.MergeTree();

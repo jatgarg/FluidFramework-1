@@ -207,6 +207,33 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void MinimumSequence_AdvancesWhenNoLocalPendingOps()
+		{
+			// TS ref: packages/dds/merge-tree/src/client.ts applyMsg — TS advances
+			// both Client.collabWindow.minSeq and MergeTree.minSeq when a remote
+			// message's minimumSequenceNumber is higher and no local ops are
+			// pending. The T01 audit finding flagged this path as untested.
+			Client client = CreateAckedClient("local", "abc");
+
+			// After the acked-client setup no local ops are pending.
+			Assert.Equal(0, client.PendingOpCount);
+
+			// A remote op carrying msn: 3 should advance the collab window.
+			client.ApplyOp(
+				new MergeTreeInsertMsg()
+				{
+					Pos1 = 0,
+					Seg = "X",
+				},
+				seq: 5,
+				refSeq: 3,
+				clientId: "remote",
+				minimumSequenceNumber: 3);
+
+			Assert.Equal(3, client.CollabWindowMinSeq);
+		}
+
+		[Fact]
 		public void MinimumSequence_DoesNotAdvancePastInFlightLocalRefSeq()
 		{
 			Client client = new("local");

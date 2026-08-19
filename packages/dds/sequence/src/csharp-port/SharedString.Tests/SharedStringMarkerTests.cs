@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using Microsoft.Office.Web.Fluid.MergeTree;
 using Xunit;
@@ -210,6 +211,62 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("bar", Assert.IsType<string>(marker.Properties!["label"]));
 		}
 
+		[Fact]
+		public void MarkerIdIndex_ClearedThroughLocalRemoteAndAckedObliterate()
+		{
+			// TS ref: packages/dds/merge-tree/src/client.ts + test/client.searchForMarker.spec —
+			// TS's marker id index cleans up when a marker is removed by local,
+			// remote, or ACKed obliterate paths. The T02 audit finding flagged
+			// this end-to-end path as untested.
+
+			// Local remove path.
+			var localString = new SharedString();
+			localString.InsertText(0, "abc");
+			localString.InsertMarker(3, ReferenceType.Tile, MarkerProps("p-local", "para"));
+			Assert.NotNull(localString.GetMarkerFromId("p-local"));
+
+			localString.DeleteText(2, 4);
+			Assert.Null(localString.GetMarkerFromId("p-local"));
+
+			// Remote remove path (marker + remove both come from remote).
+			var sender = new FakeFluidDataObjectSender();
+			var sharedString = new SharedString("s", sender);
+			sharedString.InsertText(0, "abc");
+			ProcessLocalAck(sharedString, Assert.Single(sender.Sent), refSeq: 0, seq: 1);
+			sender.Sent.Clear();
+
+			string markerInsertJson = SharedStringOpSerializer.Serialize(new MergeTreeInsertMsg()
+			{
+				Pos1 = 3,
+				Seg = Marker.Make(ReferenceType.Tile, MarkerProps("p-remote", "para")),
+			});
+			sharedString.ProcessDataObjectOp(RemoteMessage(refSeq: 1, seq: 2), markerInsertJson);
+			Assert.NotNull(sharedString.GetMarkerFromId("p-remote"));
+
+			string removeJson = SharedStringOpSerializer.Serialize(new MergeTreeRemoveMsg()
+			{
+				Pos1 = 2,
+				Pos2 = 4,
+			});
+			sharedString.ProcessDataObjectOp(RemoteMessage(refSeq: 2, seq: 3), removeJson);
+			Assert.Null(sharedString.GetMarkerFromId("p-remote"));
+
+			// Local -> ACKed remove path.
+			var ackedSender = new FakeFluidDataObjectSender();
+			var ackedString = new SharedString("s2", ackedSender);
+			ackedString.InsertText(0, "abc");
+			ackedString.InsertMarker(3, ReferenceType.Tile, MarkerProps("p-acked", "para"));
+			ackedString.DeleteText(2, 4);
+			// Ack all pending: insert, insertMarker, delete.
+			long ackSeq = 1;
+			foreach ((string Address, string OpTypeName, string OpJson, long ClientSeq) in ackedSender.Sent.ToList())
+			{
+				ProcessLocalAck(ackedString, (Address, OpTypeName, OpJson, ClientSeq), refSeq: 0, seq: ackSeq++);
+			}
+
+			Assert.Null(ackedString.GetMarkerFromId("p-acked"));
+		}
+
 		private static PropertySet MarkerProps(string markerId, params string[] tileLabels)
 		{
 			return new PropertySet()
@@ -259,6 +316,19 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				SequenceNumber.ForTesting(clientSeq: 0, refSeq: refSeq, seq: seq),
 				OpOrigin.Remote,
 				clientId);
+		}
+
+		private static void ProcessLocalAck(
+			SharedString sharedString,
+			(string Address, string OpTypeName, string OpJson, long ClientSeq) sent,
+			long refSeq,
+			long seq)
+		{
+			sharedString.ProcessDataObjectOp(
+				new SequencedDocumentMessageDescriptor(
+					SequenceNumber.ForTesting(clientSeq: sent.ClientSeq, refSeq: refSeq, seq: seq),
+					OpOrigin.Local),
+				sent.OpJson);
 		}
 
 		private static SharedStringSnapshotDto LoadSimpleHelloSnapshot()
