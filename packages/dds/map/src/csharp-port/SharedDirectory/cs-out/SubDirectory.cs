@@ -32,6 +32,7 @@ namespace Microsoft.Office.Web.Fluid
 		private readonly SharedDirectory _root;
 		private readonly SubDirectory? _parent;
 		private readonly string _absolutePath;
+		private readonly string _localName;
 		private readonly Dictionary<string, object?> _storage;
 		private readonly Dictionary<string, SubDirectory> _subdirs;
 		private readonly List<string> _subdirOrder;
@@ -145,12 +146,14 @@ namespace Microsoft.Office.Web.Fluid
 			SharedDirectory root,
 			SubDirectory? parent,
 			string absolutePath,
+			string localName,
 			SeqData seqData,
 			IEnumerable<string>? clientIds)
 		{
 			_root = root;
 			_parent = parent;
 			_absolutePath = absolutePath;
+			_localName = localName;
 			SeqData = seqData;
 			ClientIds = clientIds == null ? new HashSet<string>() : new HashSet<string>(clientIds);
 			_storage = new Dictionary<string, object?>();
@@ -384,6 +387,7 @@ namespace Microsoft.Office.Web.Fluid
 					_root,
 					this,
 					MakeChildAbsolutePath(_absolutePath, subdirName),
+					subdirName,
 					CreateLocalSeqDataNoLock(),
 					CreateLocalClientIdsNoLock());
 				if (_root.Sender == null)
@@ -703,11 +707,11 @@ namespace Microsoft.Office.Web.Fluid
 					return;
 				}
 
-				// TS ref: directory.ts. TS emits valueChanged with
-				// previousValue: undefined even when the key isn't present locally,
-				// as long as no pending op suppresses it.
-				_storage.TryGetValue(key, out object? previous);
-				_storage.Remove(key);
+				// TS emits valueChanged with previousValue: undefined even when
+				// the key isn't present locally, as long as no pending op
+				// suppresses it. Remove(out) returns the prior value in a single
+				// hash lookup and leaves `previous` as null when the key was absent.
+				_storage.Remove(key, out object? previous);
 				if (!HasPendingStorageEntryForKeyOrClearNoLock(key))
 				{
 					args = new ValueChangedEventArgs()
@@ -784,6 +788,7 @@ namespace Microsoft.Office.Web.Fluid
 						_root,
 						this,
 						MakeChildAbsolutePath(_absolutePath, subdirName),
+						subdirName,
 						CreateRemoteSeqData(msg),
 						CreateRemoteClientIds(msg));
 				}
@@ -876,6 +881,7 @@ namespace Microsoft.Office.Web.Fluid
 							_root,
 							this,
 							childPath,
+							kvp.Key,
 							CreateSnapshotSeqDataNoLock(kvp.Value.CreateInfo, snapshotClientSeqByCreateSeq),
 							CreateSnapshotClientIds(kvp.Value.CreateInfo));
 						AddSequencedSubDirectoryNoLock(kvp.Key, child);
@@ -1510,7 +1516,7 @@ namespace Microsoft.Office.Web.Fluid
 				{
 					SubdirName = args.SubdirName,
 					ParentPath = args.ParentPath,
-					Path = PosixPath.Join(GetLocalName(), args.Path),
+					Path = DirectoryPath.Join(GetLocalName(), args.Path),
 					Local = args.Local,
 				};
 				_parent.RaiseSubDirectoryCreated(bubbledArgs);
@@ -1536,7 +1542,7 @@ namespace Microsoft.Office.Web.Fluid
 				{
 					SubdirName = args.SubdirName,
 					ParentPath = args.ParentPath,
-					Path = PosixPath.Join(GetLocalName(), args.Path),
+					Path = DirectoryPath.Join(GetLocalName(), args.Path),
 					Local = args.Local,
 				};
 				_parent.RaiseSubDirectoryDeleted(bubbledArgs);
@@ -1547,21 +1553,16 @@ namespace Microsoft.Office.Web.Fluid
 		}
 
 		/// <summary>
-		/// Returns this subdirectory's name relative to its parent — the last
-		/// segment of <see cref="_absolutePath"/>. Empty for the root. Used when
-		/// bubbling subdirectory events so each ancestor sees a joined relative
-		/// path (matching TS <c>posix.join(subDirName, relativePath)</c>).
+		/// Returns this subdirectory's name relative to its parent (the key
+		/// under which it lives in the parent's map). Empty for the root.
+		/// Used when bubbling subdirectory events so each ancestor sees a
+		/// joined relative path — matching TS
+		/// <c>posix.join(subDirName, relativePath)</c>. Storing the caller-
+		/// supplied name is required because <see cref="_absolutePath"/> is
+		/// posix-normalized, and normalizing subdirectory names such as
+		/// <c>"."</c>, <c>".."</c>, and <c>""</c> would collapse away.
 		/// </summary>
-		private string GetLocalName()
-		{
-			if (_absolutePath == "/")
-			{
-				return string.Empty;
-			}
-
-			int lastSlash = _absolutePath.LastIndexOf('/');
-			return lastSlash < 0 ? _absolutePath : _absolutePath.Substring(lastSlash + 1);
-		}
+		private string GetLocalName() => _localName;
 
 		private static void ValidateSubDirectoryName(string subdirName)
 		{
@@ -1617,7 +1618,7 @@ namespace Microsoft.Office.Web.Fluid
 			// TS ref: packages/dds/map/src/directory.ts uses posix.join(this.absolutePath, subdirName).
 			// Literal concatenation would preserve '.' and '..' subdirectory names, so
 			// CreateSubDirectory(".") would yield '/.' locally but TS would emit '/' on the wire.
-			return PosixPath.Join(parentPath, subdirName);
+			return DirectoryPath.Join(parentPath, subdirName);
 		}
 	}
 }

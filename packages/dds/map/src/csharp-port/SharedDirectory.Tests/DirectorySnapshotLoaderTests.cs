@@ -63,6 +63,21 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void Parse_BlobSplitContent_MalformedRootCi_IsIgnored()
+		{
+			// Blob-split inline content sits under "content" and is still a
+			// top-level SharedDirectory fragment — its `ci` should be ignored
+			// the same way root's is. A malformed `ci` here (bad type on csn)
+			// must not throw.
+			const string json = "{\"blobs\":[],\"content\":{\"storage\":{},\"ci\":{\"csn\":\"not-a-number\"}}}";
+
+			DirectorySnapshotDto dto = DirectorySnapshotLoader.Parse(json);
+
+			Assert.Empty(dto.Storage);
+			Assert.Empty(dto.Subdirectories);
+		}
+
+		[Fact]
 		public void Parse_CreateInfo_MissingCcIds_DefaultsToEmptyCreatorSet()
 		{
 			// TS ref: directory.ts does `new Set<string>(createInfo.ccIds)`, and

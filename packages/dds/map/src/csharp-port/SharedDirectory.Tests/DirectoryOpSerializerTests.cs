@@ -214,10 +214,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		// -----------------------------------------------------------------
-		// Boundary validation: WriteTo / Serialize rejects DTOs whose required
-		// wire fields are empty/null. Prevents an uninitialized DTO from
-		// silently producing a wire message that TS SharedDirectory never
-		// emits (empty path, empty key, etc.).
+		// Boundary validation on Serialize / WriteTo. Empty-string keys and
+		// subdirectory names are accepted (match public API + TS parity);
+		// null identifiers and missing Path / Value.Type are rejected.
 		// -----------------------------------------------------------------
 
 		[Fact]
@@ -231,17 +230,29 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void Serialize_SetOp_MissingKey_Throws()
+		public void Serialize_SetOp_NullKey_Throws()
 		{
 			OcsException exception = Assert.Throws<OcsException>(
 				() => DirectoryOpSerializer.Serialize(new DirectorySetOperation()
 				{
 					Path = "/",
-					// Key intentionally left as default "".
+					Key = null!,
 					Value = new SerializableValue() { Type = "Plain", Value = 1 },
 				}));
 			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("key", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_SetOp_EmptyKey_Succeeds()
+		{
+			// Public APIs accept empty-string keys; matches TS parity.
+			DirectoryOpSerializer.Serialize(new DirectorySetOperation()
+			{
+				Path = "/",
+				Key = "",
+				Value = new SerializableValue() { Type = "Plain", Value = 1 },
+			});
 		}
 
 		[Fact]
@@ -259,12 +270,18 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void Serialize_DeleteOp_MissingKey_Throws()
+		public void Serialize_DeleteOp_NullKey_Throws()
 		{
 			OcsException exception = Assert.Throws<OcsException>(
-				() => DirectoryOpSerializer.Serialize(new DirectoryDeleteOperation() { Path = "/" }));
+				() => DirectoryOpSerializer.Serialize(new DirectoryDeleteOperation() { Path = "/", Key = null! }));
 			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("key", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_DeleteOp_EmptyKey_Succeeds()
+		{
+			DirectoryOpSerializer.Serialize(new DirectoryDeleteOperation() { Path = "/", Key = "" });
 		}
 
 		[Fact]
@@ -277,21 +294,33 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void Serialize_CreateSubDirectoryOp_MissingSubdirName_Throws()
+		public void Serialize_CreateSubDirectoryOp_NullSubdirName_Throws()
 		{
 			OcsException exception = Assert.Throws<OcsException>(
-				() => DirectoryOpSerializer.Serialize(new DirectoryCreateSubDirectoryOperation() { Path = "/" }));
+				() => DirectoryOpSerializer.Serialize(new DirectoryCreateSubDirectoryOperation() { Path = "/", SubdirName = null! }));
 			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("subdirName", exception.Message);
 		}
 
 		[Fact]
-		public void Serialize_DeleteSubDirectoryOp_MissingSubdirName_Throws()
+		public void Serialize_CreateSubDirectoryOp_EmptySubdirName_Succeeds()
+		{
+			DirectoryOpSerializer.Serialize(new DirectoryCreateSubDirectoryOperation() { Path = "/", SubdirName = "" });
+		}
+
+		[Fact]
+		public void Serialize_DeleteSubDirectoryOp_NullSubdirName_Throws()
 		{
 			OcsException exception = Assert.Throws<OcsException>(
-				() => DirectoryOpSerializer.Serialize(new DirectoryDeleteSubDirectoryOperation() { Path = "/" }));
+				() => DirectoryOpSerializer.Serialize(new DirectoryDeleteSubDirectoryOperation() { Path = "/", SubdirName = null! }));
 			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("subdirName", exception.Message);
+		}
+
+		[Fact]
+		public void Serialize_DeleteSubDirectoryOp_EmptySubdirName_Succeeds()
+		{
+			DirectoryOpSerializer.Serialize(new DirectoryDeleteSubDirectoryOperation() { Path = "/", SubdirName = "" });
 		}
 
 		[Fact]

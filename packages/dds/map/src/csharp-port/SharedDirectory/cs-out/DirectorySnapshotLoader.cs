@@ -90,7 +90,7 @@ namespace Microsoft.Office.Web.Fluid
 				return ReadBlobSplitFormat(document.RootElement, blobsElement, blobResolver, registry);
 			}
 
-			return ReadDirectory(document.RootElement, "root", registry);
+			return ReadDirectory(document.RootElement, "root", registry, isRoot: true);
 		}
 
 		private static DirectorySnapshotDto ReadBlobSplitFormat(
@@ -102,9 +102,9 @@ namespace Microsoft.Office.Web.Fluid
 			IDirectoryNewStorageFormat format = ReadNewStorageFormat(element, blobsElement, registry);
 			DirectorySnapshotDto snapshot = format.Content;
 
-			// TS ref: directory.ts iterates newFormat.blobs and reads each via
-			// storage.readBlob. When blobs is empty, the resolver is never called, so
-			// only require it here when a blob actually needs to be read.
+			// The resolver is required only when a blob actually needs reading.
+			// TS ref: directory.ts iterates newFormat.blobs via storage.readBlob;
+			// an empty blobs array never calls the resolver.
 			if (format.Blobs.Length > 0 && blobResolver == null)
 			{
 				throw InvalidSnapshot("Blob-split IDirectoryNewStorageFormat snapshots with non-empty 'blobs' require a blob resolver callback.");
@@ -135,7 +135,7 @@ namespace Microsoft.Office.Web.Fluid
 			return new IDirectoryNewStorageFormat()
 			{
 				Blobs = ReadBlobNames(blobsElement),
-				Content = ReadDirectory(contentElement, "root.content", registry),
+				Content = ReadDirectory(contentElement, "root.content", registry, isRoot: true),
 			};
 		}
 
@@ -160,7 +160,9 @@ namespace Microsoft.Office.Web.Fluid
 		private static DirectorySnapshotDto ParseDirectoryDataObjectJson(string json, string path, IFluidDataObjectRegistry? registry)
 		{
 			using JsonDocument document = JsonDocument.Parse(json);
-			return ReadDirectory(document.RootElement, path, registry);
+			// Each blob's contents are a full IDirectoryDataObject fragment
+			// that TS's populate merges into root — top-level `ci` is ignored.
+			return ReadDirectory(document.RootElement, path, registry, isRoot: true);
 		}
 
 		private static void MergeSnapshotInto(DirectorySnapshotDto target, DirectorySnapshotDto source)
@@ -198,7 +200,7 @@ namespace Microsoft.Office.Web.Fluid
 			return false;
 		}
 
-		private static DirectorySnapshotDto ReadDirectory(JsonElement element, string path, IFluidDataObjectRegistry? registry)
+		private static DirectorySnapshotDto ReadDirectory(JsonElement element, string path, IFluidDataObjectRegistry? registry, bool isRoot = false)
 		{
 			if (element.ValueKind != JsonValueKind.Object)
 			{
@@ -217,10 +219,9 @@ namespace Microsoft.Office.Web.Fluid
 				ReadSubdirectories(subdirectoriesElement, dto.Subdirectories, path, registry);
 			}
 
-			// TS ref: directory.ts does not inspect root-level `ci` at all;
-			// only child `ci` blocks feed the seqData / creator-set logic. Skip root
-			// `ci` even when present to match TS runtime behavior.
-			if (element.TryGetProperty("ci", out JsonElement createInfoElement) && path != "root")
+			// TS ref: directory.ts populate — only child `ci` blocks feed seqData
+			// and creator-set logic; the root object's `ci` is not inspected.
+			if (!isRoot && element.TryGetProperty("ci", out JsonElement createInfoElement))
 			{
 				dto.CreateInfo = ReadCreateInfo(createInfoElement, path);
 			}
@@ -230,10 +231,10 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static DirectoryCreateInfo ReadCreateInfo(JsonElement createInfoElement, string path)
 		{
-			// TS ref: directory.ts. TS treats missing `csn` as falsy (falls
-			// through to the seq: 0 branch) and missing `ccIds` as an empty iterable
-			// (`new Set(undefined)`). Match TS runtime: allow both to be missing;
-			// enforce types only when the field IS present.
+			// Missing `csn` defaults to 0 (TS treats missing as falsy and
+			// falls through to the seq: 0 branch); missing `ccIds` defaults
+			// to an empty set (TS `new Set(undefined)` yields an empty Set).
+			// When either field IS present, its type is enforced strictly.
 			if (createInfoElement.ValueKind != JsonValueKind.Object)
 			{
 				throw InvalidSnapshot($"Create info at {path}.ci must be a JSON object.");

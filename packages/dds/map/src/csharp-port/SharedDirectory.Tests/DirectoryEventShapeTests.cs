@@ -76,6 +76,29 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("a/b/c", capturedOnRoot!.Path);
 		}
 
+		[Theory]
+		[InlineData(".")]
+		[InlineData("..")]
+		[InlineData("")]
+		public void OnSubDirectoryCreated_BubblesLiteralLocalName_WhenAncestorNameNormalizesAway(string ancestorName)
+		{
+			// DirectoryPath.Join normalizes ".", "..", and "" away, so an ancestor
+			// subdirectory created under one of those names would have an
+			// AbsolutePath equal to its parent's. The bubble path must use the
+			// literal local name (the parent-map key) so listeners still see
+			// the caller-supplied segment.
+			var dir = new SharedDirectory();
+			IDirectory ancestor = dir.CreateSubDirectory(ancestorName);
+
+			SubDirectoryEventArgs? capturedOnRoot = null;
+			dir.OnSubDirectoryCreated += (s, e) => capturedOnRoot = e;
+
+			ancestor.CreateSubDirectory("leaf");
+
+			Assert.NotNull(capturedOnRoot);
+			Assert.Equal(DirectoryPath.Join(ancestorName, "leaf"), capturedOnRoot!.Path);
+		}
+
 		[Fact]
 		public void OnSubDirectoryDeleted_BubblesJoinedPath()
 		{

@@ -128,12 +128,10 @@ namespace Microsoft.Office.Web.Fluid
 		}
 
 		/// <summary>
-		/// Rejects DTOs whose required wire fields are null or empty. Prevents an
-		/// uninitialized <see cref="DirectoryOperation"/> from being serialized
-		/// into a syntactically-valid wire message that targets the root path with
-		/// empty key / subdirName. TS SharedDirectory never emits any of these
-		/// shapes (see <c>directory.ts</c> — every op envelope is constructed with
-		/// concrete path and identifier values).
+		/// Rejects DTOs whose required wire fields are null. The root
+		/// <c>Path</c> and <c>Value.Type</c> discriminant must be non-empty
+		/// (both are TS wire invariants); empty-string keys and subdirectory
+		/// names are accepted to match the public API contract.
 		/// </summary>
 		private static void ValidateRequiredWireFields(DirectoryOperation op)
 		{
@@ -147,7 +145,7 @@ namespace Microsoft.Office.Web.Fluid
 			switch (op)
 			{
 				case DirectorySetOperation setOperation:
-					if (string.IsNullOrEmpty(setOperation.Key))
+					if (setOperation.Key is null)
 					{
 						throw new OcsException(OcsGateErrorCode.InvalidOperation,
 							"DirectorySetOperation is missing required 'key' field.");
@@ -168,7 +166,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				case DirectoryDeleteOperation deleteOperation:
-					if (string.IsNullOrEmpty(deleteOperation.Key))
+					if (deleteOperation.Key is null)
 					{
 						throw new OcsException(OcsGateErrorCode.InvalidOperation,
 							"DirectoryDeleteOperation is missing required 'key' field.");
@@ -177,7 +175,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				case DirectoryCreateSubDirectoryOperation createOperation:
-					if (string.IsNullOrEmpty(createOperation.SubdirName))
+					if (createOperation.SubdirName is null)
 					{
 						throw new OcsException(OcsGateErrorCode.InvalidOperation,
 							"DirectoryCreateSubDirectoryOperation is missing required 'subdirName' field.");
@@ -186,7 +184,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				case DirectoryDeleteSubDirectoryOperation deleteSubOperation:
-					if (string.IsNullOrEmpty(deleteSubOperation.SubdirName))
+					if (deleteSubOperation.SubdirName is null)
 					{
 						throw new OcsException(OcsGateErrorCode.InvalidOperation,
 							"DirectoryDeleteSubDirectoryOperation is missing required 'subdirName' field.");

@@ -26,6 +26,7 @@ namespace Microsoft.Office.Web.Fluid
 				this,
 				parent: null,
 				absolutePath: "/",
+				localName: string.Empty,
 				seqData: new SeqData(seq: 0, clientSeq: 0),
 				clientIds: null);
 		}
@@ -307,7 +308,7 @@ namespace Microsoft.Office.Web.Fluid
 			// then splits on posix.sep. Non-canonical wire paths (e.g. '/a/../b' or '/./x')
 			// must resolve to their canonical form before walking, otherwise the walk looks
 			// for a child literally named '.' or '..' and misses the target directory.
-			string canonical = PosixPath.ResolveAbsolute(absolutePath);
+			string canonical = DirectoryPath.ResolveAbsolute(absolutePath);
 			if (canonical == "/")
 			{
 				return _root;
@@ -334,7 +335,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			// TS ref: see ResolveSubDirectoryByPath. Same normalization is required so
 			// non-canonical wire paths don't miss existing directories.
-			string canonical = PosixPath.ResolveAbsolute(absolutePath);
+			string canonical = DirectoryPath.ResolveAbsolute(absolutePath);
 			if (canonical == "/")
 			{
 				return _root;

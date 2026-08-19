@@ -20,7 +20,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 	public class DirectoryPathNormalizationTests
 	{
 		// -------------------------------------------------------------
-		// PosixPath primitive tests (Join + ResolveAbsolute + Normalize)
+		// DirectoryPath primitive tests (Join + ResolveAbsolute + Normalize)
 		// -------------------------------------------------------------
 
 		[Theory]
@@ -33,17 +33,36 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[InlineData("/", ".", "/")]
 		[InlineData("/a", ".", "/a")]
 		[InlineData("/a", "./b", "/a/b")]
+		// Dot segments in the middle of the child path
+		[InlineData("/a/b", "c/./d", "/a/b/c/d")]
+		[InlineData("/a", "b/./c/./d", "/a/b/c/d")]
+		[InlineData("/a/b/c", "./d/./e", "/a/b/c/d/e")]
 		// Parent-directory segments (up-navigation)
 		[InlineData("/a", "..", "/")]
 		[InlineData("/a/b", "..", "/a")]
 		[InlineData("/a/b", "../c", "/a/c")]
 		[InlineData("/a", "../..", "/")] // walking above root stays at root
+		// Parent-directory segments in the middle of the child path
+		[InlineData("/a/b", "c/../d", "/a/b/d")]
+		[InlineData("/a/b/c", "d/../../e", "/a/b/e")]
+		[InlineData("/a/b/c/d", "../../e", "/a/b/e")]
+		[InlineData("/a", "b/c/../../d", "/a/d")]
+		// Mixed `.` and `..` in the middle of the child path
+		[InlineData("/a/b", "c/./d/../e", "/a/b/c/e")]
+		[InlineData("/a", "b/./c/../d", "/a/b/d")]
+		// Very deep paths with mid-path resolution
+		[InlineData("/a/b/c/d", "e/f/../../../g", "/a/b/c/g")]
+		[InlineData("/a/b/c/d/e", "../../f/../g", "/a/b/c/g")]
+		// Parent-directory segments in the middle of the parent path
+		[InlineData("/a/b/../c", "d", "/a/c/d")]
+		[InlineData("/a/./b", "c", "/a/b/c")]
 		// Consecutive slashes collapse
 		[InlineData("/a", "//b", "/a/b")]
 		[InlineData("/", "//", "/")]
-		public void PosixPath_Join_MatchesNodePosixJoin(string parent, string child, string expected)
+		[InlineData("/a/b", "c//d///e", "/a/b/c/d/e")]
+		public void DirectoryPath_Join_MatchesNodePosixJoin(string parent, string child, string expected)
 		{
-			Assert.Equal(expected, PosixPath.Join(parent, child));
+			Assert.Equal(expected, DirectoryPath.Join(parent, child));
 		}
 
 		[Theory]
@@ -53,17 +72,47 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[InlineData("/a", "/a")]
 		[InlineData("a/b", "/a/b")]
 		[InlineData("/a/b", "/a/b")]
-		// Dot / dot-dot resolution
+		// Dot / dot-dot resolution at edges
 		[InlineData("/a/./b", "/a/b")]
 		[InlineData("/a/../b", "/b")]
 		[InlineData("/../a", "/a")] // extra '..' above root drop
 		[InlineData("/a/b/..", "/a")]
 		[InlineData("/./a", "/a")]
-		// Consecutive slashes
+		// Dot segments in the middle of longer paths
+		[InlineData("/a/./b/./c", "/a/b/c")]
+		[InlineData("/a/b/./c/d", "/a/b/c/d")]
+		// Parent-directory segments in the middle of longer paths
+		[InlineData("/a/b/../c/d", "/a/c/d")]
+		[InlineData("/a/b/c/../../d", "/a/d")]
+		[InlineData("/a/b/../c/../d", "/a/d")]
+		// Mixed `.` and `..` in the middle
+		[InlineData("/a/b/./c/../d", "/a/b/d")]
+		[InlineData("/a/./b/../c/./d", "/a/c/d")]
+		// Multiple `..` beyond root at various positions
+		[InlineData("/a/../../b", "/b")]
+		[InlineData("/../../../a/b", "/a/b")]
+		// Very deep paths
+		[InlineData("/a/b/c/d/e/f/../../../g/h", "/a/b/c/g/h")]
+		// Consecutive slashes with mid-path resolution
 		[InlineData("//a//b//", "/a/b")]
-		public void PosixPath_ResolveAbsolute_MatchesNodePosixResolveRoot(string input, string expected)
+		[InlineData("/a//./b//../c", "/a/c")]
+		public void DirectoryPath_ResolveAbsolute_MatchesNodePosixResolveRoot(string input, string expected)
 		{
-			Assert.Equal(expected, PosixPath.ResolveAbsolute(input));
+			Assert.Equal(expected, DirectoryPath.ResolveAbsolute(input));
+		}
+
+		[Fact]
+		public void DirectoryPath_RootRepresentation_IsAlwaysSlash()
+		{
+			// SharedDirectory represents root as "/" everywhere: absolute
+			// paths use "/" and never "" (empty). These entry points must all
+			// agree so a caller passing "" for "root" resolves to the same
+			// path as "/".
+			Assert.Equal("/", DirectoryPath.ResolveAbsolute(""));
+			Assert.Equal("/", DirectoryPath.ResolveAbsolute("/"));
+			Assert.Equal("/", DirectoryPath.Join("/", ""));
+			Assert.Equal("/", DirectoryPath.Join("", "/"));
+			Assert.Equal("/", DirectoryPath.Join("/", "/"));
 		}
 
 		// -------------------------------------------------------------

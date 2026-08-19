@@ -43,36 +43,30 @@ namespace Microsoft.Office.Web.Fluid
 	}
 
 	/// <summary>
-	/// Minimal port of Node.js <c>path.posix</c> semantics used by SharedDirectory
-	/// for path normalization. TS SharedDirectory uses <c>posix.join</c> and
-	/// <c>posix.resolve</c> (see packages/dds/map/src/directory.ts) to keep every
-	/// SubDirectory path canonical (leading '/', no '.' or '..' segments, no
-	/// duplicate slashes). The C# port must match those semantics because path
-	/// bytes appear on the wire in every directory operation.
+	/// Path helper for SharedDirectory. Implements the subset of posix-style
+	/// path operations that TS SharedDirectory (packages/dds/map/src/directory.ts)
+	/// uses to keep every SubDirectory path canonical (leading '/', no '.' or
+	/// '..' segments, no duplicate slashes). The C# port must match those
+	/// semantics because path bytes appear on the wire in every directory operation.
 	/// </summary>
-	/// <remarks>
-	/// Not a full port of Node's posix module — only the two operations we need.
-	/// </remarks>
-	public static class PosixPath
+	public static class DirectoryPath
 	{
 		/// <summary>
-		/// Equivalent of Node.js <c>posix.join(parent, child)</c>. Joins two POSIX
-		/// path segments and normalizes the result: drops <c>.</c> segments, resolves
-		/// <c>..</c> segments up to the root, and collapses consecutive slashes.
+		/// Joins two POSIX path segments and normalizes the result: drops
+		/// <c>.</c> segments, resolves <c>..</c> segments up to the root, and
+		/// collapses consecutive slashes. Equivalent to Node.js
+		/// <c>path.posix.join(parent, child)</c> for the shapes SharedDirectory
+		/// encounters:
+		/// <c>Join("/", "a") == "/a"</c>,
+		/// <c>Join("/a", ".") == "/a"</c>,
+		/// <c>Join("/a", "..") == "/"</c>,
+		/// <c>Join("/", "") == "/"</c>.
 		/// </summary>
-		/// <remarks>
-		/// Matches Node's behavior for the shapes SharedDirectory encounters:
-		/// <c>posix.join("/", "a") == "/a"</c>,
-		/// <c>posix.join("/a", ".") == "/a"</c>,
-		/// <c>posix.join("/a", "..") == "/"</c>,
-		/// <c>posix.join("/", "") == "/"</c>.
-		/// </remarks>
 		public static string Join(string parent, string child)
 		{
 			ArgumentNullException.ThrowIfNull(parent);
 			ArgumentNullException.ThrowIfNull(child);
 
-			// Concatenate with a separator, matching Node's posix.join preprocess step.
 			string combined = string.IsNullOrEmpty(child)
 				? parent
 				: string.IsNullOrEmpty(parent)
@@ -83,33 +77,31 @@ namespace Microsoft.Office.Web.Fluid
 		}
 
 		/// <summary>
-		/// Equivalent of Node.js <c>posix.resolve('/', relativePath)</c>. Produces
-		/// an absolute canonical POSIX path from a relative or absolute input.
+		/// Produces an absolute canonical POSIX path from a relative or
+		/// absolute input. Equivalent to Node.js
+		/// <c>path.posix.resolve('/', relativePath)</c> for the shapes
+		/// SharedDirectory encounters:
+		/// <c>ResolveAbsolute("") == "/"</c>,
+		/// <c>ResolveAbsolute("a/b") == "/a/b"</c>,
+		/// <c>ResolveAbsolute("/a/../b") == "/b"</c>,
+		/// <c>ResolveAbsolute("../a") == "/a"</c>.
+		/// Excess <c>..</c> segments stay at the root.
 		/// </summary>
-		/// <remarks>
-		/// Matches Node's behavior for the shapes SharedDirectory encounters:
-		/// <c>posix.resolve('/', '') == '/'</c>,
-		/// <c>posix.resolve('/', 'a/b') == '/a/b'</c>,
-		/// <c>posix.resolve('/', '/a/../b') == '/b'</c>,
-		/// <c>posix.resolve('/', '../a') == '/a'</c>.
-		/// Attempts to walk above the root (via extra <c>..</c>) stay at root, matching
-		/// posix.resolve semantics.
-		/// </remarks>
 		public static string ResolveAbsolute(string relativePath)
 		{
 			ArgumentNullException.ThrowIfNull(relativePath);
 
 			// posix.resolve('/', relativePath) is equivalent to normalizing '/' + relativePath.
-			// An empty relativePath resolves to just '/'.
 			return Normalize(string.IsNullOrEmpty(relativePath) ? "/" : $"/{relativePath}");
 		}
 
 		/// <summary>
-		/// Canonicalizes a POSIX path in-place: drops empty segments, drops <c>.</c>
-		/// segments, resolves <c>..</c> segments (up to the root). Preserves the
-		/// absolute-vs-relative distinction based on whether the input started with
-		/// <c>'/'</c>. The result always uses <c>'/'</c> as the separator and never
-		/// contains duplicate slashes.
+		/// Canonicalizes a POSIX path: drops empty segments and <c>.</c>
+		/// segments, resolves <c>..</c> segments (up to the root for absolute
+		/// paths; preserved for unresolvable leading <c>..</c> on relative
+		/// paths). Preserves the absolute-vs-relative distinction based on
+		/// whether the input started with <c>'/'</c>. The result uses
+		/// <c>'/'</c> as the separator and never contains duplicate slashes.
 		/// </summary>
 		internal static string Normalize(string path)
 		{
