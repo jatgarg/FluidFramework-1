@@ -222,12 +222,22 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         /// <returns>Live segments and offsets covering the requested range.</returns>
         public IEnumerable<(ISegment segment, int startOffset, int endOffset)> GetSegments(int start, int end)
         {
-            ValidateRange(start, end, GetLength());
+            return GetSegments(start, end, refSeq: UnassignedSequenceNumber, clientId: null);
+        }
+
+        /// <summary>
+        /// Walks visible segments across a range in the supplied (referenceSequenceNumber, clientId) perspective.
+        /// </summary>
+        public IEnumerable<(ISegment segment, int startOffset, int endOffset)> GetSegments(int start, int end, long refSeq, string? clientId)
+        {
+            int? perspectiveClientId = clientId is null ? null : GetClientId(clientId);
+            long perspectiveSeq = CurrentSeq + 1;
+            ValidateRange(start, end, GetLength(refSeq, clientId));
 
             int position = 0;
             foreach (ISegment segment in WalkAllSegments())
             {
-                int length = VisibleLength(segment, UnassignedSequenceNumber);
+                int length = GetNodeLength(segment, refSeq, perspectiveClientId, perspectiveSeq);
                 if (length == 0)
                 {
                     continue;
@@ -2827,7 +2837,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             }
         }
 
-        private static void SlideReferencesOffRemovedSegments(
+        private void SlideReferencesOffRemovedSegments(
             IReadOnlyList<ISegment> segments,
             IEnumerable<ISegment> removedSegments)
         {
@@ -2863,6 +2873,15 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return;
             }
 
+            // TS uses the all-acked perspective for slide-target selection to
+            // avoid picking an unacked local insertion as a permanent remote
+            // destination. V2-A10 is documented as a partial deviation: the
+            // port keeps current-view slide-target selection for now because
+            // switching to all-acked without a fully-perspective-aware
+            // walk-and-record around every op call site produced regressions
+            // (some remove/obliterate paths depend on the current-view slide
+            // choice). Follow-up: parameterize the slide perspective with the
+            // op's own seq / refSeq once the surrounding call sites carry it.
             if (TryGetSlideTarget(segments, removedIndex, reference, out SlideTarget slideTarget))
             {
                 if (slideTarget.Segment is ISegment targetSegment)
@@ -2923,8 +2942,24 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             LocalReferencePosition reference,
             out SlideTarget target)
         {
+            return TryGetSlideTarget(segments, removedIndex, reference, allAckedRefSeq: UnassignedSequenceNumber, out target);
+        }
+
+        // V2-A10: TS selects slide targets from the all-acked perspective so
+        // an unacknowledged local insertion cannot become a permanent remote
+        // slide destination. When the caller supplies `allAckedRefSeq` (=
+        // CurrentSeq), the visibility check treats local unacked segments as
+        // not-yet-inserted. (TS: mergeTree.ts slide selection uses the all-
+        // acked perspective.)
+        private static bool TryGetSlideTarget(
+            IReadOnlyList<ISegment> segments,
+            int removedIndex,
+            LocalReferencePosition reference,
+            long allAckedRefSeq,
+            out SlideTarget target)
+        {
             bool preferBackward = reference.SlidingPreference == SlidingPreference.Backward;
-            if (TryGetSlideTargetInDirection(segments, removedIndex, preferBackward, out target))
+            if (TryGetSlideTargetInDirection(segments, removedIndex, preferBackward, allAckedRefSeq, out target))
             {
                 return true;
             }
@@ -2938,18 +2973,19 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return true;
             }
 
-            return TryGetSlideTargetInDirection(segments, removedIndex, !preferBackward, out target);
+            return TryGetSlideTargetInDirection(segments, removedIndex, !preferBackward, allAckedRefSeq, out target);
         }
 
         private static bool TryGetSlideTargetInDirection(
             IReadOnlyList<ISegment> segments,
             int removedIndex,
             bool backward,
+            long allAckedRefSeq,
             out SlideTarget target)
         {
             ISegment? segment = backward
-                ? FindPreviousVisibleSegment(segments, removedIndex)
-                : FindNextVisibleSegment(segments, removedIndex);
+                ? FindPreviousVisibleSegment(segments, removedIndex, allAckedRefSeq)
+                : FindNextVisibleSegment(segments, removedIndex, allAckedRefSeq);
             if (segment is null)
             {
                 target = default;
@@ -3023,9 +3059,14 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
         private static ISegment? FindNextVisibleSegment(IReadOnlyList<ISegment> segments, int index)
         {
+            return FindNextVisibleSegment(segments, index, UnassignedSequenceNumber);
+        }
+
+        private static ISegment? FindNextVisibleSegment(IReadOnlyList<ISegment> segments, int index, long refSeq)
+        {
             for (int i = index + 1; i < segments.Count; i++)
             {
-                if (VisibleLength(segments[i], UnassignedSequenceNumber) > 0)
+                if (VisibleLength(segments[i], refSeq) > 0)
                 {
                     return segments[i];
                 }
@@ -3036,9 +3077,14 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
         private static ISegment? FindPreviousVisibleSegment(IReadOnlyList<ISegment> segments, int index)
         {
+            return FindPreviousVisibleSegment(segments, index, UnassignedSequenceNumber);
+        }
+
+        private static ISegment? FindPreviousVisibleSegment(IReadOnlyList<ISegment> segments, int index, long refSeq)
+        {
             for (int i = index - 1; i >= 0; i--)
             {
-                if (VisibleLength(segments[i], UnassignedSequenceNumber) > 0)
+                if (VisibleLength(segments[i], refSeq) > 0)
                 {
                     return segments[i];
                 }

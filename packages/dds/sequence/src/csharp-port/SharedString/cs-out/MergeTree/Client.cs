@@ -2210,7 +2210,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
 		private IReadOnlyList<MergeTreeDelta> ApplyRemoteInsert(IMergeTreeInsertMsg op, long seq, long refSeq, string clientId, long? perspectiveSeq = null)
 		{
-			int position = ResolvePosition(op.Pos1, op.RelativePos1, nameof(op.Pos1));
+			int position = ResolvePosition(op.Pos1, op.RelativePos1, nameof(op.Pos1), refSeq, clientId);
 			ISegment segment = SegmentFromSpec(op.Seg);
 			List<ISegment> deltaSegments = MergeTree.InsertSegments(position, new ISegment[] { segment }, refSeq, seq, clientId, perspectiveSeq);
 			if (segment is Marker marker && segment.RemoveStamps.Count == 0)
@@ -2223,8 +2223,8 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
 		private IReadOnlyList<MergeTreeDelta> ApplyRemoteRemove(IMergeTreeRemoveMsg op, long seq, long refSeq, string clientId, long? perspectiveSeq = null)
 		{
-			int start = ResolvePosition(op.Pos1, op.RelativePos1, nameof(op.Pos1));
-			int end = ResolvePosition(op.Pos2, op.RelativePos2, nameof(op.Pos2));
+			int start = ResolvePosition(op.Pos1, op.RelativePos1, nameof(op.Pos1), refSeq, clientId);
+			int end = ResolvePosition(op.Pos2, op.RelativePos2, nameof(op.Pos2), refSeq, clientId);
 			HashSet<ISegment> previouslyRemoved = CollectRemovedSegments();
 			List<ISegment> deltaSegments = MergeTree.MarkRangeRemoved(start, end, refSeq, seq, clientId, perspectiveSeq);
 			RemoveNewlyRemovedMarkers(previouslyRemoved);
@@ -2251,8 +2251,8 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
 		private IReadOnlyList<MergeTreeDelta> ApplyRemoteAnnotate(MergeTreeAnnotateMsg op, long seq, long refSeq, string clientId, long? perspectiveSeq = null)
 		{
-			int start = ResolvePosition(op.Pos1, op.RelativePos1, nameof(op.Pos1));
-			int end = ResolvePosition(op.Pos2, op.RelativePos2, nameof(op.Pos2));
+			int start = ResolvePosition(op.Pos1, op.RelativePos1, nameof(op.Pos1), refSeq, clientId);
+			int end = ResolvePosition(op.Pos2, op.RelativePos2, nameof(op.Pos2), refSeq, clientId);
 			PropertySet props = CloneAnnotateProps(op.Props);
 
 			// Snapshot pre-annotate props on each affected segment; used by
@@ -2531,13 +2531,22 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 					segment => segment.PendingAnnotates is not null && segment.PendingAnnotates.ContainsKey(pending.LocalSeq));
 				foreach ((int start, int end) in BuildRebasedRanges(annotateSegments, pending.LocalSeq - 1))
 				{
+					// V2-A08: apply the annotate against the same perspective
+					// the positions were computed in. Using
+					// UnassignedSequenceNumber would resolve the range against
+					// the current view, which may have shifted the segments
+					// due to intervening remote edits. Match TS by keeping
+					// position resolution and application in the same
+					// reconnect perspective (pending.RefSeq / pending.LocalSeq
+					// - 1).
 					MergeTree.AnnotateRange(
 						start,
 						end,
 						pending.AnnotateProps,
+						pending.RefSeq,
 						MergeTree.UnassignedSequenceNumber,
-						MergeTree.UnassignedSequenceNumber,
-						ClientId);
+						ClientId,
+						perspectiveSeq: pending.LocalSeq);
 				}
 			}
 		}
@@ -2697,6 +2706,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
 		private int ResolvePosition(int? position, object? relativePosition, string name)
 		{
+			return ResolvePosition(position, relativePosition, name, remoteRefSeq: null, remoteClientId: null);
+		}
+
+		private int ResolvePosition(int? position, object? relativePosition, string name, long? remoteRefSeq, string? remoteClientId)
+		{
 			if (position is int value)
 			{
 				return value;
@@ -2704,13 +2718,18 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
 			if (relativePosition is not null)
 			{
-				return PositionFromRelativePosition(relativePosition, name);
+				return PositionFromRelativePosition(relativePosition, name, remoteRefSeq, remoteClientId);
 			}
 
 			return RequirePosition(position, name);
 		}
 
 		private int PositionFromRelativePosition(object relativePosition, string name)
+		{
+			return PositionFromRelativePosition(relativePosition, name, remoteRefSeq: null, remoteClientId: null);
+		}
+
+		private int PositionFromRelativePosition(object relativePosition, string name, long? remoteRefSeq, string? remoteClientId)
 		{
 			if (!TryReadRelativePositionId(relativePosition, out string? id) || string.IsNullOrEmpty(id))
 			{
@@ -2723,7 +2742,15 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				throw new ArgumentException("Relative position marker could not be found.", name);
 			}
 
-			int? position = GetPositionOfMarker(marker);
+			// V2-A09: resolve the marker's position in the message perspective
+			// so relative-position ops from remote authors bind to the segment
+			// they addressed. Local pending edits that shifted the marker in
+			// the current view are excluded from the perspective walk. (TS:
+			// mergeTree.ts posFromRelativePos passes the message's perspective
+			// to segment lookup.)
+			int? position = remoteRefSeq.HasValue
+				? GetPositionOfMarkerInPerspective(marker, remoteRefSeq.Value, remoteClientId)
+				: GetPositionOfMarker(marker);
 			if (position is not int markerPosition)
 			{
 				throw new ArgumentException("Relative position marker is not in the current view.", name);
@@ -2738,6 +2765,35 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			return markerPosition
 				+ marker.CachedLength
 				+ (TryReadRelativePositionOffset(relativePosition, out int afterOffset) ? afterOffset : 0);
+		}
+
+		private int? GetPositionOfMarkerInPerspective(Marker marker, long refSeq, string? clientId)
+		{
+			ArgumentNullException.ThrowIfNull(marker);
+			string? markerId = marker.GetId();
+			foreach ((ISegment segment, int segmentPosition) in WalkVisibleSegmentsInPerspective(refSeq, clientId))
+			{
+				if (segment is Marker candidate
+					&& (ReferenceEquals(candidate, marker)
+						|| (!string.IsNullOrEmpty(markerId)
+							&& string.Equals(candidate.GetId(), markerId, StringComparison.Ordinal))))
+				{
+					return segmentPosition;
+				}
+			}
+
+			return null;
+		}
+
+		private IEnumerable<(ISegment segment, int position)> WalkVisibleSegmentsInPerspective(long refSeq, string? clientId)
+		{
+			int position = 0;
+			int length = MergeTree.GetLength(refSeq, clientId);
+			foreach ((ISegment segment, int startOffset, int endOffset) in MergeTree.GetSegments(0, length, refSeq, clientId))
+			{
+				yield return (segment, position);
+				position += endOffset - startOffset;
+			}
 		}
 
 		private static bool TryReadRelativePositionId(object relativePosition, out string? id)
