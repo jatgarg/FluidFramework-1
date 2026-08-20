@@ -336,6 +336,39 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void TwoClients_ConcurrentChange_DifferentIntent_Converges()
+		{
+			// SS-A01 stress test: two clients concurrently change the same
+			// interval to DIFFERENT ranges. Under the port's original
+			// implementation each client saw the other's op applied on top
+			// of its own local mutation and the two clients ended at different
+			// endpoints after ACK. With consensus-based reconciliation, both
+			// clients converge to the same final endpoints (the last-writer's
+			// op wins on the shared endpoint at server-sequenced time).
+			var harness = new TwoClientHarness();
+			LoadInitialSharedText(harness, "abcdefghij");
+			IntervalCollection commentsA = harness.ClientA.GetIntervalCollection("comments");
+			commentsA.Add(2, 5, intervalId: "c1");
+			harness.DeliverAtoB(Assert.Single(harness.SenderA.Sent), refSeq: harness.CurrentServerSeq);
+			harness.SenderA.Sent.Clear();
+			harness.SenderB.Sent.Clear();
+			IntervalCollection commentsB = harness.ClientB.GetIntervalCollection("comments");
+			long refSeq = harness.CurrentServerSeq;
+
+			// Client A wants (1, 5). Client B concurrently wants (3, 7).
+			commentsA.Change("c1", newStart: 1, newEnd: 5);
+			var sentA = Assert.Single(harness.SenderA.Sent);
+			commentsB.Change("c1", newStart: 3, newEnd: 7);
+			var sentB = Assert.Single(harness.SenderB.Sent);
+
+			// Deliver in both orders (A hears B's op, B hears A's op).
+			harness.DeliverAtoB(sentA, refSeq);
+			harness.DeliverBtoA(sentB, refSeq);
+
+			AssertCollectionsHaveSameInterval(harness, "comments", "c1");
+		}
+
+		[Fact]
 		public void Change_OneSided_Throws()
 		{
 			// TS-parity: one-sided change is rejected (intervalCollection.ts:1314-1319).

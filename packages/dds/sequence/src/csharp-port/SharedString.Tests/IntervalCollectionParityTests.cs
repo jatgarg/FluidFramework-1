@@ -319,6 +319,93 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("red", value.GetProperty("properties").GetProperty("color").GetString());
 		}
 
+		[Fact]
+		public void ConcurrentChange_RemoteChangeDuringPending_DoesNotOverwriteLocalView()
+		{
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts ackChange —
+			// when a remote change arrives during a local pending change, TS
+			// applies the remote to the consensus snapshot in pending[id] and
+			// leaves the live interval's local view unchanged. Without this,
+			// two clients simultaneously changing the same interval converge
+			// to different values after ACK.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			// Seed a shared interval known to both clients (add is local + ACKed).
+			SequenceInterval interval = collection.Add(2, 5, intervalId: "i1");
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Local pending change: [2,5] -> [1,5]
+			collection.Change("i1", newStart: 1, newEnd: 5);
+			var pendingLocalSend = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			// Concurrent remote change arrives: another client moved i1 to [3,7].
+			// Under the port's previous behavior this would overwrite the local
+			// [1,5] view with [3,7]. Under TS semantics the local view stays at
+			// [1,5] because the remote reconciles into the consensus snapshot.
+			ProcessRemoteIntervalChange(local, "comments", "i1", 3, 7, refSeq: 2, seq: 3);
+
+			SequenceInterval? current = collection.GetIntervalById("i1");
+			Assert.NotNull(current);
+			Assert.Equal(1, current!.StartPosition);
+			Assert.Equal(5, current.EndPosition);
+			Assert.Same(interval, current);
+
+			// Now ACK the local pending change. The consensus at ACK is [3,7]
+			// (from the concurrent remote change), and our local mutation on
+			// top brought it back to what we want ([1,5]). The port's live
+			// interval still shows [1,5] — that's the caller's local intent.
+			ProcessLocalAck(local, pendingLocalSend, refSeq: 3, seq: 4);
+			SequenceInterval? afterAck = collection.GetIntervalById("i1");
+			Assert.NotNull(afterAck);
+			Assert.Equal(1, afterAck!.StartPosition);
+			Assert.Equal(5, afterAck.EndPosition);
+		}
+
+		[Fact]
+		public void ConcurrentChange_SegmentRemovedByRemoteWhilePending_FiresSlideEvent()
+		{
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts ackInterval —
+			// if a segment holding one of the interval's endpoints was
+			// sequenced-removed while our change was pending, TS fires a
+			// "changed" event with slide: true at ACK time. The port previously
+			// did nothing at ACK (the ACK handler was empty).
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			SequenceInterval interval = collection.Add(2, 5, intervalId: "i1");
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Local pending change on i1 endpoints.
+			collection.Change("i1", newStart: 3, newEnd: 6);
+			var pendingLocalSend = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			// A remote peer deletes the segment currently holding the start
+			// endpoint (position 3), causing an eventual endpoint slide at
+			// ACK time.
+			ProcessRemoteRemove(local, 3, 4, refSeq: 2, seq: 3, clientId: "client-b");
+
+			int slideCount = 0;
+			collection.OnChanged += (_, e) =>
+			{
+				if (e.Slide)
+				{
+					slideCount++;
+				}
+			};
+
+			// ACK of our local change — under TS semantics fires a "changed"
+			// event with slide: true because the endpoint segment was
+			// sequenced-removed during the pending window.
+			ProcessLocalAck(local, pendingLocalSend, refSeq: 3, seq: 4);
+
+			Assert.Equal(1, slideCount);
+		}
+
 		private static SharedString CreateSharedStringWithText(string text)
 		{
 			SharedString sharedString = new();
