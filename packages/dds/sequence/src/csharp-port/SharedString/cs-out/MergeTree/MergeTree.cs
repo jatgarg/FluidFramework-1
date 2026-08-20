@@ -311,6 +311,29 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         }
 
         /// <summary>
+        /// <summary>
+        /// Creates a <see cref="LocalReferencePosition" /> anchored to the synthetic
+        /// start-of-tree or end-of-tree endpoint. Matches TS's `startOfTree`/`endOfTree`
+        /// sentinel segments used when the wire encodes an interval endpoint as
+        /// `"start"` or `"end"`.
+        /// </summary>
+        internal LocalReferencePosition CreateReferencePositionAtEndpoint(
+            ReferenceEndpointKind endpoint,
+            ReferenceType refType,
+            SlidingPreference slidingPreference = SlidingPreference.Forward,
+            PropertySet? properties = null)
+        {
+            if (endpoint == ReferenceEndpointKind.None)
+            {
+                throw new ArgumentException(
+                    "Endpoint must be Start or End.",
+                    nameof(endpoint));
+            }
+
+            return new LocalReferencePosition(endpoint, refType, slidingPreference, properties, canSlideToEndpoint: true);
+        }
+
+        /// <summary>
         /// Removes a <see cref="LocalReferencePosition" /> from its segment.
         /// </summary>
         /// <param name="reference">The reference to remove.</param>

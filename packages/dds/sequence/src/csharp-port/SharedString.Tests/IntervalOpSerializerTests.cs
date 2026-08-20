@@ -263,9 +263,11 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void IntervalAddOp_SentinelEndpoints_Deserialize()
 		{
-			// TS ref: packages/dds/merge-tree/src/sequencePlace.ts
-			// normalizePlace — string endpoints "start" and "end" map to
-			// (pos: -1, side: After) and (pos: -1, side: Before).
+			// TS ref: packages/dds/sequence/src/intervals/sequenceInterval.ts
+			// createPositionReference — string endpoints "start" and "end"
+			// anchor to the synthetic start-of-tree / end-of-tree segment.
+			// The port routes these through EndpointSentinel on the op DTO;
+			// the numeric Start/End field is meaningless when Sentinel is set.
 			const string wire =
 				"{\"type\":\"act\",\"key\":\"comments\",\"value\":{\"opName\":\"add\",\"value\":{" +
 				"\"sequenceNumber\":0,\"intervalType\":2," +
@@ -274,10 +276,65 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			IMergeTreeOp op = SharedStringOpSerializer.Deserialize(wire);
 			IntervalAddOpMsg add = Assert.IsType<IntervalAddOpMsg>(op);
-			Assert.Equal(-1, add.Start);
-			Assert.Equal(-1, add.End);
+			Assert.Equal(EndpointSentinel.Start, add.StartSentinel);
+			Assert.Equal(EndpointSentinel.End, add.EndSentinel);
 			Assert.Equal(Intervals.Side.After, add.StartSide);
 			Assert.Equal(Intervals.Side.Before, add.EndSide);
+		}
+
+		[Fact]
+		public void IntervalAddOp_SentinelEndpoints_RoundTripSerializes()
+		{
+			// SS-W02 regression. Emitting an op DTO with sentinel-encoded
+			// endpoints must serialize back as the string sentinels TS peers
+			// understand.
+			IntervalAddOpMsg add = new()
+			{
+				CollectionName = "comments",
+				IntervalId = "whole",
+				StartSentinel = EndpointSentinel.Start,
+				EndSentinel = EndpointSentinel.End,
+				StartSide = Intervals.Side.After,
+				EndSide = Intervals.Side.Before,
+			};
+
+			string json = SharedStringOpSerializer.Serialize(add);
+			using JsonDocument document = JsonDocument.Parse(json);
+			JsonElement value = document.RootElement.GetProperty("value").GetProperty("value");
+			Assert.Equal("start", value.GetProperty("start").GetString());
+			Assert.Equal("end", value.GetProperty("end").GetString());
+		}
+
+		[Fact]
+		public void SharedString_ApplyRemoteIntervalAdd_WithSentinelEndpoints_Succeeds()
+		{
+			// SS-W02 regression (reopened v1). The codec now decodes the wire
+			// sentinels, and IntervalCollection routes them to
+			// MergeTree.CreateReferencePositionAtEndpoint. Applying such an op
+			// used to throw because the position validator rejected the
+			// decoded -1.
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "abcdef");
+			const string wire =
+				"{\"type\":\"act\",\"key\":\"comments\",\"value\":{\"opName\":\"add\",\"value\":{" +
+				"\"sequenceNumber\":0,\"intervalType\":2," +
+				"\"start\":\"start\",\"end\":\"end\"," +
+				"\"properties\":{\"intervalId\":\"whole\",\"referenceRangeLabels\":[\"comments\"]}}}}";
+
+			sharedString.ProcessDataObjectOp(
+				new SequencedDocumentMessageDescriptor(
+					SequenceNumber.ForTesting(clientSeq: 0, refSeq: 0, seq: 1),
+					OpOrigin.Remote,
+					"remote-client"),
+				wire);
+
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			SequenceInterval? interval = collection.GetIntervalById("whole");
+			Assert.NotNull(interval);
+			// Interval anchored to start-of-tree and end-of-tree resolves to
+			// positions 0 and length respectively.
+			Assert.Equal(0, interval!.StartPosition);
+			Assert.Equal(sharedString.GetLength(), interval.EndPosition);
 		}
 
 		[Fact]

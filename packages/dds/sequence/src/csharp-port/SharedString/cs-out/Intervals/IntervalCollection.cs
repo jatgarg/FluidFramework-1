@@ -581,7 +581,17 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			SequenceInterval interval;
 			lock (_lock)
 			{
-				interval = AddCore(op.Start, op.End, op.Props, op.IntervalId, op.IntervalType, validateDuplicate: true, op.StartSide, op.EndSide);
+				interval = AddCore(
+					op.Start,
+					op.End,
+					op.Props,
+					op.IntervalId,
+					op.IntervalType,
+					validateDuplicate: true,
+					op.StartSide,
+					op.EndSide,
+					op.StartSentinel,
+					op.EndSentinel);
 			}
 
 			RaiseAdd(interval, local: false, operation: op);
@@ -631,7 +641,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				}
 
 				string intervalId = op.IntervalId ?? throw new OcsException(OcsGateErrorCode.InvalidOperation, "Interval change op is missing required IntervalId.");
-				(interval, previousStart, previousEnd) = ChangeCore(intervalId, op.Start, op.End, op.StartSide, op.EndSide);
+				(interval, previousStart, previousEnd) = ChangeCore(intervalId, op.Start, op.End, op.StartSide, op.EndSide, op.StartSentinel, op.EndSentinel);
 
 				// The combined change op carries both endpoint and property
 				// delta — apply properties alongside the endpoint change so
@@ -850,7 +860,35 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			Side startSide,
 			Side endSide)
 		{
-			ValidateEndpointOrder(start, end);
+			return AddCore(
+				start,
+				end,
+				properties,
+				intervalId,
+				intervalType,
+				validateDuplicate,
+				startSide,
+				endSide,
+				MergeTree.EndpointSentinel.None,
+				MergeTree.EndpointSentinel.None);
+		}
+
+		private SequenceInterval AddCore(
+			int start,
+			int end,
+			MergeTree.PropertySet? properties,
+			string? intervalId,
+			IntervalType intervalType,
+			bool validateDuplicate,
+			Side startSide,
+			Side endSide,
+			MergeTree.EndpointSentinel startSentinel,
+			MergeTree.EndpointSentinel endSentinel)
+		{
+			if (startSentinel == MergeTree.EndpointSentinel.None && endSentinel == MergeTree.EndpointSentinel.None)
+			{
+				ValidateEndpointOrder(start, end);
+			}
 
 			string id = string.IsNullOrEmpty(intervalId) ? Guid.NewGuid().ToString() : intervalId;
 			if (validateDuplicate && GetActiveIntervalById(id) is not null)
@@ -858,11 +896,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				throw new InvalidOperationException($"Interval '{id}' already exists in collection '{Name}'.");
 			}
 
-			MergeTree.LocalReferencePosition startReference = CreateEndpointReference(start, intervalType, isStartEndpoint: true, startSide, endSide);
+			MergeTree.LocalReferencePosition startReference = CreateEndpointReference(start, intervalType, isStartEndpoint: true, startSide, endSide, startSentinel);
 			MergeTree.LocalReferencePosition endReference;
 			try
 			{
-				endReference = CreateEndpointReference(end, intervalType, isStartEndpoint: false, startSide, endSide);
+				endReference = CreateEndpointReference(end, intervalType, isStartEndpoint: false, startSide, endSide, endSentinel);
 			}
 			catch
 			{
@@ -911,6 +949,25 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			Side? newStartSide = null,
 			Side? newEndSide = null)
 		{
+			return ChangeCore(
+				id,
+				newStart,
+				newEnd,
+				newStartSide,
+				newEndSide,
+				MergeTree.EndpointSentinel.None,
+				MergeTree.EndpointSentinel.None);
+		}
+
+		private (SequenceInterval? Interval, int? PreviousStart, int? PreviousEnd) ChangeCore(
+			string id,
+			int? newStart,
+			int? newEnd,
+			Side? newStartSide,
+			Side? newEndSide,
+			MergeTree.EndpointSentinel newStartSentinel,
+			MergeTree.EndpointSentinel newEndSentinel)
+		{
 			ArgumentException.ThrowIfNullOrEmpty(id);
 
 			SequenceInterval? interval = GetActiveIntervalById(id);
@@ -921,11 +978,13 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 			int? previousStart = interval.StartPosition;
 			int? previousEnd = interval.EndPosition;
+			bool startIsSentinel = newStartSentinel != MergeTree.EndpointSentinel.None;
+			bool endIsSentinel = newEndSentinel != MergeTree.EndpointSentinel.None;
 			int? resultingStart = newStart ?? previousStart;
 			int? resultingEnd = newEnd ?? previousEnd;
 			Side resultingStartSide = newStartSide ?? (newStart.HasValue ? IntervalUtils.DefaultSide : interval.StartSide);
 			Side resultingEndSide = newEndSide ?? (newEnd.HasValue ? IntervalUtils.DefaultSide : interval.EndSide);
-			if (resultingStart.HasValue && resultingEnd.HasValue)
+			if (!startIsSentinel && !endIsSentinel && resultingStart.HasValue && resultingEnd.HasValue)
 			{
 				ValidateEndpointOrder(resultingStart.Value, resultingEnd.Value);
 			}
@@ -934,7 +993,17 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			MergeTree.LocalReferencePosition? replacementEnd = null;
 			try
 			{
-				if (newStart.HasValue || (newStartSide.HasValue && previousStart.HasValue))
+				if (startIsSentinel)
+				{
+					replacementStart = CreateEndpointReference(
+						0,
+						interval.IntervalType,
+						isStartEndpoint: true,
+						resultingStartSide,
+						resultingEndSide,
+						newStartSentinel);
+				}
+				else if (newStart.HasValue || (newStartSide.HasValue && previousStart.HasValue))
 				{
 					replacementStart = CreateEndpointReference(
 						newStart ?? previousStart!.Value,
@@ -944,7 +1013,17 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 						resultingEndSide);
 				}
 
-				if (newEnd.HasValue || (newEndSide.HasValue && previousEnd.HasValue))
+				if (endIsSentinel)
+				{
+					replacementEnd = CreateEndpointReference(
+						0,
+						interval.IntervalType,
+						isStartEndpoint: false,
+						resultingStartSide,
+						resultingEndSide,
+						newEndSentinel);
+				}
+				else if (newEnd.HasValue || (newEndSide.HasValue && previousEnd.HasValue))
 				{
 					replacementEnd = CreateEndpointReference(
 						newEnd ?? previousEnd!.Value,
@@ -996,9 +1075,39 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			Side startSide,
 			Side endSide)
 		{
+			return CreateEndpointReference(position, intervalType, isStartEndpoint, startSide, endSide, MergeTree.EndpointSentinel.None);
+		}
+
+		private MergeTree.LocalReferencePosition CreateEndpointReference(
+			int position,
+			IntervalType intervalType,
+			bool isStartEndpoint,
+			Side startSide,
+			Side endSide,
+			MergeTree.EndpointSentinel sentinel)
+		{
 			MergeTree.SlidingPreference slidingPreference = isStartEndpoint
 				? IntervalUtils.StartReferenceSlidingPreference(startSide, endSide)
 				: IntervalUtils.EndReferenceSlidingPreference(startSide, endSide);
+
+			if (sentinel != MergeTree.EndpointSentinel.None)
+			{
+				// Sentinel-encoded endpoint anchors to the synthetic start/end
+				// segment. TS creates the reference via createLocalReferencePosition
+				// with segment === "start" | "end". (TS:
+				// sequenceInterval.ts:createPositionReferenceFromSegoff.)
+				MergeTree.ReferenceEndpointKind endpointKind = sentinel switch
+				{
+					MergeTree.EndpointSentinel.Start => MergeTree.ReferenceEndpointKind.Start,
+					MergeTree.EndpointSentinel.End => MergeTree.ReferenceEndpointKind.End,
+					_ => throw new InvalidOperationException($"Unhandled endpoint sentinel: {sentinel}"),
+				};
+
+				return _mergeTree.CreateReferencePositionAtEndpoint(
+					endpointKind,
+					EndpointTypeToReferenceType(intervalType, isStartEndpoint),
+					slidingPreference);
+			}
 
 			return _mergeTree.CreateReferencePosition(
 				position,

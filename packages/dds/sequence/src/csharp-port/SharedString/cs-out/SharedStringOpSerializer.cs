@@ -404,7 +404,7 @@ namespace Microsoft.Office.Web.Fluid
 
 					case _startPropertyName:
 					{
-						(int? pos, int? impliedSide) = ReadEndpointPositionOrSentinel(ref reader, _startPropertyName);
+						(int? pos, int? impliedSide, MergeTree.EndpointSentinel _) = ReadEndpointPositionOrSentinel(ref reader, _startPropertyName);
 						start = pos;
 						if (impliedSide.HasValue && !startSide.HasValue)
 						{
@@ -416,7 +416,7 @@ namespace Microsoft.Office.Web.Fluid
 
 					case _endPropertyName:
 					{
-						(int? pos, int? impliedSide) = ReadEndpointPositionOrSentinel(ref reader, _endPropertyName);
+						(int? pos, int? impliedSide, MergeTree.EndpointSentinel _) = ReadEndpointPositionOrSentinel(ref reader, _endPropertyName);
 						end = pos;
 						if (impliedSide.HasValue && !endSide.HasValue)
 						{
@@ -583,8 +583,8 @@ namespace Microsoft.Office.Web.Fluid
 						addOperation.Stickiness,
 						addOperation.StartSide,
 						addOperation.EndSide);
-					writer.WriteNumber(_startPropertyName, addOperation.Start);
-					writer.WriteNumber(_endPropertyName, addOperation.End);
+					WriteIntervalEndpoint(writer, _startPropertyName, addOperation.Start, addOperation.StartSentinel);
+					WriteIntervalEndpoint(writer, _endPropertyName, addOperation.End, addOperation.EndSentinel);
 					writer.WritePropertyName(_propertiesPropertyName);
 					WriteIntervalMapProperties(writer, addOperation.CollectionName, addOperation.IntervalId, addOperation.Props, registry);
 					writer.WriteEndObject();
@@ -611,8 +611,8 @@ namespace Microsoft.Office.Web.Fluid
 						changeOperation.Stickiness,
 						changeOperation.StartSide,
 						changeOperation.EndSide);
-					WriteNullableIntervalEndpoint(writer, _startPropertyName, changeOperation.Start);
-					WriteNullableIntervalEndpoint(writer, _endPropertyName, changeOperation.End);
+					WriteNullableIntervalEndpoint(writer, _startPropertyName, changeOperation.Start, changeOperation.StartSentinel);
+					WriteNullableIntervalEndpoint(writer, _endPropertyName, changeOperation.End, changeOperation.EndSentinel);
 					writer.WritePropertyName(_propertiesPropertyName);
 					// Pass Props so combined endpoint+property changes serialize
 					// as a single op (matches TS intervalCollection.ts changeInterval).
@@ -671,8 +671,42 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
+		private static void WriteIntervalEndpoint(Utf8JsonWriter writer, string propertyName, int value, MergeTree.EndpointSentinel sentinel)
+		{
+			if (sentinel == MergeTree.EndpointSentinel.Start)
+			{
+				writer.WriteString(propertyName, "start");
+				return;
+			}
+
+			if (sentinel == MergeTree.EndpointSentinel.End)
+			{
+				writer.WriteString(propertyName, "end");
+				return;
+			}
+
+			writer.WriteNumber(propertyName, value);
+		}
+
 		private static void WriteNullableIntervalEndpoint(Utf8JsonWriter writer, string propertyName, int? value)
 		{
+			WriteNullableIntervalEndpoint(writer, propertyName, value, MergeTree.EndpointSentinel.None);
+		}
+
+		private static void WriteNullableIntervalEndpoint(Utf8JsonWriter writer, string propertyName, int? value, MergeTree.EndpointSentinel sentinel)
+		{
+			if (sentinel == MergeTree.EndpointSentinel.Start)
+			{
+				writer.WriteString(propertyName, "start");
+				return;
+			}
+
+			if (sentinel == MergeTree.EndpointSentinel.End)
+			{
+				writer.WriteString(propertyName, "end");
+				return;
+			}
+
 			if (value.HasValue)
 			{
 				writer.WriteNumber(propertyName, value.Value);
@@ -883,6 +917,8 @@ namespace Microsoft.Office.Web.Fluid
 			bool hasStart = false;
 			int? end = null;
 			bool hasEnd = false;
+			MergeTree.EndpointSentinel startSentinel = MergeTree.EndpointSentinel.None;
+			MergeTree.EndpointSentinel endSentinel = MergeTree.EndpointSentinel.None;
 			int? intervalType = null;
 			int? stickiness = null;
 			int? startSide = null;
@@ -897,6 +933,8 @@ namespace Microsoft.Office.Web.Fluid
 						hasStart,
 						end,
 						hasEnd,
+						startSentinel,
+						endSentinel,
 						intervalType,
 						stickiness,
 						startSide,
@@ -919,9 +957,10 @@ namespace Microsoft.Office.Web.Fluid
 				{
 					case _startPropertyName:
 					{
-						(int? pos, int? impliedSide) = ReadEndpointPositionOrSentinel(ref reader, _startPropertyName);
+						(int? pos, int? impliedSide, MergeTree.EndpointSentinel sentinel) = ReadEndpointPositionOrSentinel(ref reader, _startPropertyName);
 						start = pos;
 						hasStart = true;
+						startSentinel = sentinel;
 						if (impliedSide.HasValue && !startSide.HasValue)
 						{
 							startSide = impliedSide;
@@ -932,9 +971,10 @@ namespace Microsoft.Office.Web.Fluid
 
 					case _endPropertyName:
 					{
-						(int? pos, int? impliedSide) = ReadEndpointPositionOrSentinel(ref reader, _endPropertyName);
+						(int? pos, int? impliedSide, MergeTree.EndpointSentinel sentinel) = ReadEndpointPositionOrSentinel(ref reader, _endPropertyName);
 						end = pos;
 						hasEnd = true;
+						endSentinel = sentinel;
 						if (impliedSide.HasValue && !endSide.HasValue)
 						{
 							endSide = impliedSide;
@@ -995,8 +1035,14 @@ namespace Microsoft.Office.Web.Fluid
 					{
 						CollectionName = collectionName,
 						IntervalId = intervalId,
-						Start = RequireInt32(payload.Start, _startPropertyName),
-						End = RequireInt32(payload.End, _endPropertyName),
+						Start = payload.StartSentinel == MergeTree.EndpointSentinel.None
+							? RequireInt32(payload.Start, _startPropertyName)
+							: 0,
+						End = payload.EndSentinel == MergeTree.EndpointSentinel.None
+							? RequireInt32(payload.End, _endPropertyName)
+							: 0,
+						StartSentinel = payload.StartSentinel,
+						EndSentinel = payload.EndSentinel,
 						IntervalType = payload.IntervalType.HasValue
 							? (Intervals.IntervalType)payload.IntervalType.Value
 							: Intervals.IntervalType.SlideOnRemove,
@@ -1026,6 +1072,8 @@ namespace Microsoft.Office.Web.Fluid
 						IntervalId = intervalId,
 						Start = payload.Start,
 						End = payload.End,
+						StartSentinel = payload.StartSentinel,
+						EndSentinel = payload.EndSentinel,
 						Stickiness = payload.Stickiness.HasValue ? (Intervals.IntervalStickiness)payload.Stickiness.Value : (Intervals.IntervalStickiness?)null,
 						StartSide = payload.StartSide.HasValue ? (Intervals.Side)payload.StartSide.Value : (Intervals.Side?)null,
 						EndSide = payload.EndSide.HasValue ? (Intervals.Side)payload.EndSide.Value : (Intervals.Side?)null,
@@ -1733,29 +1781,29 @@ namespace Microsoft.Office.Web.Fluid
 
 		// TS ref: packages/dds/merge-tree/src/sequencePlace.ts normalizePlace.
 		// Interval endpoints on the wire may be a number OR a string sentinel:
-		//   "start" → (pos: -1, side: After)   points before position 0
-		//   "end"   → (pos: -1, side: Before)  points after last position
-		// Returns (numericPosition, impliedSide) — impliedSide is null when
-		// the value was a plain number.
-		private static (int? position, int? impliedSide) ReadEndpointPositionOrSentinel(ref Utf8JsonReader reader, string propertyName)
+		//   "start" → sentinel Start (points before position 0, side After)
+		//   "end"   → sentinel End   (points after last position, side Before)
+		// Returns (numericPosition, impliedSide, sentinel). numericPosition is
+		// null when the value was a sentinel; sentinel is None for plain numbers.
+		private static (int? position, int? impliedSide, MergeTree.EndpointSentinel sentinel) ReadEndpointPositionOrSentinel(ref Utf8JsonReader reader, string propertyName)
 		{
 			if (reader.TokenType == JsonTokenType.String)
 			{
 				string? sentinel = reader.GetString();
 				if (sentinel == "start")
 				{
-					return (-1, (int)Intervals.Side.After);
+					return (null, (int)Intervals.Side.After, MergeTree.EndpointSentinel.Start);
 				}
 
 				if (sentinel == "end")
 				{
-					return (-1, (int)Intervals.Side.Before);
+					return (null, (int)Intervals.Side.Before, MergeTree.EndpointSentinel.End);
 				}
 
 				throw new JsonException($"Invalid endpoint sentinel '{sentinel}' for property '{propertyName}'.");
 			}
 
-			return (ReadNullableInt32(ref reader, propertyName), null);
+			return (ReadNullableInt32(ref reader, propertyName), null, MergeTree.EndpointSentinel.None);
 		}
 
 		private static int RequireInt32(int? value, string propertyName)
@@ -1823,6 +1871,8 @@ namespace Microsoft.Office.Web.Fluid
 			bool HasStart,
 			int? End,
 			bool HasEnd,
+			MergeTree.EndpointSentinel StartSentinel,
+			MergeTree.EndpointSentinel EndSentinel,
 			int? IntervalType,
 			int? Stickiness,
 			int? StartSide,

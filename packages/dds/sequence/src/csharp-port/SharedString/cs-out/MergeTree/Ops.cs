@@ -452,6 +452,19 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         public string IntervalId { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// Wire-endpoint sentinel kind on interval add/change ops. TS encodes
+    /// `"start"`/`"end"` string sentinels for endpoints that anchor to the
+    /// synthetic start-of-tree / end-of-tree segment. See TS
+    /// `packages/dds/sequence/src/intervals/sequenceInterval.ts` `createPositionReference`.
+    /// </summary>
+    public enum EndpointSentinel
+    {
+        None = 0,
+        Start = 1,
+        End = 2,
+    }
+
     public sealed class IntervalAddOpMsg : IntervalOpMsg
     {
         public override IntervalOpKind IntervalOpKind => IntervalOpKind.Add;
@@ -459,6 +472,14 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         public int Start { get; set; }
 
         public int End { get; set; }
+
+        // Set when the wire encoded the endpoint as the string sentinel
+        // `"start"` or `"end"`. When non-None, the numeric Start/End field is
+        // meaningless and the endpoint must be anchored via
+        // MergeTree.CreateReferencePositionAtEndpoint.
+        public EndpointSentinel StartSentinel { get; set; } = EndpointSentinel.None;
+
+        public EndpointSentinel EndSentinel { get; set; } = EndpointSentinel.None;
 
         public Microsoft.Office.Web.Fluid.Intervals.IntervalType IntervalType { get; set; } =
             Microsoft.Office.Web.Fluid.Intervals.IntervalType.SlideOnRemove;
@@ -487,6 +508,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         public int? Start { get; set; }
 
         public int? End { get; set; }
+
+        // See IntervalAddOpMsg.StartSentinel/EndSentinel.
+        public EndpointSentinel StartSentinel { get; set; } = EndpointSentinel.None;
+
+        public EndpointSentinel EndSentinel { get; set; } = EndpointSentinel.None;
 
         public Microsoft.Office.Web.Fluid.Intervals.IntervalStickiness? Stickiness { get; set; }
 

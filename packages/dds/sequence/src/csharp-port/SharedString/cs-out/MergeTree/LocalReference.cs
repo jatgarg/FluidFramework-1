@@ -46,6 +46,35 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             CanSlideToEndpoint = canSlideToEndpoint;
         }
 
+        // Endpoint-anchored ctor: creates a reference bound to the synthetic
+        // start-of-tree or end-of-tree endpoint (TS's startOfTree/endOfTree
+        // segments). Used by interval creation when the wire supplies the
+        // string sentinels "start" or "end". (TS: mergeTree.ts
+        // createLocalReferencePosition with segment === "start" | "end".)
+        internal LocalReferencePosition(
+            ReferenceEndpointKind endpoint,
+            ReferenceType refType,
+            SlidingPreference slidingPreference = SlidingPreference.Forward,
+            PropertySet? properties = null,
+            bool canSlideToEndpoint = false)
+        {
+            if (endpoint == ReferenceEndpointKind.None)
+            {
+                throw new ArgumentException(
+                    "Endpoint-anchored reference requires ReferenceEndpointKind.Start or End.",
+                    nameof(endpoint));
+            }
+
+            ValidateReferenceType(refType);
+            Segment = null;
+            Endpoint = endpoint;
+            Offset = 0;
+            RefType = refType;
+            SlidingPreference = slidingPreference;
+            Properties = properties;
+            CanSlideToEndpoint = canSlideToEndpoint;
+        }
+
         internal ISegment? Segment { get; set; }
 
         internal int Offset { get; set; }
