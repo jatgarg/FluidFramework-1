@@ -612,6 +612,54 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(local.GetText(), serverVisible.GetText());
 		}
 
+		[Fact]
+		public void Rebase_PendingCombinedIntervalChange_PreservesProperties()
+		{
+			// V2-W01 regression. TS ref: packages/dds/sequence/src/
+			// intervalCollection.ts rebasePositionalOp — TS spreads the entire
+			// change op (`{...op, value: {...op.value}}`) so `properties`
+			// survives alongside recomputed endpoint fields. The port's
+			// CloneOp for IntervalChangeOpMsg must copy Props to match.
+			var (local, sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			SharedString serverVisible = CreateAckedSharedString("server", "abcdefghij").SharedString;
+
+			AddAckedInterval(local, sender, serverVisible, "comments", "abc", 2, 5, refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Combined endpoint + property local change.
+			local.GetIntervalCollection("comments").Change(
+				"abc",
+				newStart: 3,
+				newEnd: 5,
+				props: new PropertySet() { ["color"] = "blue" });
+			sender.Sent.Clear();
+
+			// A remote insert lands during the disconnected window.
+			ProcessRemoteInsert(local, 0, "R", refSeq: 2, seq: 3, clientId: "client-b");
+			ProcessRemoteInsert(serverVisible, 0, "R", refSeq: 2, seq: 3, clientId: "client-b");
+
+			local.RegeneratePendingOps();
+
+			var rebased = Assert.Single(sender.Sent);
+			IntervalChangeOpMsg op = Assert.IsType<IntervalChangeOpMsg>(SharedStringOpSerializer.Deserialize(rebased.OpJson));
+			Assert.Equal("abc", op.IntervalId);
+			// Endpoint fields are rebased (shifted +1 by the remote insert).
+			Assert.Equal(4, op.Start);
+			Assert.Equal(6, op.End);
+			// Properties MUST survive the clone.
+			Assert.NotNull(op.Props);
+			Assert.Equal("blue", Assert.IsType<string>(op.Props!["color"]));
+
+			// Peer picks up both endpoint AND property.
+			ApplyRebasedOpToServerAndAckLocal(local, serverVisible, rebased, refSeq: 3, seq: 4);
+			SequenceInterval? serverSide = serverVisible.GetIntervalCollection("comments").GetIntervalById("abc");
+			Assert.NotNull(serverSide);
+			Assert.Equal(4, serverSide!.StartPosition);
+			Assert.Equal(6, serverSide.EndPosition);
+			Assert.NotNull(serverSide.Properties);
+			Assert.Equal("blue", Assert.IsType<string>(serverSide.Properties!["color"]));
+		}
+
 		private static (SharedString SharedString, FakeFluidDataObjectSender Sender) CreateAckedSharedString(string id, string text)
 		{
 			var sender = new FakeFluidDataObjectSender();

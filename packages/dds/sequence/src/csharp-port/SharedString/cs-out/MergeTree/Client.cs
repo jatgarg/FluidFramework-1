@@ -1797,6 +1797,13 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 						Stickiness = changeOp.Stickiness,
 						StartSide = changeOp.StartSide,
 						EndSide = changeOp.EndSide,
+						// Props must survive the clone so a rebased combined
+						// endpoint+property change carries both parts on the
+						// wire. TS spreads the entire op value (`{...op,
+						// value: {...op.value}}`) so `properties` is preserved
+						// alongside recomputed endpoint fields. (TS:
+						// intervalCollection.ts rebasePositionalOp.)
+						Props = PropertyMap.ClonePropertySet(changeOp.Props),
 						ClientSeq = changeOp.ClientSeq,
 					};
 
