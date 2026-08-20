@@ -88,12 +88,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RemoteInsert_HandleShape_MissingUrl_Rejected()
 		{
-			// TS ref: packages/runtime/runtime-utils/src/handles.ts isSerializedHandle
-			// identifies a handle purely by `type === "__fluid_handle__"`. TS would
-			// then fail at dereference when reading `value.url`. The port previously
-			// accepted the malformed handle as ordinary property data and could
-			// re-emit it, causing a TS peer to reject during processing. Match TS's
-			// handle-identification but reject at ingestion to keep the wire clean.
+			// TS ref: packages/runtime/runtime-utils/src/handles.ts
+			// isSerializedHandle identifies a handle by the type marker alone;
+			// dereference fails if url is missing. Reject at ingestion.
 			var receiverString = new SharedString();
 
 			OcsException exception = Assert.Throws<OcsException>(() =>

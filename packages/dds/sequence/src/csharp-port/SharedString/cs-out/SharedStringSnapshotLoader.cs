@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/merge-tree/src/snapshotV1.ts + snapshotLoader.ts
-// (subset for POC — V1 chunked format, TextSegment only).
-// Part of the SharedString C# feasibility port — Wave 5.
+//.
 //
 // Also handles the synthetic V1-lite format produced by
 // SharedString.Tests/Fixtures/generate.mjs when real Fluid packages aren't
@@ -48,7 +47,7 @@ namespace Microsoft.Office.Web.Fluid
 
 		public bool IsUnknown { get; set; }
 
-		// Merge info (only present in real V1 IJSONSegmentWithMergeInfo — optional for POC)
+		// Merge info (only present in real V1 IJSONSegmentWithMergeInfo — optional for port)
 		public long? Seq { get; set; }
 
 		public string? ClientId { get; set; }
@@ -626,14 +625,12 @@ namespace Microsoft.Office.Web.Fluid
 				return;
 			}
 
-			// TS ref: merge-tree/src/snapshotLoader.ts loadBodyAndCatchupOps —
-			// TS's canonical legacy format does not carry catchupOpsBlobNames;
-			// TS discovers the catchup blob by listing storage and finding the
-			// unnamed extra blob (default name "catchupOps" per snapshotlegacy.ts).
-			// The port has no storage-list API, so probe the well-known name
-			// via the caller's resolver. The probe stays silent: if the
-			// resolver returns null / throws / returns a non-catchup shape,
-			// treat it as "no catchup blob" and continue.
+			// TS-canonical legacy format doesn't carry catchupOpsBlobNames;
+			// TS discovers the catchup blob by listing storage. This port has
+			// no list API, so probe the well-known name via the resolver. The
+			// probe is silent: null / throw / non-catchup shape all mean "no
+			// catchup blob" and load continues. (TS:
+			// merge-tree/src/snapshotLoader.ts loadBodyAndCatchupOps.)
 			if (blobResolver is null)
 			{
 				return;
@@ -660,8 +657,8 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		// TS ref: merge-tree/src/snapshotlegacy.ts SnapshotLegacy.catchupOps —
-		// well-known blob name TS uses for the pre-name-list catchup ops layout.
+		// Well-known blob name TS uses for the pre-name-list catchup ops
+		// layout. (TS: merge-tree/src/snapshotlegacy.ts SnapshotLegacy.catchupOps.)
 		private const string LegacyCatchupOpsBlobName = "catchupOps";
 
 		private static bool TryReadCatchupOpsBlob(string json, out CatchupOpsBlobDto? blob)

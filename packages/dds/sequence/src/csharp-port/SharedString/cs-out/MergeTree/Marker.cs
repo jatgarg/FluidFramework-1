@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/merge-tree/src/mergeTreeNodes.ts + referencePositions.ts
-// Part of the SharedString C# feasibility port — Wave 11.
 // -----------------------------------------------------------------------------
 
 #nullable enable

@@ -1,14 +1,8 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/merge-tree/src/client.ts (subset for POC)
-// Part of the SharedString C# feasibility port — Wave 4.
-// 
-// POC scope: pending-op tracking, op emission, remote-op reception with
-// transformation (block-aware via MergeTree.GetContainingSegment(refSeq)).
-// Skipped: sided obliterate, resubmit,
-// attribution, short-client-id mapping.
-// 
-// CORRECTNESS NOTE: Two-client convergence is the primary correctness goal.
-// See Wave 8 tests for validation.
+// Ported from packages/dds/merge-tree/src/client.ts.
+//
+// Scope: pending-op tracking, op emission, remote-op reception with block-aware
+// transformation via MergeTree.GetContainingSegment(refSeq).
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -93,11 +87,10 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 		public int Length { get; init; }
 
 		/// <summary>
-		/// For annotate deltas: the previous value of each property mutated by
-		/// the annotate op, keyed by property name. Null for non-annotate deltas.
-		/// TS ref: sequenceDeltaEvent.ts propertyDeltas — TS's remote annotate
-		/// events carry the property values that were replaced (so listeners
-		/// can compute what changed).
+		/// For annotate deltas, the previous value of each property mutated by
+		/// the annotate op, keyed by property name. Null for non-annotate
+		/// deltas. Matches TS's sequenceDeltaEvent.ts propertyDeltas (previous
+		/// values) so listeners can compute what changed.
 		/// </summary>
 		public PropertySet? PreviousProperties { get; init; }
 	}
@@ -682,7 +675,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 					return Array.Empty<MergeTreeDelta>();
 
 				default:
-					throw new NotSupportedException($"Merge-tree op type '{op.Type}' is not supported by the POC Client.");
+					throw new NotSupportedException($"Merge-tree op type '{op.Type}' is not supported by the port Client.");
 			}
 		}
 
@@ -2234,10 +2227,9 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			int end = ResolvePosition(op.Pos2, op.RelativePos2, nameof(op.Pos2));
 			PropertySet props = CloneAnnotateProps(op.Props);
 
-			// TS ref: sequenceDeltaEvent.ts — the propertyDeltas on a remote
-			// annotate carry the *previous* values of each mutated key so
-			// listeners can compute what changed. Snapshot the pre-annotate
-			// props on each affected segment before AnnotateRange mutates them.
+			// Snapshot pre-annotate props on each affected segment; used by
+			// the delta ranges to expose previous values on the remote-annotate
+			// event. (TS: sequenceDeltaEvent.ts propertyDeltas.)
 			Dictionary<ISegment, PropertySet> previousBySegment = SnapshotPropertiesForAnnotate(start, end, props);
 
 			List<ISegment> deltaSegments = MergeTree.AnnotateRange(start, end, props, refSeq, seq, clientId, perspectiveSeq);
@@ -2248,12 +2240,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
 		private Dictionary<ISegment, PropertySet> SnapshotPropertiesForAnnotate(int start, int end, PropertySet mutatedKeys)
 		{
-			// The annotate start/end may be expressed in a perspective (e.g.
-			// remote's view) that predates local pending edits, so clamp to
-			// the current visible length before snapshotting. AnnotateRange
-			// itself performs the perspective-aware walk; we only need the
-			// pre-annotate props on the segments whose properties are about
-			// to be mutated.
+			// Clamp the range to the current visible length: the annotate
+			// start/end may be expressed against a remote perspective that
+			// predates local pending edits. AnnotateRange itself performs the
+			// perspective-aware walk; we only need the pre-annotate props on
+			// segments whose properties are about to be mutated.
 			int currentLength = MergeTree.GetLength();
 			if (start < 0)
 			{
@@ -2371,10 +2362,9 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			long perspectiveSeq = seq == long.MaxValue ? seq : seq + 1;
 			foreach (MergeTreeOp memberOp in op.Ops)
 			{
-				// TS ref: packages/dds/merge-tree/src/client.ts applyRemoteOp.
-				// TS runtime recursively applies nested group operations even
-				// though the static union type excludes them. Match the TS
-				// runtime tolerance and recurse.
+				// Nested group ops are accepted by the TS runtime even though
+				// the static union type excludes them — match that tolerance.
+				// (TS: merge-tree/src/client.ts applyRemoteOp.)
 				deltas.AddRange(ApplyRemoteOp(memberOp, seq, refSeq, clientId, perspectiveSeq));
 			}
 
@@ -2858,7 +2848,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return TextSegmentFromJsonElement(jsonElement);
 			}
 
-			throw new NotSupportedException("Only TextSegment and Marker insert payloads are supported by the POC Client.");
+			throw new NotSupportedException("Only TextSegment and Marker insert payloads are supported by the port Client.");
 		}
 
 		private static TextSegment TextSegmentFromJsonElement(JsonElement jsonElement)
@@ -2883,7 +2873,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return new TextSegment(textProperty.GetString() ?? string.Empty, properties);
 			}
 
-			throw new NotSupportedException("Only JSON text segment insert payloads are supported by the POC Client.");
+			throw new NotSupportedException("Only JSON text segment insert payloads are supported by the port Client.");
 		}
 
 		private static PropertySet JsonElementToPropertySet(JsonElement jsonElement)

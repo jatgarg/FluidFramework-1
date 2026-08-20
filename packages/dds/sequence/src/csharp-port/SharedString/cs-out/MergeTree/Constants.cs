@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/merge-tree/src/constants.ts
-// Part of the SharedString C# feasibility port — Wave 1.
 // -----------------------------------------------------------------------------
 
 #nullable enable

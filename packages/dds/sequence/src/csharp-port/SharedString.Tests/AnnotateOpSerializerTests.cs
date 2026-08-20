@@ -1,5 +1,4 @@
 // -----------------------------------------------------------------------------
-// Wave 10a annotate op serialization tests for SharedString POC.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;

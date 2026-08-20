@@ -1,5 +1,4 @@
 // -----------------------------------------------------------------------------
-// Wave 8 tests for SharedString POC.
 // -----------------------------------------------------------------------------
 
 using System;
@@ -229,7 +228,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				totalLength: 1,
 				catchupOpsBlobNamesJson: "[\"catchup_0\"]");
 			// TS-parity: catchup ops are a serialized ISequencedDocumentMessage[]
-			// (see packages/dds/merge-tree/src/snapshotlegacy.ts:187). Each entry must
+			// (see packages/dds/merge-tree/src/snapshotlegacy.ts). Each entry must
 			// carry the full sequence numbering + clientId + contents fields.
 			const string catchupOpsJson = "[" +
 				"{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"remote-client\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}," +
@@ -244,11 +243,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Load_CatchupOps_GroupedBatchSharesSequenceNumber()
 		{
-			// TS ref: packages/dds/sequence/src/sequence.ts (loadCatchupOps validation).
-			// TS uses `m.sequenceNumber < collabWindow.currentSeq` — messages in the
-			// same grouped batch share a sequence number, so equality must be
-			// permitted. The port previously used `<=`, which rejected the second
-			// message of a grouped catchup batch as an invalid snapshot.
+			// TS ref: packages/dds/sequence/src/sequence.ts loadCatchupOps —
+			// validation uses `sequenceNumber < collabWindow.currentSeq`
+			// (strict), permitting equality for messages in the same grouped
+			// batch.
 			var sharedString = new SharedString();
 			string snapshotJson = CreateHeaderSnapshotJson(
 				segmentsJson: "[\"A\"]",
@@ -294,7 +292,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 		// -----------------------------------------------------------------
 		// Strict catchup ops regression tests.
-		// TS ref: packages/dds/merge-tree/src/snapshotlegacy.ts:187 —
+		// TS ref: packages/dds/merge-tree/src/snapshotlegacy.ts —
 		//   builder.addBlob("catchupOps", JSON.stringify(catchUpMsgs));
 		// Each entry is an ISequencedDocumentMessage whose sequence numbering
 		// + clientId + contents fields are all required.

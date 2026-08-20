@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/merge-tree/src/mergeTreeNodes.ts (subset for POC)
-// Part of the SharedString C# feasibility port — Wave 1.
-// POC scope: base segment/block types, TextSegment-only, basic obliterate.
+// Ported from packages/dds/merge-tree/src/mergeTreeNodes.ts
+// Scope: base segment/block types, TextSegment-only, basic obliterate.
 // Attribution, local refs, and Marker deferred to later waves.
 // -----------------------------------------------------------------------------
 
@@ -195,7 +194,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
     {
         private readonly List<LocalReferencePosition> _localRefs = new();
 
-        // TODO(post-POC): attribution, marker.
+        // TODO: attribution, marker.
 
         /// <inheritdoc />
         public MergeBlock? Parent { get; set; }

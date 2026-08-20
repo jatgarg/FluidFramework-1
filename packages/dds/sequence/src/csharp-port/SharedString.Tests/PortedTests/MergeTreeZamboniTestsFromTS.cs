@@ -11,7 +11,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class MergeTreeZamboniTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.zamboni.spec.ts:45 — "zamboni with no segments to scour"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.zamboni.spec.ts — "zamboni with no segments to scour"
 		[Fact]
 		public void ZamboniWithNoSegmentsToScour_LeavesTreeUnchanged()
 		{
@@ -24,7 +24,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Single(tree.WalkAllSegments());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.zamboni.spec.ts:54 — "zamboni with one segment to scour"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.zamboni.spec.ts — "zamboni with one segment to scour"
 		[Fact]
 		public void ZamboniWithOneSegmentToScour_RemovesStableTombstone()
 		{
@@ -38,7 +38,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.DoesNotContain(tree.WalkAllSegments(), segment => segment is TextSegment textSegment && textSegment.Text == "hello");
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.zamboni.spec.ts:66 — "zamboni with many segments to scour"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.zamboni.spec.ts — "zamboni with many segments to scour"
 		[Fact]
 		public void ZamboniWithManySegmentsToScour_RemovesAllStableTombstones()
 		{

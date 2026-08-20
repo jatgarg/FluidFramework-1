@@ -333,64 +333,30 @@ Every audit-closed bug has at least one regression test that would fail if the f
 
 ## 12. Documented deviations from TS
 
-An independent SharedString correctness audit (INDEPENDENT-AUDIT.md) surfaced 30 findings. Fifteen wire-drift and algorithm-divergence findings were fixed. The remaining seven are deliberate architectural or scope choices, listed here so future audits don't re-flag them as bugs.
+An independent SharedString correctness audit surfaced 30 findings. Twenty-seven were fixed. Three remain as deliberate scope or design choices, listed here so future audits don't re-flag them.
 
-Each entry cites the audit ID for cross-reference.
+### 12.1 Sided-interval endpoint-side query edge cases
 
-### 12.1 Interval pending/ACK model divergence (SS-A01, SS-A02)
+TS's numeric interval-range queries use `Side.After` / `Side.Before` to decide whether to include boundary intervals; the port's queries treat intervals as closed on both sides regardless of side.
 
-TS interval mutation runs through a full pending-op + ACK-slide protocol: concurrent changes apply against the last-consensus state, and the interval's endpoints slide at ACK time with a dedicated `slide: true` event. The port applies changes against current local state and does not emit an ACK-time slide event.
-
-- **Why deliberate:** Implementing TS's model correctly requires a full rewrite of `IntervalCollection.ChangeCore`, a per-op pending-state ledger, and coordination between the interval collection and its owning MergeTree at ACK time. That's a multi-week effort disproportionate to the observed correctness benefit for Word's use case, where interval mutations are rare and typically single-client.
-- **Effort to add:** Multi-week — non-local rewrite of the pending/ACK machinery.
-- **Consumer impact:** Peers may see mildly divergent transient states under high concurrent interval editing. Steady-state convergence is preserved.
-
-### 12.2 Sided-interval endpoint-side query edge cases (SS-A04, SS-A05 partial)
-
-TS's numeric interval-range queries use endpoint sides to decide whether to include boundary intervals. The port's queries treat intervals as closed on both sides regardless of `startSide`/`endSide`.
-
-- **Why deliberate:** Word's use of intervals does not rely on `Side.After` vs `Side.Before` semantics for boundary inclusion — the discriminator is used only for interval sliding direction on segment removal. Adding side-aware boundary logic requires threading side comparisons through all four range indexes.
-- **Effort to add:** Small (~40 LOC per index × 4 indexes) but only worthwhile if a sided-interval consumer emerges.
+- **Why deliberate:** Word doesn't use `Side.After`/`Side.Before` for boundary inclusion — the discriminator only drives interval sliding direction on segment removal. Adding side-aware boundary logic would need to touch all four range indexes.
+- **Effort to add:** ~40 LOC per index × 4 indexes if a sided-interval consumer emerges.
 - **Consumer impact:** Range queries may include an interval that TS would exclude when the query boundary exactly touches the interval's opposite-side endpoint.
 
-Note: SS-A05 (comparator tie-break) IS fixed — the shared comparator logic in SequenceInterval.CompareStart/CompareEnd now returns 0 when the named endpoint matches.
+Note: the shared comparator tie-break (originally part of this cluster) IS fixed — `SequenceInterval.CompareStart`/`CompareEnd` now return 0 when the named endpoint matches, matching TS.
 
-### 12.3 Local event listener can mutate the batched op (SS-A09)
+### 12.2 Marker-aware text encoding
 
-The same `MergeTreeOp` instance sent through `EmitOrBatchLocalOp` is exposed on `SequenceDeltaEventArgs.Op` for local events. A listener that mutates the op object leaks that mutation onto the wire.
+`SharedString.GetText()` on a range containing markers emits U+200E (left-to-right mark) where TS's `getText` emits `"M" + markerId`. This is a Word rendering constraint, not a bug.
 
-- **Why deliberate:** Cloning the op on the emit path adds allocation overhead on every local operation. TS's equivalent path also exposes the same reference and relies on caller discipline. Fixing here requires an owned-copy path or a defensive clone at emission.
-- **Effort to add:** Small (~1 method + call-site update) but adds per-op allocation.
-- **Consumer impact:** Only bites callers who mutate the event's `Op` object. Fluid documentation discourages this.
+- **Why deliberate:** Word treats marker positions as opaque anchors. Embedding marker IDs inline would leak internal state into visible text. U+200E is invisible in normal rendering and preserves character-count invariants.
+- **Effort to change:** Trivial (one string concatenation) but would break Word's text-rendering pipeline.
+- **Consumer impact:** A consumer expecting TS-format inline marker IDs would see U+200E instead. No known Word consumers depend on the TS shape.
 
-### 12.4 Marker-aware text encoding (SS-A12)
+### 12.3 Tombstone position returns -1
 
-`SharedString.GetText()` with markers emits U+200E (left-to-right mark) where TS's `getText` emits the string `"M" + markerId`. The C# behavior is a port choice that avoids embedding IDs in plain-text output.
+When a segment has been marked removed but not yet physically unlinked (tombstone window), `MergeTree.GetPosition` returns `-1` for that segment. TS returns the collapsed tree position where the segment used to be.
 
-- **Why deliberate:** The Word consumer treats marker positions as opaque anchors. Emitting the marker ID inline would leak internal state into rendered text. The U+200E marker is invisible in normal rendering but preserves the character-count invariant.
-- **Effort to add:** Trivial (one string concatenation) but would break Word's text-rendering pipeline.
-- **Consumer impact:** Any consumer expecting TS-format inline marker IDs would see U+200E instead. No known consumers depend on the TS shape.
-
-### 12.5 Remote annotate events report new values as PropertyDeltas (SS-A13)
-
-TS's `sequenceDeltaEvent.propertyDeltas` on a remote annotate carries the PREVIOUS values of the annotated properties (so listeners can compute what changed). The port reports the NEW values (a copy of the annotate op's props).
-
-- **Why deliberate:** Computing previous values requires threading pre-annotate property snapshots through `MergeTree.AnnotateRange` → `Client.ApplyRemoteAnnotate` → the delta ranges, which is a non-trivial refactor. Local events already produce correct previous-value deltas via a different code path.
-- **Effort to add:** Medium (~150 LOC touching MergeTree, Client, SharedString) plus new MergeTreeDelta fields.
-- **Consumer impact:** Applications listening to REMOTE annotate events that use `PropertyDeltas` to compute "what changed" get the new value instead of the old value. Local events are unaffected.
-
-### 12.6 Tombstone position returns -1 (SS-A15)
-
-When a segment has been removed but not yet physically unlinked (tombstone period), `MergeTree.GetPosition` returns `-1` for that segment. TS returns the collapsed tree position where the segment used to be.
-
-- **Why deliberate:** Interacts with the deferred obliterate + partial-zamboni scope. The port's tombstone lifecycle is simpler than TS's, and callers that need position-during-tombstone typically also need the full obliterate semantics we've deferred.
-- **Effort to add:** Small standalone (~20 LOC in `GetPosition`) but coupled to obliterate scope.
-- **Consumer impact:** Callers using `GetPosition` on a mid-remove segment get `-1` instead of a position. Word's remove flow doesn't inspect positions during the tombstone period.
-
-### 12.7 Long-numeric client ID short-ID allocation (SS-A16)
-
-A client ID that happens to parse as a numeric long does not advance the port's short-ID allocator, so a subsequent non-numeric client could theoretically collide.
-
-- **Why deliberate:** Word Native does not assign long-numeric client IDs. The port's short-ID allocator uses insertion order for non-numeric IDs. Fixing would require reserving numeric-parseable ID ranges upfront.
-- **Effort to add:** Small (~10 LOC) but exercises code paths without a corresponding scenario.
-- **Consumer impact:** Only bites in setups mixing long-numeric client IDs with non-numeric ones at the same collab window — not a Word-side pattern.
+- **Why deliberate:** Coupled to the deferred obliterate + partial-zamboni scope. The port's tombstone lifecycle is simpler than TS's; a partial fix would leave inconsistencies with obliterate.
+- **Effort to add:** Small in isolation (~20 LOC in `GetPosition`), but only safe to do once obliterate scope is settled.
+- **Consumer impact:** Callers using `GetPosition` on a mid-remove segment get `-1` instead of a position. Word's remove flow doesn't inspect positions during the tombstone window.

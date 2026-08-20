@@ -1,12 +1,11 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/merge-tree/src/partialLengths.ts (subset for POC).
-// Part of the SharedString C# feasibility port — Wave 9.
+// Ported from packages/dds/merge-tree/src/partialLengths.ts.
 //
-// POC scope: per-block seq-indexed length cache for O(log N) position queries.
+// Scope: per-block seq-indexed length cache for O(log N) position queries.
 // Skipped: attribution, zamboni GC integration,
 // legacy V0 snapshot format, verbose asserts / telemetry.
 //
-// Style chosen: B — compact rebuild-from-tree cache keeps the POC correct and
+// Style chosen: B — compact rebuild-from-tree cache keeps the port correct and
 // debuggable while preserving the important seq-indexed query shape.
 // Cache invalidation: path-local incremental updates for edits, with full
 // rebuild retained for snapshot load / structural recompute.

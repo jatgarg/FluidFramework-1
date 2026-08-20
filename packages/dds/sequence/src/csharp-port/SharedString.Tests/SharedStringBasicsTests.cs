@@ -152,10 +152,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OnSequenceDelta_LocalEvent_ExposesLocalClientId()
 		{
-			// TS ref: packages/dds/sequence/src/sequenceDeltaEvent.ts —
-			// SequenceDeltaEvent carries the local client id on local events
-			// once the runtime has assigned one. The port previously left
-			// ClientId null on all local event emissions.
+			// TS ref: packages/dds/sequence/src/sequenceDeltaEvent.ts — the
+			// event carries the local client id on local events once a client
+			// id has been assigned.
 			var sharedString = new SharedString("local-client");
 			SequenceDeltaEventArgs? captured = null;
 			sharedString.OnSequenceDelta += (_, e) => captured = e;
@@ -170,10 +169,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OnSequenceDelta_RemoteAnnotate_PropertyDeltas_CarryPreviousValues()
 		{
-			// TS ref: sequenceDeltaEvent.ts — remote annotate events carry the
-			// property values that were replaced (previous values), so listeners
-			// can compute what changed. The port previously carried the new
-			// values (a copy of the annotate op's props).
+			// TS ref: sequenceDeltaEvent.ts — propertyDeltas on a remote
+			// annotate carry the values that were REPLACED so listeners can
+			// compute what changed.
 			var sender = new FakeFluidDataObjectSender();
 			var sharedString = new SharedString("s", sender);
 			sharedString.InsertText(0, "abc");
@@ -261,9 +259,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void GetPropertiesAtPosition_OutsideContent_ReturnsNull()
 		{
-			// TS ref: packages/dds/merge-tree/src/client.ts getPropertiesAtPosition —
-			// TS returns undefined for positions outside content instead of
-			// throwing. Port previously threw ArgumentOutOfRangeException.
+			// TS ref: packages/dds/merge-tree/src/client.ts
+			// getPropertiesAtPosition — returns undefined for positions
+			// outside content.
 			var sharedString = new SharedString();
 			sharedString.InsertText(0, "abc");
 

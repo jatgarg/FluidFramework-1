@@ -1,5 +1,4 @@
 // -----------------------------------------------------------------------------
-// Wave 8 op serialization + emission tests for SharedString POC.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;

@@ -9,7 +9,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class ClientSearchForMarkerTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:36 — "Should return marker at the search position in either direction"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should return marker at the search position in either direction"
 		[Fact]
 		public void SearchAtMarkerPosition_ReturnsMarkerInEitherDirection()
 		{
@@ -24,7 +24,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(4, sharedString.GetPositionOfMarker(forward!));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:69 — "Should return the marker at the search position in either direction from multiple blocks"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should return the marker at the search position in either direction from multiple blocks"
 		[Fact]
 		public void SearchAtMarkerPositionAcrossMultipleSegments_ReturnsMarkerInEitherDirection()
 		{
@@ -40,7 +40,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(4, sharedString.GetPositionOfMarker(forward!));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:103 — "Should be able to find forward marker position based on label"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should be able to find forward marker position based on label"
 		[Fact]
 		public void ForwardSearch_UsesTileLabel()
 		{
@@ -55,7 +55,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(3, sharedString.GetPositionOfMarker(marker));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:151 — "Should be able to find backward marker position based on label from client with multiple marker"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should be able to find backward marker position based on label from client with multiple marker"
 		[Fact]
 		public void BackwardSearch_UsesNearestMatchingTileLabel()
 		{
@@ -70,7 +70,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(5, sharedString.GetPositionOfMarker(marker));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:221 — "Should be able to find forward marker position with multiple segments and markers"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should be able to find forward marker position with multiple segments and markers"
 		[Fact]
 		public void ForwardSearch_WithManySegmentsAndMarkers_FindsNearestMarkerAtOrAfterStart()
 		{
@@ -95,7 +95,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			}
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:248 — "Should be able to find backward marker position with multiple segments and markers"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should be able to find backward marker position with multiple segments and markers"
 		[Fact]
 		public void BackwardSearch_WithManySegmentsAndMarkers_FindsNearestMarkerAtOrBeforeStart()
 		{
@@ -120,7 +120,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			}
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:448 — "Should be able to find a marker at 0 searching at 0 in both directions"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should be able to find a marker at 0 searching at 0 in both directions"
 		[Fact]
 		public void SearchAtZero_FindsMarkerAtZeroBothDirections()
 		{
@@ -135,7 +135,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(0, sharedString.GetPositionOfMarker(forward!));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:482 — "Should be able to find a marker at length-1 searching at length-1 in both directions"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should be able to find a marker at length-1 searching at length-1 in both directions"
 		[Fact]
 		public void SearchAtLastPosition_FindsMarkerAtLastPositionBothDirections()
 		{
@@ -152,7 +152,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(lastPosition, sharedString.GetPositionOfMarker(forward!));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:517 — "Should return undefined when searching past the end of a string length 1"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should return undefined when searching past the end of a string length 1"
 		[Fact]
 		public void SearchPastEndOfSingleMarkerString_ReturnsNull()
 		{
@@ -162,7 +162,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Null(sharedString.SearchForMarker(sharedString.GetLength(), "Eop", forwards: true));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:529 — "Should return undefined when searching before the start of a string length 1"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should return undefined when searching before the start of a string length 1"
 		[Fact]
 		public void SearchBeforeStartOfSingleMarkerString_ReturnsNull()
 		{
@@ -172,7 +172,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Null(sharedString.SearchForMarker(-1, "Eop", forwards: false));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:570 — "Should return undefined when trying to find marker from text without the specified marker"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should return undefined when trying to find marker from text without the specified marker"
 		[Fact]
 		public void SearchTextWithoutMatchingMarker_ReturnsNullBothDirections()
 		{
@@ -182,7 +182,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Null(sharedString.SearchForMarker(1, "EOP", forwards: false));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:597 — "Should return undefined when trying to find a removed marker"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should return undefined when trying to find a removed marker"
 		[Fact]
 		public void SearchRemovedMarker_ReturnsNull()
 		{
@@ -195,7 +195,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Null(sharedString.GetMarkerFromId("marker"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:630 — "Should be able to find remotely inserted marker"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should be able to find remotely inserted marker"
 		[Fact]
 		public void SearchRemotelyInsertedMarker_FindsMarker()
 		{
@@ -209,7 +209,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(0, sharedString.GetPositionOfMarker(marker));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts:661 — "Should not be able to find remotely removed marker"
+		// Ported from packages/dds/merge-tree/src/test/client.searchForMarker.spec.ts — "Should not be able to find remotely removed marker"
 		[Fact]
 		public void SearchRemotelyRemovedMarker_ReturnsNull()
 		{

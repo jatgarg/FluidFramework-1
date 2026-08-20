@@ -13,7 +13,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class ClientApplyMsgTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts:42 — "Interleaved inserts, annotates, and deletes"
+		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts — "Interleaved inserts, annotates, and deletes"
 		[Fact]
 		public void InterleavedInsertsAnnotatesAndDeletes_ConvergeAndPreserveAnnotations()
 		{
@@ -34,7 +34,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("greeting", Assert.IsType<string>(harness.ClientB.GetPropertiesAtPosition(0)!["style"]));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts:234 — "overlapping deletes"
+		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts — "overlapping deletes"
 		[Fact]
 		public void OverlappingDeletes_FromDifferentClients_KeepSingleVisibleRemainder()
 		{
@@ -54,7 +54,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("rld", harness.ClientA.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts:278 — "overlapping insert and delete"
+		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts — "overlapping insert and delete"
 		[Fact]
 		public void OverlappingInsertAndDelete_PreservesConcurrentInsert()
 		{
@@ -74,7 +74,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("abXXf", harness.ClientA.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts:305 — "intersecting insert after local delete"
+		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts — "intersecting insert after local delete"
 		[Fact]
 		public void IntersectingInsertAfterDelete_IsVisibleAtDeletedPosition()
 		{
@@ -88,7 +88,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("cb", sharedString.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts:383 — "conflicting insert over local delete"
+		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts — "conflicting insert over local delete"
 		[Fact]
 		public void ConflictingInsertOverLocalDelete_ConvergesAfterAck()
 		{
@@ -102,7 +102,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("abXef", sharedString.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts:412 — "Local insert after acked local delete"
+		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts — "Local insert after acked local delete"
 		[Fact]
 		public void LocalInsertAfterAckedLocalDelete_UsesCurrentVisiblePosition()
 		{
@@ -117,7 +117,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("CZ", sharedString.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts:440 — "Remote Remove before conflicting insert"
+		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts — "Remote Remove before conflicting insert"
 		[Fact]
 		public void RemoteRemoveBeforeConflictingInsert_AllowsLaterInsertAtRemovedPosition()
 		{
@@ -130,7 +130,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("CB", sharedString.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts:619 — "Concurrent insert into removed segment across block boundary"
+		// Ported from packages/dds/merge-tree/src/test/client.applyMsg.spec.ts — "Concurrent insert into removed segment across block boundary"
 		[Fact]
 		public void ConcurrentInsertIntoRemovedSegmentAcrossBlockBoundary_RemainsVisibleAndKeepsInvariants()
 		{

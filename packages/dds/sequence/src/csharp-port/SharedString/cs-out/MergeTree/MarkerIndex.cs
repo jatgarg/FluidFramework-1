@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// Marker id index for the SharedString C# feasibility port — Wave 11.
+// Marker id index for the SharedString port.
 // -----------------------------------------------------------------------------
 
 #nullable enable

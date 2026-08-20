@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/merge-tree/src/localReference.ts (subset for POC)
-// Part of the SharedString C# feasibility port — Wave 12a.
+// Ported from packages/dds/merge-tree/src/localReference.ts
 // -----------------------------------------------------------------------------
 
 #nullable enable

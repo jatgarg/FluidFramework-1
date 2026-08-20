@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/merge-tree/src/mergeTreeNodes.ts (subset for POC)
-// Part of the SharedString C# feasibility port — Wave 1.
-// POC scope: base segment/block types, TextSegment-only. Obliterate,
+// Ported from packages/dds/merge-tree/src/mergeTreeNodes.ts
+// Scope: base segment/block types, TextSegment-only. Obliterate,
 // attribution, local refs, and Marker deferred to later waves.
 // -----------------------------------------------------------------------------
 

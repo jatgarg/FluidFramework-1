@@ -1,11 +1,9 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/merge-tree/src/mergeTree.ts (subset for POC)
-// Part of the SharedString C# feasibility port — Wave 2.
-// 
-// POC scope: insert / mark-removed / basic obliterate / walk / get-text / get-length / position-query.
-// Skipped: sided obliterate, attribution,
-// non-TextSegment segment types.
-// Position queries use the Wave 9 partialLengths cache for block-aware descent.
+// Ported from packages/dds/merge-tree/src/mergeTree.ts.
+//
+// Scope: insert / mark-removed / basic obliterate / walk / get-text / get-length
+// / position-query. Position queries use the partialLengths cache for
+// block-aware descent.
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -21,11 +19,6 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
     /// <summary>
     /// Merge-tree storage for SharedString text segments.
     /// </summary>
-    /// <remarks>
-    /// POC: assumes single-threaded access; add locks later for concurrent use.
-    /// TODO(Wave 3+): port attribution, non-text segments,
-    /// and SegmentGroup tracking.
-    /// </remarks>
     public sealed class MergeTree
     {
         /// <summary>
@@ -214,7 +207,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 }
                 else
                 {
-                    // TODO(post-POC): represent Marker/non-TextSegment leaves with placeholders.
+                    // TODO: represent Marker/non-TextSegment leaves with placeholders.
                 }
             }
 

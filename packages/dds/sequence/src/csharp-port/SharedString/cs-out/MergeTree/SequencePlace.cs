@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/merge-tree/src/sequencePlace.ts (subset for POC)
-// Part of the SharedString C# feasibility port — sided obliterate.
+// Ported from packages/dds/merge-tree/src/sequencePlace.ts.
 // -----------------------------------------------------------------------------
 
 #nullable enable

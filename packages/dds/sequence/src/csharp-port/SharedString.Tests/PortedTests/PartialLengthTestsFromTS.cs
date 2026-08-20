@@ -11,7 +11,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class PartialLengthTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:45 — "passes with no additional ops"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "passes with no additional ops"
 		[Fact]
 		public void NoAdditionalOps_LengthMatchesInitialText()
 		{
@@ -22,7 +22,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(12, tree.GetLength(1, "remote"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:50 — "includes length of local insert for local view"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "includes length of local insert for local view"
 		[Fact]
 		public void SingleInsertedElement_LocalInsertVisibleForLocalView()
 		{
@@ -34,7 +34,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(17, tree.GetLength(2));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:72 — "includes length of remote insert for local view"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "includes length of remote insert for local view"
 		[Fact]
 		public void SingleInsertedElement_RemoteInsertVisibleForLocalView()
 		{
@@ -46,7 +46,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(12, tree.GetLength(1, "local"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:97 — "includes result of local delete for local view"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "includes result of local delete for local view"
 		[Fact]
 		public void SingleRemovedSegment_LocalDeleteVisibleForLocalView()
 		{
@@ -58,7 +58,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(0, tree.GetLength(1, "local"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:119 — "includes result of remote delete for local view"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "includes result of remote delete for local view"
 		[Fact]
 		public void SingleRemovedSegment_RemoteDeleteVisibleForLocalView()
 		{
@@ -70,7 +70,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(12, tree.GetLength(1, "local"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:144 — "includes lengths from multiple permutations in single tree"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "includes lengths from multiple permutations in single tree"
 		[Fact]
 		public void Aggregation_MultipleInsertPermutationsInSingleTree()
 		{
@@ -86,7 +86,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("4321hello world!", tree.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:178 — "is correct for different heights"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "is correct for different heights"
 		[Fact]
 		public void Aggregation_DifferentTreeHeights()
 		{
@@ -101,7 +101,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			PartialLengths.ValidateBlockPartialLengthInvariants(tree.Root);
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:198 — "concurrent remote changes are visible to local"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "concurrent remote changes are visible to local"
 		[Fact]
 		public void ConcurrentOverlappingDeletes_RemoteChangesVisibleToLocal()
 		{
@@ -115,7 +115,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("d!", tree.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:220 — "concurrent local and remote changes are visible"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "concurrent local and remote changes are visible"
 		[Fact]
 		public void ConcurrentOverlappingDeletes_LocalAndRemoteChangesVisible()
 		{

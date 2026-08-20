@@ -11,7 +11,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class PartialLengthPerspectiveTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:239 — "concurrent remote and unsequenced local changes are visible"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "concurrent remote and unsequenced local changes are visible"
 		[Fact]
 		public void GetLength_LocalSeqIncludesPendingInsertOnlyAtOrBelowLocalSeq()
 		{
@@ -25,7 +25,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(6, sharedString.GetLength(refSeq: 1, clientId: "localUser", localSeq: 2));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts:239 — "concurrent remote and unsequenced local changes are visible"
+		// Ported from packages/dds/merge-tree/src/test/partialLength.spec.ts — "concurrent remote and unsequenced local changes are visible"
 		[Fact]
 		public void GetLength_LocalSeqIncludesPendingRemoveOnlyAtOrBelowLocalSeq()
 		{
@@ -39,7 +39,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(3, sharedString.GetLength(refSeq: 1, clientId: "localUser", localSeq: 2));
 		}
 
-		// Ported from packages/dds/merge-tree/src/mergeTree.ts:824 and perspective.ts:103 — detached refSeq with a local reconnecting perspective
+		// Ported from packages/dds/merge-tree/src/mergeTree.ts and perspective.ts — detached refSeq with a local reconnecting perspective
 		[Fact]
 		public void GetLength_DetachedPerspectiveOnlyIncludesLocalPendingWithinPerspective()
 		{
@@ -53,7 +53,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(3, sharedString.GetLength(refSeq: MergeTreeModel.UnassignedSequenceNumber, clientId: "localUser", localSeq: 1));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.rebasePosition.spec.ts:27 — "rebase past remote insert"
+		// Ported from packages/dds/merge-tree/src/test/client.rebasePosition.spec.ts — "rebase past remote insert"
 		[Fact]
 		public void GetPosition_RemoteInsertBeforeSegmentChangesByRefSeq()
 		{
@@ -66,7 +66,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(2, sharedString.GetPosition(originalSegment, refSeq: 2));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.rebasePosition.spec.ts:88 — local edits are ignored above the reconnecting localSeq
+		// Ported from packages/dds/merge-tree/src/test/client.rebasePosition.spec.ts — local edits are ignored above the reconnecting localSeq
 		[Fact]
 		public void GetPosition_LocalPendingInsertBeforeSegmentRespectsLocalSeq()
 		{
@@ -80,7 +80,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(2, sharedString.GetPosition(bSegment, refSeq: 1, clientId: "localUser", localSeq: 2));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.rebasePosition.spec.ts:107 — local removes are ignored above the reconnecting localSeq
+		// Ported from packages/dds/merge-tree/src/test/client.rebasePosition.spec.ts — local removes are ignored above the reconnecting localSeq
 		[Fact]
 		public void GetPosition_LocalPendingRemoveBeforeSegmentRespectsLocalSeq()
 		{
@@ -94,7 +94,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(0, sharedString.GetPosition(bSegment, refSeq: 1, clientId: "localUser", localSeq: 2));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.rebasePosition.spec.ts:34 — "rebase past remote delete"
+		// Ported from packages/dds/merge-tree/src/test/client.rebasePosition.spec.ts — "rebase past remote delete"
 		[Fact]
 		public void GetPosition_RemoteRemoveBeforeSegmentChangesByRefSeq()
 		{
@@ -107,7 +107,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(0, sharedString.GetPosition(bSegment, refSeq: 2));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.getPosition.spec.ts:38 — "Deleted Segment"
+		// Ported from packages/dds/merge-tree/src/test/client.getPosition.spec.ts — "Deleted Segment"
 		[Fact]
 		public void GetPosition_DeletedSegmentReturnsTombstonePositionAtPerspective()
 		{
@@ -125,7 +125,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(1, tree.GetPositionOfSegmentAt(bSegment, refSeq: 3, clientId: "localUser", localSeq: null));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/client.getPosition.spec.ts:45 — "Detached Segment"
+		// Ported from packages/dds/merge-tree/src/test/client.getPosition.spec.ts — "Detached Segment"
 		[Fact]
 		public void GetPosition_DetachedSegmentReturnsMinusOne()
 		{

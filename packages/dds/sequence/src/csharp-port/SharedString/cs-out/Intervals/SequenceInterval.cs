@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/sequence/src/intervals/{sequenceInterval,intervalUtils}.ts
-// (subset for POC — Simple + SlideOnRemove + Transient intervals).
-// Part of the SharedString C# feasibility port — Wave 12b.
+//.
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -120,10 +119,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         {
             ArgumentNullException.ThrowIfNull(other);
 
-            // TS ref: packages/dds/sequence/src/intervals/sequenceInterval.ts compareStart —
-            // TS compares only start position, then start side. The port
-            // previously fell through to end-position comparison, producing
-            // ordering where TS returns equality.
+            // Compare start position, then start side. (TS: sequenceInterval.ts
+            // compareStart.)
             int startComparison = IntervalUtils.ComparePositions(StartPosition, other.StartPosition);
             if (startComparison != 0)
             {
@@ -142,10 +139,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         {
             ArgumentNullException.ThrowIfNull(other);
 
-            // TS ref: packages/dds/sequence/src/intervals/sequenceInterval.ts compareEnd —
-            // TS compares only end position, then end side. The port previously
-            // fell through to start-position comparison, producing ordering
-            // where TS returns equality.
+            // Compare end position, then end side. (TS: sequenceInterval.ts
+            // compareEnd.)
             int endComparison = IntervalUtils.ComparePositions(EndPosition, other.EndPosition);
             if (endComparison != 0)
             {

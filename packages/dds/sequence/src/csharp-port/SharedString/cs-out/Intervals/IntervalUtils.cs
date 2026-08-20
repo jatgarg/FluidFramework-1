@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/sequence/src/intervals/{sequenceInterval,intervalUtils}.ts
-// (subset for POC — Simple + SlideOnRemove + Transient intervals).
-// Part of the SharedString C# feasibility port — Wave 12b.
+//.
 // -----------------------------------------------------------------------------
 
 #nullable enable

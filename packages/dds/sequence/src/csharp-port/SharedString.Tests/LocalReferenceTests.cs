@@ -1,5 +1,4 @@
 // -----------------------------------------------------------------------------
-// Wave 12a local reference tests for SharedString POC.
 // -----------------------------------------------------------------------------
 
 using Microsoft.Office.Web.Fluid.MergeTree;

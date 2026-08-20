@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/merge-tree/src/ops.ts (subset for POC)
-// Part of the SharedString C# feasibility port — Wave 1.
-// POC scope: Insert + Remove + Annotate + basic Obliterate + Group + interval envelopes.
+// Ported from packages/dds/merge-tree/src/ops.ts
+// Scope: Insert + Remove + Annotate + basic Obliterate + Group + interval envelopes.
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -363,7 +362,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
     /// Op: apply properties to a range of the sequence.
     /// </summary>
     /// <remarks>
-    /// Ported from packages/dds/merge-tree/src/ops.ts IMergeTreeAnnotateMsg (~lines 179-197).
+    /// Ported from packages/dds/merge-tree/src/ops.ts IMergeTreeAnnotateMsg.
     /// </remarks>
     public sealed class MergeTreeAnnotateMsg : MergeTreeDeltaMsg
     {
@@ -414,9 +413,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
     }
 
     // -----------------------------------------------------------------------------
-    // Interval-collection op types (Wave 12b agent B3).
-    // Wire format is Fluid-adjacent but simplified for POC — real Fluid uses a
-    // slightly different envelope. Documented here so Wave 12d can revise if needed.
+    // Interval-collection op types.
     // -----------------------------------------------------------------------------
 
     public enum IntervalOpKind
@@ -616,5 +613,5 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
     }
 
     // TODO: Annotate-adjust,
-    // ReferenceType, and typed relative/reference position helpers are deferred for the POC.
+    // ReferenceType, and typed relative/reference position helpers are deferred for the port.
 }

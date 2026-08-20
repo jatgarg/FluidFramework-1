@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
-// Ported from packages/dds/sequence/src/intervalIndex/endpointInRangeIndex.ts (subset for POC).
-// Part of the SharedString C# feasibility port — Wave 12b.
-// POC uses List/SortedDictionary-based implementations instead of the TS
+// Ported from packages/dds/sequence/src/intervalIndex/endpointInRangeIndex.ts.
+// Uses List/SortedDictionary-based implementations instead of the TS
 // RedBlackTree-backed indexes.
 // -----------------------------------------------------------------------------
 

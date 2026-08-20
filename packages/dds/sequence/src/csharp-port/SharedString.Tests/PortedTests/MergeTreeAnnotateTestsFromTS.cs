@@ -12,7 +12,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class MergeTreeAnnotateTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts:69 — "remote"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts — "remote"
 		[Fact]
 		public void RemoteAnnotate_AppliesPropertyToRequestedRange()
 		{
@@ -25,7 +25,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("llo w", Assert.IsType<TextSegmentModel>(segment).Text);
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts:89 — "local"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts — "local"
 		[Fact]
 		public void LocalAnnotate_AppliesUnsequencedPropertyToRequestedRange()
 		{
@@ -43,7 +43,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("local", Assert.IsType<string>(segment.Properties!["propertySource"]));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts:141 — "unsequenced local after unsequenced local"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts — "unsequenced local after unsequenced local"
 		[Fact]
 		public void UnsequencedLocalAfterUnsequencedLocal_MergesProperties()
 		{
@@ -57,7 +57,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("local", Assert.IsType<string>(props["secondProperty"]));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts:161 — "unsequenced local split"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts — "unsequenced local split"
 		[Fact]
 		public void UnsequencedLocalSplit_CopiesPropertiesToSplitSegment()
 		{
@@ -72,7 +72,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("local", Assert.IsType<string>(right.Properties!["propertySource"]));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts:292 — "unsequenced local before remote"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts — "unsequenced local before remote"
 		[Fact]
 		public void UnsequencedLocalBeforeRemote_RemoteAddsIndependentPropertyWithoutOverwritingLocal()
 		{
@@ -86,7 +86,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(1, Assert.IsType<int>(props["remoteProperty"]));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts:337 — "sequenced local before remote"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.annotate.spec.ts — "sequenced local before remote"
 		[Fact]
 		public void SequencedLocalBeforeRemote_RemoteOverwritesSharedProperty()
 		{

@@ -1,9 +1,8 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/sequence/src/sharedString.ts + sharedSequence.ts +
-// sequence.ts (subset for POC).
-// Part of the SharedString C# feasibility port — Wave 6.
+// sequence.ts.
 //
-// POC APIs: GetLength / GetText / marker-aware text extraction / InsertText / RemoveText
+// port APIs: GetLength / GetText / marker-aware text extraction / InsertText / RemoveText
 // / DeleteText / ReplaceText / relative inserts / RunInBatch / ObliterateRange
 // / SequenceDelta event / LoadFromSnapshot. Full Fluid runtime lifecycle parity remains deferred.
 // -----------------------------------------------------------------------------
@@ -215,9 +214,8 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			lock (_lock)
 			{
-				// TS ref: packages/dds/merge-tree/src/client.ts getPropertiesAtPosition —
-				// TS returns undefined for positions outside content (position < 0 or
-				// position >= length). The port previously threw.
+				// Positions outside content return null (matching TS's
+				// getPropertiesAtPosition in merge-tree/src/client.ts).
 				if (position < 0 || position >= _client.GetLength())
 				{
 					return null;
@@ -229,10 +227,9 @@ namespace Microsoft.Office.Web.Fluid
 		}
 
 		// -----------------------------------------------------------------------------
-		// Navigation APIs (Wave 13):
+		// Navigation APIs:
 		// GetContainingSegment / GetPosition / GetRangeExtentsOfPosition /
-		// LocalReferencePositionToPosition. All wrap existing MergeTree/Client
-		// machinery — thin public surface for consumers.
+		// LocalReferencePositionToPosition. Thin wrappers over MergeTree/Client.
 		// -----------------------------------------------------------------------------
 
 		/// <summary>

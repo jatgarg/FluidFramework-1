@@ -1,7 +1,5 @@
 // -----------------------------------------------------------------------------
-// Wave 8 op reception + concurrency tests for SharedString POC.
 //
-// The CORRECTNESS-CRITICAL wave 8 file: proves two-client convergence
 // for the merge-tree operational-transformation implementation.
 // -----------------------------------------------------------------------------
 

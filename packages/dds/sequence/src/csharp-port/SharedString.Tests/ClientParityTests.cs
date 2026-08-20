@@ -81,9 +81,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			// TS ref: packages/dds/merge-tree/src/client.ts applyAnnotate.
 			// TS resolves relativePos1/relativePos2 via posFromRelativePos when
-			// pos1/pos2 are undefined. The port previously required numeric
-			// positions and threw ArgumentException on valid relative annotate
-			// operations.
+			// pos1/pos2 are undefined; make sure a valid relative annotate
+			// applies without throwing.
 			Client client = CreateClientWithAckedMarker();
 
 			client.ApplyOp(
@@ -119,8 +118,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			// TS ref: packages/dds/merge-tree/src/client.ts applyRemoteOp.
 			// TS's runtime recursively applies nested group operations even
 			// though the static IMergeTreeGroupMsg.ops union excludes them
-			// (runtime-tolerance policy). The port previously threw
-			// NotSupportedException on the same input shape.
+			// (runtime-tolerance policy).
 			SharedString sharedString = CreateSharedStringWithAckedText("abc", out _);
 
 			MergeTreeGroupMsg inner = new();

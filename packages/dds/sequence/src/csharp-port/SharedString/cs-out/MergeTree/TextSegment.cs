@@ -1,6 +1,5 @@
 // -----------------------------------------------------------------------------
 // Ported from packages/dds/merge-tree/src/textSegment.ts
-// Part of the SharedString C# feasibility port — Wave 1.
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -10,9 +9,6 @@ using System.Text.Json.Serialization;
 
 namespace Microsoft.Office.Web.Fluid.MergeTree
 {
-    // BaseSegment, ISegment, IJSONSegment, and PropertySet are Wave 1 sibling ports expected
-    // to land alongside this file.
-
     /// <summary>
     /// JSON wire shape for a serialized <see cref="TextSegment"/>.
     /// </summary>

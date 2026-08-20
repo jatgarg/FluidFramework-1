@@ -1,5 +1,4 @@
 // -----------------------------------------------------------------------------
-// Wave 12b interval op serialization tests for SharedString POC.
 // -----------------------------------------------------------------------------
 
 using System.Text.Json;
@@ -202,7 +201,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void IntervalOp_WireCarriesClientCurrentSequenceNumber()
 		{
-			// TS-parity: intervals/sequenceInterval.ts:468 sets sequenceNumber = client.getCurrentSeq()
+			// TS-parity: intervals/sequenceInterval.ts sets sequenceNumber = client.getCurrentSeq()
 			// on the serialized interval. Reconnect/rebase logic reads this.
 			IntervalAddOpMsg op = new IntervalAddOpMsg()
 			{
@@ -264,10 +263,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void IntervalAddOp_SentinelEndpoints_Deserialize()
 		{
-			// TS ref: packages/dds/merge-tree/src/sequencePlace.ts normalizePlace —
-			// "start" -> {pos: -1, side: After}; "end" -> {pos: -1, side: Before}.
-			// The port previously rejected string endpoints with a JsonException.
-			// The `act` envelope wire form: value.value has start:"start", end:"end".
+			// TS ref: packages/dds/merge-tree/src/sequencePlace.ts
+			// normalizePlace — string endpoints "start" and "end" map to
+			// (pos: -1, side: After) and (pos: -1, side: Before).
 			const string wire =
 				"{\"type\":\"act\",\"key\":\"comments\",\"value\":{\"opName\":\"add\",\"value\":{" +
 				"\"sequenceNumber\":0,\"intervalType\":2," +
@@ -285,10 +283,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void IntervalChangeOp_CombinedEndpointsAndProps_DeserializePreservesUserProps()
 		{
-			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeInterval —
-			// TS emits one op carrying both endpoint delta and property delta.
-			// The port previously picked only the endpoint branch and discarded
-			// the user props on the combined form.
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts
+			// changeInterval — one op carries both endpoint delta and property
+			// delta; user props on the combined form must round-trip.
 			const string wire =
 				"{\"type\":\"act\",\"key\":\"comments\",\"value\":{\"opName\":\"change\",\"value\":{" +
 				"\"sequenceNumber\":0,\"intervalType\":2," +

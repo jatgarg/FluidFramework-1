@@ -279,11 +279,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Change_ReferenceRangeLabels_Rejected()
 		{
-			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeProperties —
-			// TS throws UsageError when a caller tries to overwrite
-			// reservedRangeLabelsKey (the collection label). The port previously
-			// updated the local props bag while the wire path canonicalized to
-			// the collection name, leaving peers divergent.
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts
+			// changeProperties. Mutating reservedRangeLabelsKey is rejected
+			// because the wire path canonicalizes to the collection name.
 			SharedString sharedString = CreateSharedStringWithText("abcdef");
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
 			collection.Add(1, 3, intervalId: "i1");
@@ -296,10 +294,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Change_CombinedEndpointsAndProps_EmitsSingleWireOp()
 		{
-			// TS ref: packages/dds/sequence/src/intervalCollection.ts changeInterval —
-			// TS emits ONE op carrying both endpoint delta and property delta.
-			// The port previously emitted two ops (change + propertyChanged),
-			// and receivers of the TS combined form dropped user properties.
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts
+			// changeInterval — one op carrying both endpoint delta and
+			// property delta. Receivers of the two-op form would drop user
+			// properties.
 			var sender = new FakeFluidDataObjectSender();
 			SharedString sharedString = new("s", sender);
 			sharedString.InsertText(0, "abcdef");
@@ -322,12 +320,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ConcurrentChange_RemoteChangeDuringPending_DoesNotOverwriteLocalView()
 		{
-			// TS ref: packages/dds/sequence/src/intervalCollection.ts ackChange —
-			// when a remote change arrives during a local pending change, TS
-			// applies the remote to the consensus snapshot in pending[id] and
-			// leaves the live interval's local view unchanged. Without this,
-			// two clients simultaneously changing the same interval converge
-			// to different values after ACK.
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts
+			// ackChange — remote changes arriving during a local pending
+			// change reconcile against pending[id].consensus rather than the
+			// locally-mutated live interval, so concurrent editors converge.
 			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
 			IntervalCollection collection = local.GetIntervalCollection("comments");
 
@@ -341,10 +337,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			var pendingLocalSend = Assert.Single(sender.Sent);
 			sender.Sent.Clear();
 
-			// Concurrent remote change arrives: another client moved i1 to [3,7].
-			// Under the port's previous behavior this would overwrite the local
-			// [1,5] view with [3,7]. Under TS semantics the local view stays at
-			// [1,5] because the remote reconciles into the consensus snapshot.
+			// Concurrent remote change moves i1 to [3,7]. The local view
+			// stays at [1,5] because the remote reconciles into consensus.
 			ProcessRemoteIntervalChange(local, "comments", "i1", 3, 7, refSeq: 2, seq: 3);
 
 			SequenceInterval? current = collection.GetIntervalById("i1");
@@ -367,11 +361,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ConcurrentChange_SegmentRemovedByRemoteWhilePending_FiresSlideEvent()
 		{
-			// TS ref: packages/dds/sequence/src/intervalCollection.ts ackInterval —
-			// if a segment holding one of the interval's endpoints was
-			// sequenced-removed while our change was pending, TS fires a
-			// "changed" event with slide: true at ACK time. The port previously
-			// did nothing at ACK (the ACK handler was empty).
+			// TS ref: packages/dds/sequence/src/intervalCollection.ts
+			// ackInterval — a "changed" event with slide: true fires at ACK
+			// time when a segment holding one of the interval's endpoints was
+			// sequenced-removed while our change was pending.
 			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
 			IntervalCollection collection = local.GetIntervalCollection("comments");
 

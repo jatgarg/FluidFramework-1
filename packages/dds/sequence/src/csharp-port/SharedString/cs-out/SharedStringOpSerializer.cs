@@ -1,8 +1,7 @@
 // -----------------------------------------------------------------------------
 // JSON (de)serialization for IMergeTreeOp (Insert / Remove / Annotate / Obliterate / Group / interval ops).
 // Merge-tree op wire format matches packages/dds/merge-tree/src/ops.ts.
-// Part of the SharedString C# feasibility port — Wave 6.
-// POC scope: Insert + Remove + Annotate + basic Obliterate + Group + interval envelopes.
+// Scope: Insert + Remove + Annotate + basic Obliterate + Group + interval envelopes.
 // -----------------------------------------------------------------------------
 
 #nullable enable
@@ -1166,7 +1165,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				default:
-					throw new NotSupportedException("Only TextSegment and Marker insert payloads are supported by the POC serializer.");
+					throw new NotSupportedException("Only TextSegment and Marker insert payloads are supported by the port serializer.");
 			}
 		}
 
@@ -1732,14 +1731,12 @@ namespace Microsoft.Office.Web.Fluid
 			return ReadInt32(ref reader, propertyName);
 		}
 
-		// TS ref: packages/dds/merge-tree/src/sequencePlace.ts normalizePlace —
-		// TS interval endpoints on the wire may be a number OR a string sentinel:
-		//   "start" → { pos: -1, side: Side.After }   (points before position 0)
-		//   "end"   → { pos: -1, side: Side.Before }  (points after last position)
-		// The port previously accepted only numbers, throwing on valid TS wire
-		// with sentinel endpoints. Reads either a number (via ReadNullableInt32)
-		// or one of the two sentinel strings; on sentinel returns (-1, impliedSide).
-		// impliedSide is null when the value was a plain number.
+		// TS ref: packages/dds/merge-tree/src/sequencePlace.ts normalizePlace.
+		// Interval endpoints on the wire may be a number OR a string sentinel:
+		//   "start" → (pos: -1, side: After)   points before position 0
+		//   "end"   → (pos: -1, side: Before)  points after last position
+		// Returns (numericPosition, impliedSide) — impliedSide is null when
+		// the value was a plain number.
 		private static (int? position, int? impliedSide) ReadEndpointPositionOrSentinel(ref Utf8JsonReader reader, string propertyName)
 		{
 			if (reader.TokenType == JsonTokenType.String)

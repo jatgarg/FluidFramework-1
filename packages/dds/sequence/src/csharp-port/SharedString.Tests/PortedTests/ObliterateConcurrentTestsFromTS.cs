@@ -10,7 +10,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class ObliterateConcurrentTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/obliterate.spec.ts:38 — "removes text"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.spec.ts — "removes text"
 		[Fact]
 		public void Obliterate_RemovesText()
 		{
@@ -21,7 +21,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(string.Empty, sharedString.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/obliterate.spec.ts:44 — "removes text for obliterate then insert"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.spec.ts — "removes text for obliterate then insert"
 		[Fact]
 		public void ConcurrentObliterateThenInsert_InsertedTextInRangeIsEaten()
 		{
@@ -34,7 +34,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Contains(SegmentWithText(tree, "more ").RemoveStamps, stamp => stamp.Seq == 2);
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/obliterate.spec.ts:98 — "does not expand to include text inserted at start"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.spec.ts — "does not expand to include text inserted at start"
 		[Fact]
 		public void EndpointBehavior_InsertAtStartBoundaryNotIncluded()
 		{
@@ -46,7 +46,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("helloXXX", tree.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts:72 — "correctly applies local remove after local obliterate"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts — "correctly applies local remove after local obliterate"
 		[Fact]
 		public void PartialLength_LocalRemoveAfterLocalObliterate_HasZeroFinalLength()
 		{
@@ -59,7 +59,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(string.Empty, tree.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts:133 — "passes for local remove and remote obliterate"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts — "passes for local remove and remote obliterate"
 		[Fact]
 		public void PartialLength_OverlappingLocalRemoveAndRemoteObliterate_RemainsRemovedOnce()
 		{
@@ -72,7 +72,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(5, tree.GetLength(2, "local"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts:173 — "passes for remote remove and local obliterate"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts — "passes for remote remove and local obliterate"
 		[Fact]
 		public void PartialLength_OverlappingRemoteRemoveAndLocalObliterate_RemainsRemovedOnce()
 		{
@@ -85,7 +85,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(5, tree.GetLength(2, "remote"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts:249 — "passes for local obliterate and remote obliterate"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts — "passes for local obliterate and remote obliterate"
 		[Fact]
 		public void PartialLength_OverlappingLocalAndRemoteObliterate_RemainsRemovedOnce()
 		{
@@ -98,7 +98,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(5, tree.GetLength(2, "local"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts:291 — "obliterates when concurrent insert in middle of string"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts — "obliterates when concurrent insert in middle of string"
 		[Fact]
 		public void PartialLength_ConcurrentInsertInMiddleOfObliterate_IsObliterated()
 		{
@@ -111,7 +111,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(0, tree.GetLength(2, "local"));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts:334 — "obliterate does not affect concurrent insert at start of string"
+		// Ported from packages/dds/merge-tree/src/test/obliterate.partialLength.spec.ts — "obliterate does not affect concurrent insert at start of string"
 		[Fact]
 		public void PartialLength_ConcurrentInsertAtStartOfObliterate_RemainsVisible()
 		{

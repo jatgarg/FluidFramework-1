@@ -10,7 +10,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class MergeTreeMarkRangeRemovedTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts:34 — "local remove followed by local insert"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts — "local remove followed by local insert"
 		[Fact]
 		public void LocalRemoveFollowedByLocalInsert_ShowsInsertedText()
 		{
@@ -22,7 +22,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("text", sharedString.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts:50 — "remote remove followed by local insert"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts — "remote remove followed by local insert"
 		[Fact]
 		public void RemoteRemoveFollowedByLocalInsert_ShowsInsertedText()
 		{
@@ -34,7 +34,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("text", sharedString.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts:66 — "local remove followed by remote insert"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts — "local remove followed by remote insert"
 		[Fact]
 		public void LocalRemoveFollowedByRemoteInsert_ShowsRemoteInsertedText()
 		{
@@ -46,7 +46,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("text", sharedString.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts:82 — "local remove followed by remote overlapping remove"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts — "local remove followed by remote overlapping remove"
 		[Fact]
 		public void LocalRemoveFollowedByRemoteOverlappingRemove_KeepsBothRemoveStamps()
 		{
@@ -62,7 +62,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(string.Empty, tree.GetText());
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts:123 — "remote remove followed by remote insert"
+		// Ported from packages/dds/merge-tree/src/test/mergeTree.markRangeRemoved.spec.ts — "remote remove followed by remote insert"
 		[Fact]
 		public void RemoteRemoveFollowedByRemoteInsert_ShowsInsertedText()
 		{

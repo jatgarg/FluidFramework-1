@@ -180,9 +180,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		public void SequenceInterval_CompareStart_ReturnsEqualityWhenNamedEndpointMatches()
 		{
 			// TS ref: packages/dds/sequence/src/intervals/sequenceInterval.ts
-			// compareStart / compareEnd — TS returns 0 once start (or end) position
-			// and side match. The port previously fell through to compare the
-			// OTHER endpoint, producing non-zero ordering where TS returns 0.
+			// compareStart / compareEnd — returns 0 as soon as the named
+			// endpoint's position and side match.
 			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
 			SequenceInterval same = collection.Add(2, 4, intervalId: "same");
 			SequenceInterval sameStartDifferentEnd = collection.Add(2, 6, intervalId: "sameStart");
@@ -200,11 +199,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void PropertyMap_MatchProperties_DeepComparesArrayValues()
 		{
-			// TS ref: packages/dds/merge-tree/src/properties.ts matchProperties —
-			// TS deep-compares array property values. Equal-content arrays with
-			// different references must compare equal. The port previously fell
-			// through to Object.Equals, which uses reference equality for arrays
-			// and Lists.
+			// TS ref: packages/dds/merge-tree/src/properties.ts matchProperties
+			// deep-compares array property values, so equal-content arrays
+			// with different references compare equal.
 			MergeTree.PropertySet a = new()
 			{
 				["tags"] = new List<object?> { "one", "two", "three" },

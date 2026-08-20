@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// Wave 12d integration tests for IntervalCollection on SharedString.
+// Integration tests for IntervalCollection on SharedString.
 // -----------------------------------------------------------------------------
 
 using System;
@@ -309,7 +309,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void TwoClients_ConcurrentChange_SameInterval_Converges()
 		{
-			// TS-parity: Change API requires both start and end (intervalCollection.ts:1314).
+			// TS-parity: Change API requires both start and end (intervalCollection.ts).
 			// Two-client convergence tested by each client passing full endpoint pairs; the
 			// last-writer's op wins on the shared endpoint.
 			var harness = new TwoClientHarness();
@@ -338,13 +338,11 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void TwoClients_ConcurrentChange_DifferentIntent_Converges()
 		{
-			// SS-A01 stress test: two clients concurrently change the same
-			// interval to DIFFERENT ranges. Under the port's original
-			// implementation each client saw the other's op applied on top
-			// of its own local mutation and the two clients ended at different
-			// endpoints after ACK. With consensus-based reconciliation, both
-			// clients converge to the same final endpoints (the last-writer's
-			// op wins on the shared endpoint at server-sequenced time).
+			// Two clients concurrently change the same interval to DIFFERENT
+			// ranges. Consensus-based reconciliation keeps the two clients'
+			// local views intact through the concurrent-op window, and the
+			// last-writer's op wins on the shared endpoint at
+			// server-sequenced time.
 			var harness = new TwoClientHarness();
 			LoadInitialSharedText(harness, "abcdefghij");
 			IntervalCollection commentsA = harness.ClientA.GetIntervalCollection("comments");
@@ -371,7 +369,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Change_OneSided_Throws()
 		{
-			// TS-parity: one-sided change is rejected (intervalCollection.ts:1314-1319).
+			// TS-parity: one-sided change is rejected (intervalCollection.ts).
 			var sharedString = CreateSharedStringWithText("abcdefghij");
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
 			collection.Add(2, 5, intervalId: "c1");

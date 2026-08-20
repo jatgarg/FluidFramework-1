@@ -10,7 +10,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class StampsAndPropertiesTestsFromTS
 	{
-		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts:56 — "returns true for reference equal stamps"
+		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts — "returns true for reference equal stamps"
 		[Fact]
 		public void StampEquality_ReferenceEqualStampsMatch()
 		{
@@ -19,7 +19,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.True(Stamps.Equal(stamp, stamp));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts:62 — "returns true for equal stamps"
+		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts — "returns true for equal stamps"
 		[Fact]
 		public void StampEquality_EqualValuesMatch()
 		{
@@ -27,7 +27,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.True(Stamps.Equal(LocalStamp(localSeq: 1), LocalStamp(localSeq: 1)));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts:68 — "returns false for different stamps"
+		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts — "returns false for different stamps"
 		[Fact]
 		public void StampEquality_DifferentSeqClientOrLocalSeqDoNotMatch()
 		{
@@ -37,7 +37,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.False(Stamps.Equal(LocalStamp(localSeq: 1), LocalStamp(localSeq: 2)));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts:78 — "orders stamps correctly"
+		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts — "orders stamps correctly"
 		[Fact]
 		public void StampComparison_OrdersAckedBeforeLocalBySeqAndLocalSeq()
 		{
@@ -59,7 +59,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			}
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts:82 — "compare can sort lists"
+		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts — "compare can sort lists"
 		[Fact]
 		public void StampComparison_CompareCanSortLists()
 		{
@@ -82,7 +82,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(new[] { acked1, acked2, acked3, local1, local2 }, stamps);
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts:108 — "inserts acked before unacked"
+		// Ported from packages/dds/merge-tree/src/test/stamps.spec.ts — "inserts acked before unacked"
 		[Fact]
 		public void SpliceIntoList_InsertsAckedBeforeUnacked()
 		{
@@ -97,7 +97,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(new[] { acked1, acked2, acked3, local1 }, stamps);
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts:12 — "simple properties match"
+		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts — "simple properties match"
 		[Fact]
 		public void MatchProperties_SimplePropertiesMatch()
 		{
@@ -106,7 +106,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				new PropertySet() { ["a"] = "a" }));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts:15 — "simple properties don't match"
+		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts — "simple properties don't match"
 		[Fact]
 		public void MatchProperties_SimplePropertiesDoNotMatch()
 		{
@@ -115,7 +115,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				new PropertySet() { ["a"] = "b" }));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts:24 — "keys don't match"
+		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts — "keys don't match"
 		[Fact]
 		public void MatchProperties_KeysDoNotMatch()
 		{
@@ -124,7 +124,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				new PropertySet() { ["b"] = "a" }));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts:30 — "complex properties match"
+		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts — "complex properties match"
 		[Fact]
 		public void MatchProperties_ComplexPropertiesMatch()
 		{
@@ -139,14 +139,14 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				}));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts:36 — "undefined and simple properties don't match"
+		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts — "undefined and simple properties don't match"
 		[Fact]
 		public void MatchProperties_NullAndSimplePropertiesDoNotMatch()
 		{
 			Assert.False(PropertyMap.MatchProperties(null, new PropertySet() { ["a"] = "a" }));
 		}
 
-		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts:48 — "undefined and empty properties match"
+		// Ported from packages/dds/merge-tree/src/test/properties.spec.ts — "undefined and empty properties match"
 		[Fact]
 		public void MatchProperties_NullAndEmptyPropertiesMatch()
 		{
