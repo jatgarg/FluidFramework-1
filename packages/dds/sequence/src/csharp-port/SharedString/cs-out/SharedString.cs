@@ -96,7 +96,7 @@ namespace Microsoft.Office.Web.Fluid
 		private readonly IFluidDataObjectRegistry? _registry;
 		private readonly Client _client;
 		private readonly HashSet<IntervalCollection> _intervalCollectionsWithOutboundHandlers = new();
-		private List<MergeTreeOp>? _batchOps;
+		private List<IMergeTreeOp>? _batchOps;
 		private int _localMutationDepth;
 
 		public SharedString(string? id = null, IFluidDataObjectSender? sender = null, IFluidDataObjectRegistry? registry = null)
@@ -122,7 +122,7 @@ namespace Microsoft.Office.Web.Fluid
 					throw new InvalidOperationException("Nested SharedString batches are not supported.");
 				}
 
-				_batchOps = new List<MergeTreeOp>();
+				_batchOps = new List<IMergeTreeOp>();
 			}
 
 			try
@@ -131,10 +131,10 @@ namespace Microsoft.Office.Web.Fluid
 			}
 			finally
 			{
-				List<MergeTreeOp> opsToFlush;
+				List<IMergeTreeOp> opsToFlush;
 				lock (_lock)
 				{
-					opsToFlush = _batchOps ?? new List<MergeTreeOp>();
+					opsToFlush = _batchOps ?? new List<IMergeTreeOp>();
 					_batchOps = null;
 				}
 
@@ -1245,23 +1245,18 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			ArgumentNullException.ThrowIfNull(op);
 
-			// Interval ops go on the wire individually and cannot be members of a group batch.
-			if (op is IntervalOpMsg)
-			{
-				SendLocalOp(op, opTypeName);
-				return;
-			}
-
 			lock (_lock)
 			{
 				if (_batchOps is not null)
 				{
-					if (op is not MergeTreeOp mergeTreeOp)
-					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Cannot batch op runtime type: {op.GetType().FullName}");
-					}
-
-					_batchOps.Add(mergeTreeOp);
+					// V2-W02: preserve local mutation order on the wire. TS
+					// puts both merge-tree and interval ops through the same
+					// runtime message queue so a text mutation preceding an
+					// interval add reaches peers in that order. Interval ops
+					// are recorded in the batch alongside merge-tree ops and
+					// dispatched individually at flush time (they cannot be
+					// members of a MergeTreeGroupMsg).
+					_batchOps.Add(op);
 					return;
 				}
 			}
@@ -1279,16 +1274,10 @@ namespace Microsoft.Office.Web.Fluid
 			return SharedStringOpSerializer.Deserialize(SharedStringOpSerializer.Serialize(op));
 		}
 
-		private void FlushBatchOps(IReadOnlyList<MergeTreeOp> ops)
+		private void FlushBatchOps(IReadOnlyList<IMergeTreeOp> ops)
 		{
 			if (ops.Count == 0)
 			{
-				return;
-			}
-
-			if (ops.Count == 1)
-			{
-				SendLocalOp(ops[0], GetLocalOpTypeName(ops[0]));
 				return;
 			}
 
@@ -1297,11 +1286,51 @@ namespace Microsoft.Office.Web.Fluid
 				return;
 			}
 
+			// Drain the batch in order. Consecutive MergeTreeOps can be
+			// group-batched into a single MergeTreeGroupMsg; interval ops
+			// interrupt any group (they must go on the wire as individual
+			// "act" envelopes per TS intervalCollectionMap wire shape).
+			List<MergeTreeOp> pendingGroup = new();
+			foreach (IMergeTreeOp op in ops)
+			{
+				if (op is IntervalOpMsg intervalOp)
+				{
+					FlushPendingGroup(pendingGroup);
+					SendLocalOp(intervalOp, GetLocalOpTypeName(intervalOp));
+					continue;
+				}
+
+				if (op is not MergeTreeOp mergeTreeOp)
+				{
+					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Cannot flush op runtime type: {op.GetType().FullName}");
+				}
+
+				pendingGroup.Add(mergeTreeOp);
+			}
+
+			FlushPendingGroup(pendingGroup);
+		}
+
+		private void FlushPendingGroup(List<MergeTreeOp> pending)
+		{
+			if (pending.Count == 0 || _sender is null)
+			{
+				return;
+			}
+
+			if (pending.Count == 1)
+			{
+				SendLocalOp(pending[0], GetLocalOpTypeName(pending[0]));
+				pending.Clear();
+				return;
+			}
+
 			MergeTreeGroupMsg groupOp = new();
-			groupOp.Ops.AddRange(ops);
+			groupOp.Ops.AddRange(pending);
 			string opJson = SharedStringOpSerializer.Serialize(groupOp, _registry, currentSequenceNumber: _client.CollabWindowCurrentSeq);
 			SequenceNumber sequenceNumber = _sender.QueueDataObjectMessage(_id, _groupOpType, opJson);
-			AssociateSentClientSequence(ops, sequenceNumber);
+			AssociateSentClientSequence(pending, sequenceNumber);
+			pending.Clear();
 		}
 
 		private void SendLocalOp(IMergeTreeOp op, string opTypeName)

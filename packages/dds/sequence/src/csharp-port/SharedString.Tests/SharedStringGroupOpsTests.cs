@@ -212,6 +212,93 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			AssertConverged(harness.ClientA, harness.ClientB);
 		}
 
+		[Fact]
+		public void RunInBatch_TextThenInterval_PreservesLocalOrderOnWire()
+		{
+			// V2-W02 regression. TS runtime queues submitLocalMessage calls in
+			// call order (both merge-tree ops via sequence.ts submitDelta and
+			// interval ops via intervalCollectionMap.submitMessage go through
+			// the same runtime queue). The port must not send interval ops
+			// while merge-tree ops in the same batch are still buffered —
+			// peers would see the interval endpoint before the text it
+			// anchors to.
+			SharedString sharedString = CreateSharedStringWithAckedText("abc");
+			FakeFluidDataObjectSender sender = GetSenderFor(sharedString);
+			sender.Sent.Clear();
+
+			sharedString.RunInBatch(() =>
+			{
+				sharedString.InsertText(3, "XYZ");
+				sharedString.GetIntervalCollection("comments").Add(3, 6, intervalId: "i1");
+			});
+
+			Assert.Equal(2, sender.Sent.Count);
+			IMergeTreeOp first = SharedStringOpSerializer.Deserialize(sender.Sent[0].OpJson);
+			IMergeTreeOp second = SharedStringOpSerializer.Deserialize(sender.Sent[1].OpJson);
+			Assert.IsType<MergeTreeInsertMsg>(first);
+			Assert.IsType<IntervalAddOpMsg>(second);
+		}
+
+		[Fact]
+		public void RunInBatch_IntervalBetweenInserts_SplitsGroupPreservingOrder()
+		{
+			// V2-W02 regression. Interval ops in the middle of a batch split
+			// any group of merge-tree ops around them so wire order matches
+			// local order: insert, interval, insert.
+			SharedString sharedString = CreateSharedStringWithAckedText("abc");
+			FakeFluidDataObjectSender sender = GetSenderFor(sharedString);
+			sender.Sent.Clear();
+
+			sharedString.RunInBatch(() =>
+			{
+				sharedString.InsertText(3, "X");
+				sharedString.GetIntervalCollection("comments").Add(0, 4, intervalId: "i1");
+				sharedString.InsertText(4, "Y");
+			});
+
+			Assert.Equal(3, sender.Sent.Count);
+			Assert.IsType<MergeTreeInsertMsg>(SharedStringOpSerializer.Deserialize(sender.Sent[0].OpJson));
+			Assert.IsType<IntervalAddOpMsg>(SharedStringOpSerializer.Deserialize(sender.Sent[1].OpJson));
+			Assert.IsType<MergeTreeInsertMsg>(SharedStringOpSerializer.Deserialize(sender.Sent[2].OpJson));
+		}
+
+		[Fact]
+		public void RunInBatch_TwoMergeTreeOpsAfterInterval_StillGroupsTail()
+		{
+			// V2-W02 regression. Batching still coalesces adjacent merge-tree
+			// ops into a single group. An interval op breaks the group only
+			// at its position — subsequent merge-tree ops start a fresh
+			// group.
+			SharedString sharedString = CreateSharedStringWithAckedText("abc");
+			FakeFluidDataObjectSender sender = GetSenderFor(sharedString);
+			sender.Sent.Clear();
+
+			sharedString.RunInBatch(() =>
+			{
+				sharedString.GetIntervalCollection("comments").Add(0, 3, intervalId: "i1");
+				sharedString.InsertText(3, "X");
+				sharedString.InsertText(4, "Y");
+			});
+
+			Assert.Equal(2, sender.Sent.Count);
+			Assert.IsType<IntervalAddOpMsg>(SharedStringOpSerializer.Deserialize(sender.Sent[0].OpJson));
+			MergeTreeGroupMsg group = AssertGroupWire(sender.Sent[1].OpJson, expectedCount: 2);
+			Assert.All(group.Ops, op => Assert.Equal(MergeTreeDeltaType.Insert, op.Type));
+		}
+
+		private static FakeFluidDataObjectSender GetSenderFor(SharedString sharedString)
+		{
+			// The test SharedString was created via CreateSharedStringWithAckedText,
+			// which passes a FakeFluidDataObjectSender we can retrieve via
+			// the private _sender field. Reflection-free approach: re-derive
+			// via a known channel by creating a fresh sender-inspection scheme.
+			// Simpler: use reflection here — this is test-only glue.
+			System.Reflection.FieldInfo? field = typeof(SharedString).GetField(
+				"_sender",
+				System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+			return (FakeFluidDataObjectSender)(field!.GetValue(sharedString)!);
+		}
+
 		private static SharedString CreateSharedStringWithAckedText(string text)
 		{
 			var sender = new FakeFluidDataObjectSender();
