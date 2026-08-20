@@ -248,6 +248,34 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void Rebase_PendingIntervalAdd_BothEndpointsDetached_DropsInterval()
+		{
+			// V2-A05 regression. TS's rebaseLocalInterval returns undefined
+			// (drops the pending op) AND calls deleteExistingInterval when
+			// the endpoint slides to 'detached'. The port previously only
+			// dropped Transient intervals; normal SlideOnRemove intervals
+			// whose endpoints both slid off were clamped and resubmitted at
+			// invalid coordinates. TS ref: intervalCollection.ts
+			// rebaseLocalInterval — `rebasedEndpoint === "detached"` branch.
+			var (local, sender) = CreateAckedSharedString("client-a", "abcdef");
+
+			local.GetIntervalCollection("comments").Add(2, 4, intervalId: "abc");
+			sender.Sent.Clear();
+
+			// Remote peer wipes the whole document — both endpoints of "abc"
+			// now anchor to sequenced-removed segments with no visible
+			// content to slide to.
+			ProcessRemoteRemove(local, 0, 6, refSeq: 1, seq: 2, clientId: "client-b");
+
+			local.RegeneratePendingOps();
+
+			// Regeneration must drop the interval add and NOT emit an op with
+			// nonsensical coordinates.
+			Assert.Empty(sender.Sent);
+			Assert.Null(local.GetIntervalCollection("comments").GetIntervalById("abc"));
+		}
+
+		[Fact]
 		public void Rebase_PendingIntervalAdd_InGroup_HandledCorrectly()
 		{
 			var (local, sender) = CreateAckedSharedString("client-a", "abcdefghi");

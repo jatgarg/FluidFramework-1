@@ -503,6 +503,136 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(7, current.EndPosition);
 		}
 
+		[Fact]
+		public void ConcurrentChange_TwoLocalChanges_AckFirst_SecondStillProtectedFromRemote()
+		{
+			// V2-A03 regression. Before the queue-based fix, a single pending
+			// record was created on the first Change and cleared on its ACK,
+			// exposing the second local change's state to any intervening
+			// remote endpoint update. TS keeps a FIFO queue per id; the head
+			// clears only when its own ACK arrives, and later remote changes
+			// still reconcile through the id's consensus.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			SequenceInterval initial = collection.Add(2, 5, intervalId: "i1");
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Local change 1: move start.
+			collection.Change("i1", newStart: 1, newEnd: 5);
+			var change1 = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			// Local change 2: move end (still pending).
+			collection.Change("i1", newStart: 1, newEnd: 6);
+			var change2 = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			// ACK the first change. The second is still pending — the id's
+			// pending state must remain populated so a subsequent remote
+			// change routes through UpdatePendingConsensusNoLock, not through
+			// the live interval.
+			ProcessLocalAck(local, change1, refSeq: 2, seq: 3);
+
+			// Concurrent remote change from another client — under the old
+			// single-record model this would apply directly to the live
+			// interval and overwrite the second local change's end. With the
+			// queue, the remote folds into consensus.
+			ProcessRemoteIntervalChange(local, "comments", "i1", 4, 8, refSeq: 3, seq: 4);
+
+			SequenceInterval? afterRemote = collection.GetIntervalById("i1");
+			Assert.NotNull(afterRemote);
+			Assert.Same(initial, afterRemote);
+			// Local view still reflects the second local change, not the remote.
+			Assert.Equal(1, afterRemote!.StartPosition);
+			Assert.Equal(6, afterRemote.EndPosition);
+
+			// ACK the second local change. Live interval should still reflect
+			// our latest local intent.
+			ProcessLocalAck(local, change2, refSeq: 4, seq: 5);
+			SequenceInterval? afterAck = collection.GetIntervalById("i1");
+			Assert.NotNull(afterAck);
+			Assert.Equal(1, afterAck!.StartPosition);
+			Assert.Equal(6, afterAck.EndPosition);
+		}
+
+		[Fact]
+		public void ConcurrentChange_RemotePropertyOnly_DuringLocalPending_FoldsIntoConsensus()
+		{
+			// V2-A02 regression. Remote property-only changes must fold into
+			// the id's pending consensus while our local changes are pending;
+			// they must not apply directly to the live interval and overwrite
+			// our optimistic local view.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			collection.Add(2, 5, intervalId: "i1", properties: new PropertySet() { ["color"] = "red" });
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Local property change: red → blue.
+			collection.ChangeProperties("i1", new PropertySet() { ["color"] = "blue" });
+			var localSent = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			// Concurrent remote property change: red → green.
+			ProcessRemoteIntervalPropertyChanged(
+				local,
+				"comments",
+				"i1",
+				new PropertySet() { ["color"] = "green" },
+				refSeq: 2,
+				seq: 3);
+
+			// Local view remains "blue" — remote folded into consensus but
+			// did not overwrite our optimistic local view.
+			SequenceInterval? current = collection.GetIntervalById("i1");
+			Assert.NotNull(current);
+			Assert.Equal("blue", current!.Properties?["color"]);
+
+			// ACK our local property change. Consensus + our local delta ⇒ blue.
+			ProcessLocalAck(local, localSent, refSeq: 3, seq: 4);
+			Assert.Equal("blue", collection.GetIntervalById("i1")!.Properties?["color"]);
+		}
+
+		[Fact]
+		public void ChangeAck_NoRemoteMutation_DoesNotFireFalseSlideEvent()
+		{
+			// V2-A04 regression. The old slide detection compared the
+			// pre-mutation segment (captured before our local Change) with
+			// the post-ACK segment (after our own mutation), which trivially
+			// differed even for normal moves and produced spurious
+			// slide:true events. The new detection compares the segment
+			// captured RIGHT AFTER Change()'s mutation with the segment at
+			// ACK time; only a sequenced-removal during pending changes them.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			collection.Add(2, 5, intervalId: "i1");
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Local change with no concurrent remote activity.
+			collection.Change("i1", newStart: 3, newEnd: 5);
+			var localSent = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			int slideCount = 0;
+			collection.OnChanged += (_, e) =>
+			{
+				if (e.Slide)
+				{
+					slideCount++;
+				}
+			};
+
+			// ACK our change — nothing happened during pending, so no slide.
+			ProcessLocalAck(local, localSent, refSeq: 2, seq: 3);
+
+			Assert.Equal(0, slideCount);
+		}
+
 		private static SharedString CreateSharedStringWithText(string text)
 		{
 			SharedString sharedString = new();

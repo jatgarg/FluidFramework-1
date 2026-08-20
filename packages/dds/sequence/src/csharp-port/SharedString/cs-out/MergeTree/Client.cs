@@ -861,7 +861,15 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return new List<IMergeTreeOp>();
 			}
 
-			if (ShouldDropDetachedTransientPendingAdd(pending))
+			// V2-A05: TS rebaseLocalInterval treats any detached endpoint (not
+			// just transient) as a signal to remove the interval and drop the
+			// op. A normal SlideOnRemove interval whose endpoints both slid
+			// off the string during the disconnected window should also be
+			// dropped rather than resubmitted clamped. Transient intervals
+			// hit the same code path in TS (they have no slide behavior). (TS:
+			// intervalCollection.ts rebaseLocalInterval `rebasedEndpoint ===
+			// 'detached'` branch.)
+			if (ShouldDropDetachedPendingInterval(pending))
 			{
 				DropDetachedPendingInterval(pending);
 				pending.DropAfterRebase = true;
@@ -888,18 +896,27 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			}
 		}
 
-		private static bool ShouldDropDetachedTransientPendingAdd(PendingOpEntry pending)
+		private static bool ShouldDropDetachedPendingInterval(PendingOpEntry pending)
 		{
-			return pending.Op is IntervalAddOpMsg
-				&& (IsDetachedTransientReference(pending.IntervalStartReference)
-					|| IsDetachedTransientReference(pending.IntervalEndReference));
+			// TS drops detached intervals on rebase regardless of reference
+			// type: intervalCollection.ts rebaseLocalInterval returns
+			// undefined when the rebased endpoint is 'detached', and calls
+			// deleteExistingInterval for add ops and for the current
+			// getIntervalById match. For change ops on a still-attached
+			// interval, TS also removes the interval when detached because
+			// the endpoints can no longer be resolved.
+			if (pending.Op is not IntervalAddOpMsg && pending.Op is not IntervalChangeOpMsg)
+			{
+				return false;
+			}
+
+			return IsDetachedReference(pending.IntervalStartReference)
+				|| IsDetachedReference(pending.IntervalEndReference);
 		}
 
-		private static bool IsDetachedTransientReference(LocalReferencePosition? reference)
+		private static bool IsDetachedReference(LocalReferencePosition? reference)
 		{
-			return reference is not null
-				&& reference.IsDetached
-				&& (reference.RefType & ReferenceType.Transient) == ReferenceType.Transient;
+			return reference is not null && reference.IsDetached;
 		}
 
 		private void RebaseIntervalEndpointPositions(PendingOpEntry pending, IMergeTreeOp rebased)

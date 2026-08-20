@@ -117,19 +117,27 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		private readonly EndpointIndex _endpointIndex = new();
 		private readonly IIntervalIndex[] _indexes;
 
-		// Per-id snapshot of the last-acknowledged (consensus) state for
-		// intervals with a pending local change. Remote changes arriving
-		// during a pending window reconcile against this snapshot instead of
-		// the locally-mutated live interval, so concurrent editors converge.
-		// (TS: intervalCollection.ts.)
-		private readonly Dictionary<string, PendingIntervalChange> _pendingChanges = new(StringComparer.Ordinal);
+		// Per-id state for intervals with pending local changes. TS uses a
+		// FIFO queue of pending changes and a single consensus snapshot per
+		// id (packages/dds/sequence/src/intervalCollection.ts PendingChanges).
+		// Remote changes arriving during a pending window reconcile against
+		// the consensus snapshot; the live interval reflects the local view
+		// (consensus + all pending changes). ACK removes the head of the
+		// queue and advances consensus by that change's delta.
+		private readonly Dictionary<string, PendingChangesForId> _pendingChanges = new(StringComparer.Ordinal);
 
-		private sealed class PendingIntervalChange
+		private sealed class PendingChangesForId
 		{
-			// Snapshot of the interval as it was when we submitted our first
-			// pending local change. Endpoints are recorded as numeric positions
-			// captured against the current view at that time; sides are the
-			// interval's own configuration and never change locally.
+			// FIFO queue of local changes awaiting ACK. Each entry captures
+			// what one Change() call did plus the segment refs its endpoints
+			// held right after that mutation, so ACK-time slide detection can
+			// compare against the current segment state.
+			public List<PendingIntervalChange> Queue { get; } = new();
+
+			// Consensus snapshot — the state as consensus (server) sees it,
+			// BEFORE any of the pending changes have applied. Remote changes
+			// during a pending window fold into these fields. ACK of the head
+			// advances these by the head's delta.
 			public int? ConsensusStart { get; set; }
 
 			public int? ConsensusEnd { get; set; }
@@ -139,14 +147,41 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			public Side ConsensusEndSide { get; set; }
 
 			public MergeTree.PropertySet ConsensusProperties { get; set; } = new();
+		}
 
-			// The MergeTree segment references held by the pending endpoints at
-			// change-submit time. Used at ACK time to detect whether a segment
-			// was sequenced-removed during the pending phase — matches TS's
-			// slide-on-ack (ackInterval) semantic.
-			public MergeTree.ISegment? PendingStartSegment { get; set; }
+		private sealed class PendingIntervalChange
+		{
+			// The endpoint/property delta this specific Change() call submitted.
+			// Null fields mean "not changed by this op." (TS: submitDelta uses
+			// SerializedIntervalDelta with optional endpoint/props.)
+			public int? DeltaStart { get; set; }
 
-			public MergeTree.ISegment? PendingEndSegment { get; set; }
+			public int? DeltaEnd { get; set; }
+
+			public Side? DeltaStartSide { get; set; }
+
+			public Side? DeltaEndSide { get; set; }
+
+			public MergeTree.EndpointSentinel DeltaStartSentinel { get; set; } = MergeTree.EndpointSentinel.None;
+
+			public MergeTree.EndpointSentinel DeltaEndSentinel { get; set; } = MergeTree.EndpointSentinel.None;
+
+			// null means "no property delta"; empty dict means "explicit no-op
+			// property submit" (matches TS's ChangeProperties on empty).
+			public MergeTree.PropertySet? DeltaProperties { get; set; }
+
+			// The segment refs held by the interval right AFTER this Change()
+			// mutated the endpoints. At ACK time, if the interval's current
+			// segment refs differ from these, the endpoint slid because its
+			// anchoring segment was sequenced-removed during the pending
+			// window. (TS: ackInterval slide detection.)
+			public MergeTree.ISegment? PostMutationStartSegment { get; set; }
+
+			public MergeTree.ISegment? PostMutationEndSegment { get; set; }
+
+			// Whether this change carried endpoint modifications (used for
+			// slide detection scoping).
+			public bool HasEndpointDelta { get; set; }
 		}
 
 		internal IntervalCollection(
@@ -309,16 +344,14 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 					return null;
 				}
 
-				// Snapshot the current interval state into a pending record
-				// BEFORE mutating, but only when we will actually submit a wire
-				// op — otherwise we would leak an unacknowledgeable pending
-				// entry that would swallow later remote reconciliation. Remote
-				// changes arriving before ACK reconcile against this consensus
-				// snapshot; our own ACK later uses it to detect endpoint
-				// slides. (TS: intervalCollection.ts.)
+				// Ensure a per-id pending-state record exists and seed consensus
+				// with the current interval snapshot the first time we see a
+				// pending change for this id. Subsequent changes append to the
+				// queue without overwriting consensus. (TS: intervalCollection.ts
+				// PendingChanges submitDelta consensus lazy-init.)
 				if (willSubmit)
 				{
-					CapturePendingConsensusIfMissingNoLock(preChangeInterval);
+					EnsurePendingConsensusForIdNoLock(id, preChangeInterval);
 				}
 
 				(interval, previousStart, previousEnd) = hasEndpointChange
@@ -333,6 +366,31 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				if (props is not null)
 				{
 					(changedProps, propertyDeltas) = ApplyPropertyChanges(interval, props);
+				}
+
+				// Enqueue this specific change on the id's pending queue. Each
+				// entry records the delta this Change() call carried plus the
+				// segment refs the interval's endpoints held immediately after
+				// mutation, so ACK-time slide detection compares against the
+				// state the interval was in when we submitted. (TS:
+				// intervalCollection.ts PendingChanges.local.)
+				if (willSubmit)
+				{
+					EnqueuePendingChangeNoLock(
+						id,
+						new PendingIntervalChange()
+						{
+							DeltaStart = newStart,
+							DeltaEnd = newEnd,
+							DeltaStartSide = newStartSide,
+							DeltaEndSide = newEndSide,
+							DeltaProperties = props is null
+								? null
+								: MergeTree.PropertyMap.ClonePropertySet(props) ?? new MergeTree.PropertySet(),
+							HasEndpointDelta = hasEndpointChange,
+							PostMutationStartSegment = interval.Start.Segment,
+							PostMutationEndSegment = interval.End.Segment,
+						});
 				}
 
 				// Emit a single combined op carrying both endpoint delta and
@@ -671,14 +729,17 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 		private void UpdatePendingConsensusNoLock(MergeTree.IntervalChangeOpMsg op)
 		{
-			if (op.IntervalId is not string id || !_pendingChanges.TryGetValue(id, out PendingIntervalChange? pending))
+			if (op.IntervalId is not string id || !_pendingChanges.TryGetValue(id, out PendingChangesForId? pending))
 			{
 				return;
 			}
 
-			// Fold the remote endpoint + property delta into the consensus
-			// snapshot; mirrors TS's ackChange path where the remote applies to
-			// pending[id].consensus. (TS: intervalCollection.ts.)
+			// Fold the remote endpoint + property delta into the per-id
+			// consensus snapshot. The consensus represents "state as consensus
+			// sees it, BEFORE any of the local pending changes have applied".
+			// Remote changes during the pending window move consensus
+			// forward; each local ACK then reconciles against it. (TS:
+			// intervalCollection.ts ackChange.)
 			if (op.Start.HasValue)
 			{
 				pending.ConsensusStart = op.Start.Value;
@@ -717,6 +778,31 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			}
 		}
 
+		private void UpdatePendingConsensusPropertyChangedNoLock(MergeTree.IntervalPropertyChangedOpMsg op)
+		{
+			if (op.IntervalId is not string id || !_pendingChanges.TryGetValue(id, out PendingChangesForId? pending))
+			{
+				return;
+			}
+
+			if (op.Props is null)
+			{
+				return;
+			}
+
+			foreach (KeyValuePair<string, object?> property in op.Props)
+			{
+				if (property.Value is null)
+				{
+					pending.ConsensusProperties.Remove(property.Key);
+				}
+				else
+				{
+					pending.ConsensusProperties[property.Key] = property.Value;
+				}
+			}
+		}
+
 		internal void ApplyRemotePropertyChanged(MergeTree.IntervalPropertyChangedOpMsg op)
 		{
 			ArgumentNullException.ThrowIfNull(op);
@@ -724,8 +810,23 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			SequenceInterval? interval;
 			MergeTree.PropertySet changedProps;
 			MergeTree.PropertySet propertyDeltas;
+			bool hasPending;
 			lock (_lock)
 			{
+				hasPending = op.IntervalId is string opId && _pendingChanges.ContainsKey(opId);
+
+				if (hasPending)
+				{
+					// V2-A02: remote property-only changes must fold into the
+					// per-id consensus while our local changes are pending,
+					// mirroring the combined-change reconciliation path. TS
+					// dispatches property-only ackChange through the same
+					// consensus-update path. (TS: intervalCollection.ts
+					// ackChange property-only branch.)
+					UpdatePendingConsensusPropertyChangedNoLock(op);
+					return;
+				}
+
 				interval = GetActiveIntervalById(op.IntervalId);
 				if (interval is null)
 				{
@@ -745,6 +846,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		internal void ApplyOwnAck(MergeTree.IntervalAddOpMsg op)
 		{
 			ArgumentNullException.ThrowIfNull(op);
+
+			// Add ACK: no per-op pending queue entry to dequeue (add is not a
+			// "change" op). TS ackAdd also does not touch the pending-change
+			// queue. Slide detection on the added endpoints is deferred to
+			// future changes / interval refreshes.
 		}
 
 		internal void ApplyOwnAck(MergeTree.IntervalDeleteOpMsg op)
@@ -756,6 +862,18 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			ArgumentNullException.ThrowIfNull(op);
 
+			ApplyChangeOwnAckCommon(op, hasPropertiesOnly: false);
+		}
+
+		internal void ApplyOwnAck(MergeTree.IntervalPropertyChangedOpMsg op)
+		{
+			ArgumentNullException.ThrowIfNull(op);
+
+			ApplyChangeOwnAckCommon(op, hasPropertiesOnly: true);
+		}
+
+		private void ApplyChangeOwnAckCommon(MergeTree.IntervalOpMsg op, bool hasPropertiesOnly)
+		{
 			if (op.IntervalId is not string id)
 			{
 				return;
@@ -769,35 +887,51 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 			lock (_lock)
 			{
-				if (!_pendingChanges.TryGetValue(id, out PendingIntervalChange? pending))
+				if (!_pendingChanges.TryGetValue(id, out PendingChangesForId? pending) || pending.Queue.Count == 0)
 				{
 					return;
 				}
 
 				interval = GetActiveIntervalById(id);
-				_pendingChanges.Remove(id);
+				PendingIntervalChange head = pending.Queue[0];
+				pending.Queue.RemoveAt(0);
+
+				// Advance consensus by the head's delta so subsequent ACKs
+				// reconcile against the correct baseline. (TS: process()
+				// updates pending.consensus after ackChange returns.)
+				AdvanceConsensusForAckedChangeNoLock(pending, head);
+
+				// V2-A03: only clear the id's pending state when the queue is
+				// empty. Retaining state while other pending changes remain
+				// preserves protection for subsequent local mutations.
+				if (pending.Queue.Count == 0)
+				{
+					_pendingChanges.Remove(id);
+				}
 
 				if (interval is null)
 				{
 					return;
 				}
 
-				// Detect endpoint slide via change of anchoring segment between
-				// change-submit and ACK. When the segment changes, the
-				// endpoint slid because its original anchor was
-				// sequenced-removed during the pending window. (TS:
-				// intervalCollection.ts ackInterval.)
-				MergeTree.ISegment? currentStartSegment = interval.Start.Segment;
-				MergeTree.ISegment? currentEndSegment = interval.End.Segment;
-
-				bool startSlid = pending.PendingStartSegment is not null && !ReferenceEquals(currentStartSegment, pending.PendingStartSegment);
-				bool endSlid = pending.PendingEndSegment is not null && !ReferenceEquals(currentEndSegment, pending.PendingEndSegment);
-				slid = startSlid || endSlid;
-
-				if (slid)
+				// V2-A04: slide detection scoped to changes that carried an
+				// endpoint delta. For property-only changes there is no
+				// endpoint to slide, so we skip the segment comparison and
+				// avoid firing spurious slide events.
+				if (!hasPropertiesOnly && head.HasEndpointDelta)
 				{
-					previousStart = pending.ConsensusStart;
-					previousEnd = pending.ConsensusEnd;
+					MergeTree.ISegment? currentStartSegment = interval.Start.Segment;
+					MergeTree.ISegment? currentEndSegment = interval.End.Segment;
+
+					bool startSlid = head.PostMutationStartSegment is not null && !ReferenceEquals(currentStartSegment, head.PostMutationStartSegment);
+					bool endSlid = head.PostMutationEndSegment is not null && !ReferenceEquals(currentEndSegment, head.PostMutationEndSegment);
+					slid = startSlid || endSlid;
+
+					if (slid)
+					{
+						previousStart = pending.ConsensusStart;
+						previousEnd = pending.ConsensusEnd;
+					}
 				}
 			}
 
@@ -809,23 +943,47 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			}
 		}
 
-		internal void ApplyOwnAck(MergeTree.IntervalPropertyChangedOpMsg op)
+		private static void AdvanceConsensusForAckedChangeNoLock(PendingChangesForId pending, PendingIntervalChange acked)
 		{
-			ArgumentNullException.ThrowIfNull(op);
-
-			if (op.IntervalId is not string id)
+			// Move consensus forward by the change we just ACK'd, matching TS's
+			// `pending.consensus = newConsensus` after ackChange. Non-endpoint
+			// deltas leave consensus positions unchanged.
+			if (acked.HasEndpointDelta)
 			{
-				return;
+				if (acked.DeltaStart.HasValue)
+				{
+					pending.ConsensusStart = acked.DeltaStart.Value;
+				}
+
+				if (acked.DeltaEnd.HasValue)
+				{
+					pending.ConsensusEnd = acked.DeltaEnd.Value;
+				}
+
+				if (acked.DeltaStartSide.HasValue)
+				{
+					pending.ConsensusStartSide = acked.DeltaStartSide.Value;
+				}
+
+				if (acked.DeltaEndSide.HasValue)
+				{
+					pending.ConsensusEndSide = acked.DeltaEndSide.Value;
+				}
 			}
 
-			// Clear the pending consensus entry we allocated in Change(). TS
-			// clears the head of its pending-change queue at ACK time; the port
-			// keeps a single record per id (Wave B) so a straight Remove is the
-			// TS-equivalent step. (TS: intervalCollection.ts ackChange
-			// property-only path.)
-			lock (_lock)
+			if (acked.DeltaProperties is not null)
 			{
-				_pendingChanges.Remove(id);
+				foreach (KeyValuePair<string, object?> property in acked.DeltaProperties)
+				{
+					if (property.Value is null)
+					{
+						pending.ConsensusProperties.Remove(property.Key);
+					}
+					else
+					{
+						pending.ConsensusProperties[property.Key] = property.Value;
+					}
+				}
 			}
 		}
 
@@ -1222,27 +1380,33 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			return (changedProps, propertyDeltas);
 		}
 
-		// Captured on the FIRST pending change for an id; subsequent local
-		// mutations on the same id pile on top without overwriting the
-		// consensus record. (TS: intervalCollection.ts changeInterval.)
-		private void CapturePendingConsensusIfMissingNoLock(SequenceInterval interval)
+		// Seed the per-id pending-state consensus with the current interval
+		// snapshot the first time we see a pending change for the id. TS
+		// lazy-initializes `pending[id]` on first submitDelta with the
+		// interval as consensus. (TS: intervalCollection.ts submitDelta.)
+		private void EnsurePendingConsensusForIdNoLock(string id, SequenceInterval interval)
 		{
-			string? id = interval.Id;
-			if (string.IsNullOrEmpty(id) || _pendingChanges.ContainsKey(id))
+			if (_pendingChanges.ContainsKey(id))
 			{
 				return;
 			}
 
-			_pendingChanges[id] = new PendingIntervalChange()
+			_pendingChanges[id] = new PendingChangesForId()
 			{
 				ConsensusStart = interval.StartPosition,
 				ConsensusEnd = interval.EndPosition,
 				ConsensusStartSide = interval.StartSide,
 				ConsensusEndSide = interval.EndSide,
 				ConsensusProperties = MergeTree.PropertyMap.ClonePropertySet(interval.Properties) ?? new MergeTree.PropertySet(),
-				PendingStartSegment = interval.Start.Segment,
-				PendingEndSegment = interval.End.Segment,
 			};
+		}
+
+		private void EnqueuePendingChangeNoLock(string id, PendingIntervalChange pendingChange)
+		{
+			if (_pendingChanges.TryGetValue(id, out PendingChangesForId? pending))
+			{
+				pending.Queue.Add(pendingChange);
+			}
 		}
 
 		private static bool IntervalOverlapsInclusive(SequenceInterval interval, int startPosition, int endPosition)
