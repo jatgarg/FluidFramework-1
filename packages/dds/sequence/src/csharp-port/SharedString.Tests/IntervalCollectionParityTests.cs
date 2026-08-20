@@ -399,6 +399,110 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(1, slideCount);
 		}
 
+		[Fact]
+		public void ChangeProperties_EqualValue_StillSubmitsWireOp()
+		{
+			// V2-W04 regression. TS ref: packages/dds/sequence/src/
+			// intervalCollection.ts changeInterval — submitSerializedOperation
+			// runs unconditionally when props is supplied. The port must not
+			// filter no-op writes out of the wire stream.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			collection.Add(2, 5, intervalId: "i1", properties: new PropertySet { ["color"] = "red" });
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Re-writing the same value with the same key should still
+			// emit a wire op — TS does the same.
+			collection.ChangeProperties("i1", new PropertySet { ["color"] = "red" });
+
+			Assert.Single(sender.Sent);
+			using JsonDocument document = JsonDocument.Parse(sender.Sent[0].OpJson);
+			JsonElement value = document.RootElement.GetProperty("value");
+			Assert.Equal("change", value.GetProperty("opName").GetString());
+		}
+
+		[Fact]
+		public void ChangeProperties_DeleteAbsentKey_StillSubmitsWireOp()
+		{
+			// V2-W04 regression. TS ref: packages/dds/sequence/src/
+			// intervalCollection.ts changeInterval — deleting a key that was
+			// never present still submits the op. The receiver-side
+			// property-manager handles the no-op semantics.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			collection.Add(2, 5, intervalId: "i1");
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			collection.ChangeProperties("i1", new PropertySet { ["missing"] = null });
+
+			Assert.Single(sender.Sent);
+		}
+
+		[Fact]
+		public void ChangeProperties_EqualValue_DoesNotSuppressLaterRemoteEndpointChange()
+		{
+			// V2-W04 regression. Before the fix, ChangeProperties() with an
+			// equal value would allocate _pendingChanges[id] but never emit a
+			// wire op, so no ACK could clear it; a subsequent remote endpoint
+			// change would then be routed into UpdatePendingConsensusNoLock
+			// and quietly reconciled into a phantom pending record rather than
+			// applied to the live interval.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			SequenceInterval interval = collection.Add(2, 5, intervalId: "i1", properties: new PropertySet { ["color"] = "red" });
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Local no-op property write.
+			collection.ChangeProperties("i1", new PropertySet { ["color"] = "red" });
+			var sentPropertyOp = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			// ACK the property op so pending state clears.
+			ProcessLocalAck(local, sentPropertyOp, refSeq: 2, seq: 3);
+
+			// Remote endpoint change now must reach the live interval, not
+			// be swallowed by a leaked pending record.
+			ProcessRemoteIntervalChange(local, "comments", "i1", 3, 7, refSeq: 3, seq: 4);
+
+			SequenceInterval? current = collection.GetIntervalById("i1");
+			Assert.NotNull(current);
+			Assert.Equal(3, current!.StartPosition);
+			Assert.Equal(7, current.EndPosition);
+		}
+
+		[Fact]
+		public void Change_NoEndpointNoProps_DoesNotAllocatePendingState()
+		{
+			// V2-W04 regression. A Change() call with nothing to do must not
+			// leak a pending record. The observable effect is that a later
+			// remote endpoint change on the same interval reaches the live
+			// interval.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			collection.Add(2, 5, intervalId: "i1");
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Change with everything null: no endpoint change, no props.
+			collection.Change("i1", newStart: null, newEnd: null);
+			Assert.Empty(sender.Sent);
+
+			// Remote endpoint change must reach the live interval.
+			ProcessRemoteIntervalChange(local, "comments", "i1", 3, 7, refSeq: 2, seq: 3);
+
+			SequenceInterval? current = collection.GetIntervalById("i1");
+			Assert.NotNull(current);
+			Assert.Equal(3, current!.StartPosition);
+			Assert.Equal(7, current.EndPosition);
+		}
+
 		private static SharedString CreateSharedStringWithText(string text)
 		{
 			SharedString sharedString = new();

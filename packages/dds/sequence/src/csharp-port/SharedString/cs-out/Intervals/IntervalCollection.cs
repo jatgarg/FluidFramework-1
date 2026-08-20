@@ -300,21 +300,31 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			MergeTree.PropertySet? changedProps = null;
 			MergeTree.PropertySet? propertyDeltas = null;
 			bool hasEndpointChange = newStart.HasValue || newEnd.HasValue || newStartSide.HasValue || newEndSide.HasValue;
+			bool willSubmit = hasEndpointChange || props is not null;
 			lock (_lock)
 			{
-				// Snapshot the current interval state into a pending record
-				// BEFORE mutating. Remote changes arriving before ACK reconcile
-				// against this consensus snapshot; our own ACK later uses it to
-				// detect endpoint slides. (TS: intervalCollection.ts.)
 				SequenceInterval? preChangeInterval = GetActiveIntervalById(id);
-				if (preChangeInterval is not null)
+				if (preChangeInterval is null)
+				{
+					return null;
+				}
+
+				// Snapshot the current interval state into a pending record
+				// BEFORE mutating, but only when we will actually submit a wire
+				// op — otherwise we would leak an unacknowledgeable pending
+				// entry that would swallow later remote reconciliation. Remote
+				// changes arriving before ACK reconcile against this consensus
+				// snapshot; our own ACK later uses it to detect endpoint
+				// slides. (TS: intervalCollection.ts.)
+				if (willSubmit)
 				{
 					CapturePendingConsensusIfMissingNoLock(preChangeInterval);
 				}
 
 				(interval, previousStart, previousEnd) = hasEndpointChange
 					? ChangeCore(id, newStart, newEnd, newStartSide, newEndSide)
-					: (GetActiveIntervalById(id), null, null);
+					: (preChangeInterval, null, null);
+
 				if (interval is null)
 				{
 					return null;
@@ -340,23 +350,27 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 						interval.EndSide,
 						props: changedProps is { Count: > 0 } ? changedProps : null);
 				}
-				else if (changedProps is { Count: > 0 })
+				else if (props is not null)
 				{
-					_opSender.SendIntervalPropertyChanged(Name, id, props!);
+					// Submit unconditionally when the caller supplied a props
+					// dictionary. TS submits without filtering (see
+					// intervalCollection.ts changeInterval); the receiver-side
+					// ApplyPropertyChanges collapses no-op deltas.
+					_opSender.SendIntervalPropertyChanged(Name, id, props);
 				}
 			}
 
 			// Emit a single combined "changed" event carrying both endpoint
 			// delta and property delta so listeners see the change atomically.
-			// (TS: intervalCollection.ts changeInterval.)
+			// TS fires the `changeInterval` event unconditionally at submit
+			// time so listeners see the change atomically alongside the wire
+			// op, even for equal-value property writes. `propertyChanged`
+			// stays gated on real deltas (matches TS's property-manager
+			// semantics). (TS: intervalCollection.ts changeInterval.)
 			MergeTree.PropertySet combinedDeltas = propertyDeltas ?? new MergeTree.PropertySet();
-			if (hasEndpointChange || (changedProps is { Count: > 0 } && propertyDeltas is not null))
+			if (willSubmit)
 			{
-				if (hasEndpointChange)
-				{
-					RaiseChange(interval, previousStart, previousEnd, slide: false, local: true, operation: null);
-				}
-
+				RaiseChange(interval, previousStart, previousEnd, slide: false, local: true, operation: null);
 				RaiseChanged(interval, combinedDeltas, previousStart, previousEnd, slide: false, local: true, operation: null);
 
 				if (changedProps is { Count: > 0 } && propertyDeltas is not null)
@@ -788,6 +802,21 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		internal void ApplyOwnAck(MergeTree.IntervalPropertyChangedOpMsg op)
 		{
 			ArgumentNullException.ThrowIfNull(op);
+
+			if (op.IntervalId is not string id)
+			{
+				return;
+			}
+
+			// Clear the pending consensus entry we allocated in Change(). TS
+			// clears the head of its pending-change queue at ACK time; the port
+			// keeps a single record per id (Wave B) so a straight Remove is the
+			// TS-equivalent step. (TS: intervalCollection.ts ackChange
+			// property-only path.)
+			lock (_lock)
+			{
+				_pendingChanges.Remove(id);
+			}
 		}
 
 		internal void DropDetachedIntervalForRebase(string id)
