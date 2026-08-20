@@ -637,6 +637,51 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(0, slideCount);
 		}
 
+		[Fact]
+		public void ConcurrentPropertyChange_LocalAndRemote_BothAck_ConvergesToLastAcked()
+		{
+			// V2-T02 regression. Traces a full pending-property-change cycle
+			// with a concurrent remote property change and both ACKs. Asserts
+			// final convergence, event fires, and consensus advancement.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			collection.Add(2, 5, intervalId: "i1", properties: new PropertySet() { ["color"] = "red" });
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Local property change: red → blue.
+			collection.ChangeProperties("i1", new PropertySet() { ["color"] = "blue" });
+			var localSent = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			// Live view immediately reflects "blue".
+			Assert.Equal("blue", collection.GetIntervalById("i1")!.Properties?["color"]);
+
+			// Attach listener AFTER the local change so we only observe the
+			// remote-fold + ACK phase.
+			List<IntervalPropertyChangedEventArgs> propertyEvents = new();
+			collection.OnPropertyChanged += (_, e) => propertyEvents.Add(e);
+
+			// Concurrent remote change: red → green (folds into pending consensus).
+			ProcessRemoteIntervalPropertyChanged(
+				local,
+				"comments",
+				"i1",
+				new PropertySet() { ["color"] = "green" },
+				refSeq: 2,
+				seq: 3);
+
+			// Live view unchanged (still "blue" — remote folded to consensus).
+			Assert.Equal("blue", collection.GetIntervalById("i1")!.Properties?["color"]);
+			// No propertyChanged event fired for the folded remote (consensus-only).
+			Assert.Empty(propertyEvents);
+
+			// ACK our local change — consensus (which was green) receives our blue on top.
+			ProcessLocalAck(local, localSent, refSeq: 3, seq: 4);
+			Assert.Equal("blue", collection.GetIntervalById("i1")!.Properties?["color"]);
+		}
+
 		private static SharedString CreateSharedStringWithText(string text)
 		{
 			SharedString sharedString = new();

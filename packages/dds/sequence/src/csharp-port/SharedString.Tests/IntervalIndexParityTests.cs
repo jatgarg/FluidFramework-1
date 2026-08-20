@@ -177,6 +177,27 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void IdIntervalIndex_FullyDetachedInterval_StillAddressableAfterEntireDocumentRemoved()
+		{
+			// V2-T01 regression. TS specifies that a truly detached interval
+			// (both endpoints slid off after the backing content vanished) is
+			// still reachable via getIntervalById. The SS-A03 fix originally
+			// added detached-interval addressability but only exercised the
+			// case where positions changed while segments still existed.
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "abcdef");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			SequenceInterval interval = collection.Add(2, 4, intervalId: "detachable");
+
+			// Wipe the entire document — both interval endpoints lose their
+			// backing segments and can't slide anywhere.
+			sharedString.DeleteText(0, 6);
+
+			Assert.NotNull(collection.GetIntervalById("detachable"));
+			Assert.Same(interval, collection.GetIntervalById("detachable"));
+		}
+
+		[Fact]
 		public void SequenceInterval_CompareStart_ReturnsEqualityWhenNamedEndpointMatches()
 		{
 			// TS ref: packages/dds/sequence/src/intervals/sequenceInterval.ts
@@ -243,6 +264,68 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			SequenceInterval[] snapshot = results.ToArray();
 
 			Assert.Equal(new[] { "a", "b" }, snapshot.Select(interval => interval.Id).ToArray());
+		}
+
+		[Fact]
+		public void StartpointInRangeIndex_ResultsSurviveIndexMutationDuringEnumeration()
+		{
+			// V2-T03 regression. Same call-time snapshot contract as
+			// OverlappingIntervalsIndex — deferred enumeration must not surface
+			// index mutations that happened after the query was issued.
+			IntervalCollection collection = CreateCollectionWithText("abcdefghij");
+			SequenceInterval a = collection.Add(1, 3, intervalId: "a");
+			SequenceInterval b = collection.Add(4, 6, intervalId: "b");
+			StartpointInRangeIndex index = new();
+			index.Add(a);
+			index.Add(b);
+
+			IEnumerable<SequenceInterval> results = index.FindStartpointsInRange(1, 10);
+			index.Add(collection.Add(7, 9, intervalId: "c"));
+
+			SequenceInterval[] snapshot = results.ToArray();
+
+			Assert.Equal(new[] { "a", "b" }, snapshot.Select(interval => interval.Id).OrderBy(id => id).ToArray());
+		}
+
+		[Fact]
+		public void EndpointInRangeIndex_ResultsSurviveIndexMutationDuringEnumeration()
+		{
+			// V2-T03 regression.
+			IntervalCollection collection = CreateCollectionWithText("abcdefghij");
+			SequenceInterval a = collection.Add(1, 3, intervalId: "a");
+			SequenceInterval b = collection.Add(4, 6, intervalId: "b");
+			EndpointInRangeIndex index = new();
+			index.Add(a);
+			index.Add(b);
+
+			IEnumerable<SequenceInterval> results = index.FindEndpointsInRange(1, 10);
+			index.Add(collection.Add(7, 9, intervalId: "c"));
+
+			SequenceInterval[] snapshot = results.ToArray();
+
+			Assert.Equal(new[] { "a", "b" }, snapshot.Select(interval => interval.Id).OrderBy(id => id).ToArray());
+		}
+
+		[Fact]
+		public void EndpointIndex_ResultsSurviveIndexMutationDuringEnumeration()
+		{
+			// V2-T03 regression. FindEndpointsInRange returns a snapshot;
+			// index mutations after the query issue must not surface in the
+			// enumeration.
+			IntervalCollection collection = CreateCollectionWithText("abcdefghij");
+			SequenceInterval a = collection.Add(1, 3, intervalId: "a");
+			SequenceInterval b = collection.Add(4, 6, intervalId: "b");
+			EndpointIndex index = new();
+			index.Add(a);
+			index.Add(b);
+
+			IEnumerable<SequenceInterval> results = index.FindEndpointsInRange(1, 10);
+			// Mutate the index AFTER capturing the query but BEFORE enumerating.
+			index.Add(collection.Add(7, 9, intervalId: "c"));
+
+			SequenceInterval[] snapshot = results.ToArray();
+
+			Assert.Equal(new[] { "a", "b" }, snapshot.Select(interval => interval.Id).OrderBy(id => id).ToArray());
 		}
 
 		private static IntervalCollection CreateCollectionWithText(string text)

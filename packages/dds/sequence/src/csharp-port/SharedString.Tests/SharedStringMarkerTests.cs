@@ -266,6 +266,24 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Null(ackedString.GetMarkerFromId("p-acked"));
 		}
 
+		[Fact]
+		public void NamedMarker_ClearedThroughObliterate()
+		{
+			// V2-T04 regression. TS specifies that a named-marker's id-index
+			// entry is removed when the marker segment is obliterated (not
+			// just when it's plain-removed). The existing marker-cleanup
+			// test uses delete; the obliterate test uses an anonymous marker.
+			// This fills the gap.
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "abc");
+			sharedString.InsertMarker(3, ReferenceType.Tile, MarkerProps("p-obliterate", "para"));
+			Assert.NotNull(sharedString.GetMarkerFromId("p-obliterate"));
+
+			sharedString.ObliterateRange(2, 4);
+
+			Assert.Null(sharedString.GetMarkerFromId("p-obliterate"));
+		}
+
 		private static PropertySet MarkerProps(string markerId, params string[] tileLabels)
 		{
 			return new PropertySet()
