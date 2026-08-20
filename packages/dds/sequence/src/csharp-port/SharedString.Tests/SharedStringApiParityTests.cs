@@ -29,7 +29,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("hello", sharedString.GetText());
 			Assert.Equal("bold", Assert.IsType<string>(sharedString.GetPropertiesAtPosition(0)!["style"]));
 			SequenceDeltaEventArgs captured = Assert.Single(events);
-			Assert.True(captured.IsLocal);
+			Assert.True(captured.Local);
 			Assert.Equal("insert", captured.OpType);
 			SequenceDeltaRange range = Assert.Single(captured.Ranges);
 			Assert.Same(range, captured.First);
@@ -188,10 +188,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			SharedString sharedString = new();
 			sharedString.InsertText(0, "ab");
 			sharedString.InsertMarker(1, ReferenceType.Tile, MarkerProps("m1", "anchor"));
-			Dictionary<string, object?> relativePosition = new()
+			RelativePosition relativePosition = new()
 			{
-				["id"] = "m1",
-				["before"] = true,
+				Id = "m1",
+				Before = true,
 			};
 
 			sharedString.InsertMarkerRelative(relativePosition, ReferenceType.Tile, MarkerProps("m0", "before"));
@@ -220,13 +220,16 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void SearchForMarker_OmittedLegacyLabel_DoesNotMatchAnyTile()
+		public void SearchForMarker_TsSignatureRequiresLabel_ThrowsOnNull()
 		{
+			// V2-I02 regression. The legacy overload with tileLabel = null
+			// returning null silently was removed to match TS which requires
+			// the marker label. Callers must now supply a non-null label.
 			SharedString sharedString = new();
 			sharedString.InsertText(0, "ab");
 			sharedString.InsertMarker(1, ReferenceType.Tile, MarkerProps("target", "target"));
 
-			Assert.Null(sharedString.SearchForMarker(0));
+			Assert.Throws<ArgumentNullException>(() => sharedString.SearchForMarker(0, markerLabel: null!));
 		}
 
 		[Fact]
@@ -304,7 +307,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			sender.Sent.Clear();
 			sharedString.OnSequenceDelta += (target, args) =>
 			{
-				if (args.IsLocal && args.OpType == "insert" && args.Text == "e")
+				if (args.Local && args.OpType == "insert" && args.Text == "e")
 				{
 					((SharedString)target).RemoveText(3, 4);
 				}

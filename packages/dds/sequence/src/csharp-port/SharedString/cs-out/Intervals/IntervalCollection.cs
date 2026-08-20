@@ -502,10 +502,12 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				return Array.Empty<SequenceInterval>();
 			}
 
+			// V2-I01: consume the maintained OverlappingIntervalsIndex rather
+			// than re-scanning the ID map. The index materializes a snapshot
+			// per call, so callers get the same stability guarantees.
 			lock (_lock)
 			{
-				return SnapshotIntervals()
-					.Where(interval => IntervalOverlapsInclusive(interval, startPosition, endPosition))
+				return _overlappingIndex.FindOverlapping(startPosition, endPosition)
 					.OrderBy(interval => interval.StartPosition)
 					.ThenBy(interval => interval.EndPosition)
 					.ThenBy(interval => interval.Id, StringComparer.Ordinal)
@@ -520,10 +522,10 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				return Array.Empty<SequenceInterval>();
 			}
 
+			// V2-I01: consume StartpointInRangeIndex.
 			lock (_lock)
 			{
-				return SnapshotIntervals()
-					.Where(interval => interval.StartPosition is int position && position >= start && position <= end)
+				return _startpointIndex.FindStartpointsInRange(start, end)
 					.OrderBy(interval => interval.StartPosition)
 					.ThenBy(interval => interval.EndPosition)
 					.ThenBy(interval => interval.Id, StringComparer.Ordinal)
@@ -538,10 +540,10 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				return Array.Empty<SequenceInterval>();
 			}
 
+			// V2-I01: consume EndpointInRangeIndex.
 			lock (_lock)
 			{
-				return SnapshotIntervals()
-					.Where(interval => interval.EndPosition is int position && position >= start && position <= end)
+				return _endpointInRangeIndex.FindEndpointsInRange(start, end)
 					.OrderBy(interval => interval.EndPosition)
 					.ThenBy(interval => interval.StartPosition)
 					.ThenBy(interval => interval.Id, StringComparer.Ordinal)
@@ -551,14 +553,10 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 		public SequenceInterval? PreviousInterval(int position)
 		{
+			// V2-I01: consume EndpointIndex.
 			lock (_lock)
 			{
-				return SnapshotIntervals()
-					.Where(interval => interval.EndPosition is int endPosition && endPosition <= position)
-					.OrderByDescending(interval => interval.EndPosition)
-					.ThenByDescending(interval => interval.StartPosition)
-					.ThenByDescending(interval => interval.Id, StringComparer.Ordinal)
-					.FirstOrDefault();
+				return _endpointIndex.PreviousInterval(position);
 			}
 		}
 
@@ -566,12 +564,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		{
 			lock (_lock)
 			{
-				return SnapshotIntervals()
-					.Where(interval => interval.EndPosition is int endPosition && endPosition >= position)
-					.OrderBy(interval => interval.EndPosition)
-					.ThenBy(interval => interval.StartPosition)
-					.ThenBy(interval => interval.Id, StringComparer.Ordinal)
-					.FirstOrDefault();
+				return _endpointIndex.NextInterval(position);
 			}
 		}
 
@@ -1064,7 +1057,9 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			string id = string.IsNullOrEmpty(intervalId) ? Guid.NewGuid().ToString() : intervalId;
 			if (validateDuplicate && GetActiveIntervalById(id) is not null)
 			{
-				throw new InvalidOperationException($"Interval '{id}' already exists in collection '{Name}'.");
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					$"Interval '{id}' already exists in collection '{Name}'.");
 			}
 
 			MergeTree.LocalReferencePosition startReference = CreateEndpointReference(start, intervalType, isStartEndpoint: true, startSide, endSide, startSentinel, remotePerspective);
@@ -1351,11 +1346,16 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			return _idIndex.GetIntervalById(id);
 		}
 
+		// V2-I06: unified public-API validation. Interval endpoint order,
+		// duplicate ID, and unsupported change shapes all surface as
+		// OcsException(InvalidOperation) so callers catch a single family.
 		private static void ValidateEndpointOrder(int start, int end)
 		{
 			if (start > end)
 			{
-				throw new ArgumentOutOfRangeException(nameof(end), "Interval start must be less than or equal to end.");
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					$"Interval start ({start}) must be less than or equal to end ({end}).");
 			}
 		}
 

@@ -36,13 +36,10 @@ namespace Microsoft.Office.Web.Fluid
 
 		public Marker? Marker { get; set; }
 
+		// TS SequenceDeltaEvent exposes a single `isLocal` boolean. The
+		// port uses `Local` throughout (PascalCase C# convention). Kept as
+		// the sole spelling per V2-I09 — the alias `IsLocal` was removed.
 		public bool Local { get; set; }
-
-		public bool IsLocal
-		{
-			get => Local;
-			set => Local = value;
-		}
 
 		public PropertySet? AnnotatedProperties { get; set; }
 
@@ -383,13 +380,26 @@ namespace Microsoft.Office.Web.Fluid
 			});
 		}
 
-		public void InsertTextRelative(object relativePos1, string text, PropertySet? props = null)
+		// V2-I03: public API takes the concrete RelativePosition type. The
+		// reflection-based reader is kept internal for wire deserialization
+		// where relativePos1 comes off the JSON as a parsed shape.
+		public void InsertTextRelative(RelativePosition relativePos1, string text, PropertySet? props = null)
 		{
+			if (relativePos1 is null)
+			{
+				throw new ArgumentNullException(nameof(relativePos1));
+			}
+
 			InsertText(PositionFromRelativePosition(relativePos1, nameof(relativePos1)), text, props);
 		}
 
-		public void InsertMarkerRelative(object relativePos1, ReferenceType refType, PropertySet? props = null)
+		public void InsertMarkerRelative(RelativePosition relativePos1, ReferenceType refType, PropertySet? props = null)
 		{
+			if (relativePos1 is null)
+			{
+				throw new ArgumentNullException(nameof(relativePos1));
+			}
+
 			InsertMarker(PositionFromRelativePosition(relativePos1, nameof(relativePos1)), refType, props);
 		}
 
@@ -541,19 +551,9 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		public Marker? SearchForMarker(int startPos, bool forwards = true, string? tileLabel = null)
-		{
-			if (tileLabel is null)
-			{
-				return null;
-			}
-
-			lock (_lock)
-			{
-				return _client.SearchForTileMarker(startPos, forwards, tileLabel);
-			}
-		}
-
+		// TS ISharedString.searchForMarker requires the marker label. V2-I02:
+		// the legacy overload with `tileLabel = null` returning null was
+		// removed to match the TS contract — callers must supply a label.
 		public Marker? SearchForMarker(int startPos, string markerLabel, bool forwards = true)
 		{
 			if (markerLabel is null)
@@ -567,7 +567,13 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		public void AnnotateRange(int start, int end, PropertySet props)
+		// V2-I07: public props inputs accept IReadOnlyDictionary<string,
+		// object?> so callers can pass their own map shapes. The internal
+		// path still consumes a PropertySet — we materialize at the
+		// boundary if the caller supplies a different concrete type. TS
+		// treats PropertySet as a structural Record<string, unknown>; the
+		// port matches by widening the input contract.
+		public void AnnotateRange(int start, int end, IReadOnlyDictionary<string, object?> props)
 		{
 			if (props is null)
 			{
@@ -580,13 +586,14 @@ namespace Microsoft.Office.Web.Fluid
 			// ({end <= start}) on the local caller path.
 			ValidateAnnotateRange(start, end);
 
+			PropertySet propsAsSet = MaterializePropertySet(props);
 			using IDisposable mutation = EnterLocalMutation();
 			MergeTreeAnnotateMsg annotateMsg;
 			IReadOnlyList<SequenceDeltaRange> ranges;
 			lock (_lock)
 			{
-				ranges = CreateAnnotateEventRanges(start, end, props);
-				annotateMsg = _client.Annotate(start, end, props);
+				ranges = CreateAnnotateEventRanges(start, end, propsAsSet);
+				annotateMsg = _client.Annotate(start, end, propsAsSet);
 			}
 
 			EmitOrBatchLocalOp(annotateMsg, _annotateOpType);
@@ -601,9 +608,25 @@ namespace Microsoft.Office.Web.Fluid
 				Text = null,
 				Local = true,
 				ClientId = _client.ClientId,
-				AnnotatedProperties = CloneAnnotateProps(props),
+				AnnotatedProperties = CloneAnnotateProps(propsAsSet),
 				Ranges = ranges,
 			});
+		}
+
+		private static PropertySet MaterializePropertySet(IReadOnlyDictionary<string, object?> input)
+		{
+			if (input is PropertySet propertySet)
+			{
+				return propertySet;
+			}
+
+			PropertySet materialized = new();
+			foreach (KeyValuePair<string, object?> entry in input)
+			{
+				materialized[entry.Key] = entry.Value;
+			}
+
+			return materialized;
 		}
 
 		private void ValidateAnnotateRange(int start, int end)
@@ -1116,6 +1139,35 @@ namespace Microsoft.Office.Web.Fluid
 			{
 				_localMutationDepth--;
 			}
+		}
+
+		// Strongly-typed local path — no reflection needed since we own the
+		// concrete type. Matches TS mergeTree.ts posFromRelativePos.
+		private int PositionFromRelativePosition(RelativePosition relativePosition, string name)
+		{
+			if (string.IsNullOrEmpty(relativePosition.Id))
+			{
+				throw new ArgumentException("Relative position id is required.", name);
+			}
+
+			Marker? marker = GetMarkerFromId(relativePosition.Id);
+			if (marker is null)
+			{
+				throw new ArgumentException("Relative position marker could not be found.", name);
+			}
+
+			int? position = GetPositionOfMarker(marker);
+			if (position is not int markerPosition)
+			{
+				throw new ArgumentException("Relative position marker is not in the current view.", name);
+			}
+
+			if (relativePosition.Before)
+			{
+				return markerPosition - relativePosition.Offset;
+			}
+
+			return markerPosition + marker.CachedLength + relativePosition.Offset;
 		}
 
 		private int PositionFromRelativePosition(object? relativePosition, string name)

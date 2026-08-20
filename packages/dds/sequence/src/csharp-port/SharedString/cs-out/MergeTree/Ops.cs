@@ -44,24 +44,22 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         /// </summary>
         ObliterateSided = 5,
 
-        /// <summary>
-        /// Legacy C# interval add discriminator. TS interval ops use the SharedString interval map envelope.
-        /// </summary>
+        // V2-I04: interval discriminators (10-13) are port-internal only —
+        // TS carries interval ops through the intervalCollectionMap "act"
+        // envelope, not as merge-tree delta types. Kept in this enum for
+        // backwards compat with existing port dispatch code; new code should
+        // prefer IntervalOpKind (defined on IntervalOpMsg) or route via the
+        // "act" wire shape.
+        /// <summary>Port-internal: interval add. Not a TS wire discriminator.</summary>
         IntervalAdd = 10,
 
-        /// <summary>
-        /// Legacy C# interval delete discriminator. TS interval ops use the SharedString interval map envelope.
-        /// </summary>
+        /// <summary>Port-internal: interval delete. Not a TS wire discriminator.</summary>
         IntervalDelete = 11,
 
-        /// <summary>
-        /// Legacy C# interval change discriminator. TS interval ops use the SharedString interval map envelope.
-        /// </summary>
+        /// <summary>Port-internal: interval change. Not a TS wire discriminator.</summary>
         IntervalChange = 12,
 
-        /// <summary>
-        /// Legacy C# interval property-changed discriminator. TS interval ops use the SharedString interval map envelope.
-        /// </summary>
+        /// <summary>Port-internal: interval property-changed. Not a TS wire discriminator.</summary>
         IntervalPropertyChanged = 13,
     }
 

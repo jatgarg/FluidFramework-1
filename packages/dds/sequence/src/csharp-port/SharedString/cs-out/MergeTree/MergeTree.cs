@@ -152,6 +152,18 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             return AnnotateRange(start, end, props, refSeq, seq, GetClientId(clientId), perspectiveSeq);
         }
 
+        // V2-I10: partial-length invariant verification is expensive
+        // (rebuilds the block's aggregates from scratch and compares). It
+        // used to run on every structural update on production paths. Now
+        // gated behind a per-tree diagnostics flag defaulting to off; tests
+        // and diagnostics can opt in via EnablePartialLengthInvariantChecks.
+        public bool PartialLengthInvariantChecksEnabled { get; set; }
+
+        internal void EnablePartialLengthInvariantChecks(bool enabled = true)
+        {
+            PartialLengthInvariantChecksEnabled = enabled;
+        }
+
         /// <summary>
         /// Gets the total length of the merge tree in the current local view.
         /// </summary>
@@ -445,6 +457,14 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return GetLength();
             }
 
+            // V2-I08 note: TS returns -1 (DetachedReferencePosition) rather
+            // than null for detached endpoints — see
+            // client.ts:localReferencePositionToPosition. Finding L7
+            // established this parity for the port; SequenceInterval and
+            // LocalReferencePositionToPosition surface the same sentinel.
+            // The `int?` return type on this method is a legacy shape kept
+            // for C# ergonomics; callers should treat -1 as the detached
+            // sentinel rather than expect null.
             if (reference.Segment is null)
             {
                 return DetachedReferencePosition;
@@ -1114,7 +1134,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 block = block.Parent;
             }
 
-            if (updatedBlocks is not null)
+            if (updatedBlocks is not null && PartialLengthInvariantChecksEnabled)
             {
                 foreach (MergeBlock updatedBlock in updatedBlocks)
                 {
@@ -3308,8 +3328,13 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             RebuildFromRoot();
         }
 
-        private static void ValidateAffectedBlockPaths(IEnumerable<MergeBlock> blocks)
+        private void ValidateAffectedBlockPaths(IEnumerable<MergeBlock> blocks)
         {
+            if (!PartialLengthInvariantChecksEnabled)
+            {
+                return;
+            }
+
             HashSet<MergeBlock> visited = new();
             foreach (MergeBlock block in blocks)
             {

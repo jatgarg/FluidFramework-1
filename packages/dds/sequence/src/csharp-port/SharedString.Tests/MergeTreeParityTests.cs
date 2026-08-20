@@ -332,7 +332,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			SharedString sharedString = CreateSharedStringWithManyMarkers();
 
-			Marker? marker = sharedString.SearchForMarker(0, forwards: true, tileLabel: "target");
+			Marker? marker = sharedString.SearchForMarker(0, markerLabel: "target");
 			Assert.NotNull(marker);
 
 			Assert.Equal("target-8", marker!.GetId());
@@ -343,7 +343,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			SharedString sharedString = CreateSharedStringWithManyMarkers();
 
-			Marker? marker = sharedString.SearchForMarker(sharedString.GetLength() - 1, forwards: false, tileLabel: "target");
+			Marker? marker = sharedString.SearchForMarker(sharedString.GetLength() - 1, markerLabel: "target", forwards: false);
 			Assert.NotNull(marker);
 
 			Assert.Equal("target-8", marker!.GetId());
@@ -358,8 +358,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			int? position = sharedString.GetPositionOfMarker(marker!);
 			Assert.NotNull(position);
 
-			Assert.Same(marker, sharedString.SearchForMarker(position.Value, forwards: true, tileLabel: "target"));
-			Assert.Same(marker, sharedString.SearchForMarker(position.Value, forwards: false, tileLabel: "target"));
+			Assert.Same(marker, sharedString.SearchForMarker(position.Value, markerLabel: "target"));
+			Assert.Same(marker, sharedString.SearchForMarker(position.Value, markerLabel: "target", forwards: false));
 		}
 
 		[Fact]

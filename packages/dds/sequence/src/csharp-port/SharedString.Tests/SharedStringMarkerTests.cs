@@ -53,7 +53,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			sharedString.InsertText(0, "hello");
 			sharedString.InsertMarker(5, ReferenceType.Tile, MarkerProps("p1", "para"));
 
-			Marker? marker = sharedString.SearchForMarker(0, forwards: true, tileLabel: "para");
+			Marker? marker = sharedString.SearchForMarker(0, markerLabel: "para");
 
 			Assert.NotNull(marker);
 			Assert.Equal("p1", marker!.GetId());
@@ -66,7 +66,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			sharedString.InsertText(0, "hello");
 			sharedString.InsertMarker(5, ReferenceType.Tile, MarkerProps("p1", "para"));
 
-			Assert.Null(sharedString.SearchForMarker(0, forwards: true, tileLabel: "doesnotexist"));
+			Assert.Null(sharedString.SearchForMarker(0, markerLabel: "doesnotexist"));
 		}
 
 		[Fact]
