@@ -447,13 +447,24 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			return Change(id, newStart: null, newEnd: null, props: props);
 		}
 
+		// V2-A06: iterator filter matches BOTH the endpoint position AND the
+		// side. TS creates a transient interval with the plain number
+		// endpoint and Side.Before (the default), then walks the interval
+		// tree looking for exact `compareStart == 0` / `compareEnd == 0`
+		// matches — which is a position + side test. The port filters by
+		// position only would include intervals with the same position but
+		// different sides (e.g. a Before-sticky interval and an After-sticky
+		// interval at the same offset). Add the side check to match TS.
 		public IEnumerable<SequenceInterval> CreateForwardIteratorWithStartPosition(int startPos)
 		{
 			lock (_lock)
 			{
 				return SnapshotIntervals()
-					.Where(interval => interval.StartPosition is int position && position == startPos)
+					.Where(interval => interval.StartPosition is int position
+						&& position == startPos
+						&& interval.StartSide == IntervalUtils.DefaultSide)
 					.OrderBy(interval => interval.EndPosition)
+					.ThenBy(interval => interval.EndSide == IntervalUtils.DefaultSide ? 0 : 1)
 					.ThenBy(interval => interval.Id, System.StringComparer.Ordinal)
 					.ToArray();
 			}
@@ -464,8 +475,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			lock (_lock)
 			{
 				return SnapshotIntervals()
-					.Where(interval => interval.StartPosition is int position && position == startPos)
+					.Where(interval => interval.StartPosition is int position
+						&& position == startPos
+						&& interval.StartSide == IntervalUtils.DefaultSide)
 					.OrderByDescending(interval => interval.EndPosition)
+					.ThenByDescending(interval => interval.EndSide == IntervalUtils.DefaultSide ? 0 : 1)
 					.ThenByDescending(interval => interval.Id, System.StringComparer.Ordinal)
 					.ToArray();
 			}
@@ -476,8 +490,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			lock (_lock)
 			{
 				return SnapshotIntervals()
-					.Where(interval => interval.EndPosition is int position && position == endPos)
+					.Where(interval => interval.EndPosition is int position
+						&& position == endPos
+						&& interval.EndSide == IntervalUtils.DefaultSide)
 					.OrderBy(interval => interval.StartPosition)
+					.ThenBy(interval => interval.StartSide == IntervalUtils.DefaultSide ? 0 : 1)
 					.ThenBy(interval => interval.Id, System.StringComparer.Ordinal)
 					.ToArray();
 			}
@@ -488,8 +505,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			lock (_lock)
 			{
 				return SnapshotIntervals()
-					.Where(interval => interval.EndPosition is int position && position == endPos)
+					.Where(interval => interval.EndPosition is int position
+						&& position == endPos
+						&& interval.EndSide == IntervalUtils.DefaultSide)
 					.OrderByDescending(interval => interval.StartPosition)
+					.ThenByDescending(interval => interval.StartSide == IntervalUtils.DefaultSide ? 0 : 1)
 					.ThenByDescending(interval => interval.Id, System.StringComparer.Ordinal)
 					.ToArray();
 			}

@@ -193,16 +193,47 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         /// <returns><see langword="true" /> when the interval and range have a non-empty intersection.</returns>
         public bool Overlaps(int start, int end)
         {
-            int? intervalStartPosition = StartPosition;
-            int? intervalEndPosition = EndPosition;
-            if (!intervalStartPosition.HasValue || !intervalEndPosition.HasValue)
+            if (HasDetachedEndpoint)
             {
                 return false;
             }
 
-            int intervalStart = Math.Min(intervalStartPosition.Value, intervalEndPosition.Value);
-            int intervalEnd = Math.Max(intervalStartPosition.Value, intervalEndPosition.Value);
+            int? intervalStartPosition = StartPosition;
+            int? intervalEndPosition = EndPosition;
+            if (intervalStartPosition is not int startPositionValue
+                || intervalEndPosition is not int endPositionValue)
+            {
+                return false;
+            }
+
+            int intervalStart = Math.Min(startPositionValue, endPositionValue);
+            int intervalEnd = Math.Max(startPositionValue, endPositionValue);
             return IntervalUtils.RangesOverlap(intervalStart, intervalEnd, start, end);
+        }
+
+        /// <summary>
+        /// V2-A07: half-open overlap that matches TS <c>SequenceInterval.overlapsPos</c>.
+        /// Returns <see langword="true" /> when the interval end is strictly past
+        /// <paramref name="bstart" /> and the interval start is strictly before
+        /// <paramref name="bend" /> — same strict-less-than form as
+        /// <c>packages/dds/sequence/src/intervals/sequenceInterval.ts overlapsPos</c>.
+        /// </summary>
+        public bool OverlapsPos(int bstart, int bend)
+        {
+            if (HasDetachedEndpoint)
+            {
+                return false;
+            }
+
+            int? intervalStartPosition = StartPosition;
+            int? intervalEndPosition = EndPosition;
+            if (intervalStartPosition is not int startPositionValue
+                || intervalEndPosition is not int endPositionValue)
+            {
+                return false;
+            }
+
+            return endPositionValue > bstart && startPositionValue < bend;
         }
 
         /// <summary>

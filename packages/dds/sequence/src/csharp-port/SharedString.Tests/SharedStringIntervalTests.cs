@@ -9,6 +9,8 @@ using Microsoft.Office.Web.Fluid.Intervals;
 using Microsoft.Office.Web.Fluid.MergeTree;
 using Xunit;
 
+using IntervalSide = Microsoft.Office.Web.Fluid.Intervals.Side;
+
 namespace Microsoft.Office.Web.Fluid.Tests
 {
 	public sealed class SharedStringIntervalTests
@@ -173,6 +175,68 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			AssertIds(collection.CreateBackwardIteratorWithEndPosition(9), "a");
 			AssertIds(collection.CreateBackwardIteratorWithEndPosition(10), "c");
 			Assert.Empty(collection.CreateBackwardIteratorWithEndPosition(11));
+		}
+
+		[Fact]
+		public void CreateForwardIteratorWithStartPosition_FiltersOnStartSide()
+		{
+			// V2-A06 regression. TS's walkExactMatchesForward matches on
+			// compareStart == 0, which is position + side. Before the fix the
+			// port matched on position only, so a StartSide.After interval
+			// at the same position would leak in.
+			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+
+			// Both b (After start) and c (Before start) begin at position 3.
+			collection.Add(3, IntervalSide.After, 5, IntervalSide.Before, intervalId: "b");
+			collection.Add(3, IntervalSide.Before, 5, IntervalSide.Before, intervalId: "c");
+
+			// TS's transient interval uses defaultSide = Before for the plain
+			// numeric input. Only c matches — b's After startSide is excluded.
+			AssertIds(collection.CreateForwardIteratorWithStartPosition(3), "c");
+		}
+
+		[Fact]
+		public void CreateForwardIteratorWithEndPosition_FiltersOnEndSide()
+		{
+			// V2-A06 regression. Same fix on the end-position path.
+			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+
+			collection.Add(1, IntervalSide.Before, 5, IntervalSide.Before, intervalId: "beforeend");
+			collection.Add(1, IntervalSide.Before, 5, IntervalSide.After, intervalId: "afterend");
+
+			AssertIds(collection.CreateForwardIteratorWithEndPosition(5), "beforeend");
+		}
+
+		[Fact]
+		public void OverlapsPos_ZeroLengthInterval_OverlapsContainingRange()
+		{
+			// V2-A07 regression. TS overlapsPos permits zero-length intervals
+			// to overlap ranges that strictly contain the position — the old
+			// port required both ranges to be non-empty.
+			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			SequenceInterval zero = collection.Add(5, 5, intervalId: "z");
+
+			Assert.True(zero.OverlapsPos(4, 6));
+			Assert.False(zero.OverlapsPos(5, 5));
+			Assert.False(zero.OverlapsPos(6, 8));
+		}
+
+		[Fact]
+		public void OverlapsPos_ZeroLengthRange_OverlapsContainingInterval()
+		{
+			// V2-A07 regression. The reverse case — a zero-length probe range
+			// strictly inside an interval — must also report overlap under
+			// TS's strict-less-than semantics.
+			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+			SequenceInterval nonEmpty = collection.Add(2, 8, intervalId: "big");
+
+			Assert.True(nonEmpty.OverlapsPos(5, 5));
+			Assert.False(nonEmpty.OverlapsPos(2, 2));
+			Assert.False(nonEmpty.OverlapsPos(8, 8));
 		}
 
 		[Fact]
