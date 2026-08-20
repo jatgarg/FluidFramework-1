@@ -153,6 +153,44 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.True(PropertyMap.MatchProperties(null, new PropertySet()));
 		}
 
+		// V2-A11 regression. Wire-equivalent numeric values must compare
+		// equal regardless of CLR runtime type. TS uses `===` which treats
+		// numbers by value, not type — so `1 === 1.0 === 1L === 1u` all
+		// hold. Without this, delta-event range coalescing over-splits any
+		// path where the same JSON number lands as different CLR types.
+		[Fact]
+		public void MatchProperties_NumericValuesEqualAcrossCLRTypes()
+		{
+			Assert.True(PropertyMap.MatchProperties(
+				new PropertySet() { ["n"] = (int)1 },
+				new PropertySet() { ["n"] = (long)1 }));
+			Assert.True(PropertyMap.MatchProperties(
+				new PropertySet() { ["n"] = (int)1 },
+				new PropertySet() { ["n"] = (double)1.0 }));
+			Assert.True(PropertyMap.MatchProperties(
+				new PropertySet() { ["n"] = (long)42 },
+				new PropertySet() { ["n"] = (double)42.0 }));
+		}
+
+		[Fact]
+		public void MatchProperties_JsonElementNumberMatchesCLRNumeric()
+		{
+			using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse("42");
+			System.Text.Json.JsonElement element = document.RootElement.Clone();
+
+			Assert.True(PropertyMap.MatchProperties(
+				new PropertySet() { ["n"] = element },
+				new PropertySet() { ["n"] = 42 }));
+		}
+
+		[Fact]
+		public void MatchProperties_NumericValuesUnequalRejected()
+		{
+			Assert.False(PropertyMap.MatchProperties(
+				new PropertySet() { ["n"] = 1 },
+				new PropertySet() { ["n"] = 2 }));
+		}
+
 		private static InsertOperationStamp AckedStamp(long seq, int clientId)
 		{
 			return new InsertOperationStamp()

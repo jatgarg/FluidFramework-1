@@ -144,6 +144,53 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             return cloneMap;
         }
 
+        // V2-A13: deep-clone a property set. Values that are themselves
+        // dictionaries or lists are cloned recursively so a listener holding
+        // the clone cannot mutate nested structures that other consumers
+        // (batched ops, segment property maps) still reference. Scalars,
+        // strings, and IFluidDataObject handles are shared by reference —
+        // safe because those are effectively immutable from a listener's
+        // perspective.
+        public static PropertySet? DeepClonePropertySet(IReadOnlyDictionary<string, object?>? extension)
+        {
+            if (extension is null)
+            {
+                return null;
+            }
+
+            PropertySet cloneMap = new();
+            foreach (KeyValuePair<string, object?> property in extension)
+            {
+                cloneMap[property.Key] = DeepCloneValue(property.Value);
+            }
+
+            return cloneMap;
+        }
+
+        private static object? DeepCloneValue(object? value)
+        {
+            switch (value)
+            {
+                case null:
+                case string:
+                case bool:
+                case System.ValueType:
+                    return value;
+                case IReadOnlyDictionary<string, object?> nested:
+                    return DeepClonePropertySet(nested);
+                case IList list:
+                    List<object?> clonedList = new(list.Count);
+                    foreach (object? item in list)
+                    {
+                        clonedList.Add(DeepCloneValue(item));
+                    }
+
+                    return clonedList;
+                default:
+                    return value;
+            }
+        }
+
         /// <summary>
         /// Adds properties in one property set to another property set. If the property set being added to does not exist, creates one.
         /// </summary>
@@ -230,6 +277,16 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return valueA is string && valueB is string && (string)valueA == (string)valueB;
             }
 
+            // V2-A11: wire-equivalent numeric values must compare equal
+            // regardless of CLR runtime type. TS uses `===` which for numbers
+            // compares values, not types. int/long/double/JsonElement number
+            // that all encode the same JSON number should not split delta
+            // ranges. Match TS by unifying comparison at `double`.
+            if (TryReadNumeric(valueA, out double numericA) && TryReadNumeric(valueB, out double numericB))
+            {
+                return numericA == numericB;
+            }
+
             if (valueA is System.ValueType && valueB is System.ValueType)
             {
                 return valueA.Equals(valueB);
@@ -255,6 +312,61 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             }
 
             return Equals(valueA, valueB);
+        }
+
+        private static bool TryReadNumeric(object value, out double numeric)
+        {
+            switch (value)
+            {
+                case bool:
+                    numeric = 0;
+                    return false;
+                case byte b:
+                    numeric = b;
+                    return true;
+                case sbyte sb:
+                    numeric = sb;
+                    return true;
+                case short s:
+                    numeric = s;
+                    return true;
+                case ushort us:
+                    numeric = us;
+                    return true;
+                case int i:
+                    numeric = i;
+                    return true;
+                case uint ui:
+                    numeric = ui;
+                    return true;
+                case long l:
+                    numeric = l;
+                    return true;
+                case ulong ul:
+                    numeric = ul;
+                    return true;
+                case float f:
+                    numeric = f;
+                    return true;
+                case double d:
+                    numeric = d;
+                    return true;
+                case decimal dec:
+                    numeric = (double)dec;
+                    return true;
+                case System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.Number:
+                    if (je.TryGetDouble(out double val))
+                    {
+                        numeric = val;
+                        return true;
+                    }
+
+                    numeric = 0;
+                    return false;
+                default:
+                    numeric = 0;
+                    return false;
+            }
         }
 
         private static bool MatchPropertyLists(IList a, IList b)

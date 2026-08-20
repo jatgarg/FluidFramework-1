@@ -67,7 +67,12 @@ namespace Microsoft.Office.Web.Fluid
 
 		public ISegment Segment { get; set; } = null!;
 
-		public PropertySet? PropertyDeltas { get; set; }
+		// TS SequenceDeltaEvent.ranges[i].propertyDeltas is always a
+		// PropertySet — {} for non-annotate ops, the delta for annotate.
+		// Match TS by defaulting to an empty PropertySet so listeners can
+		// enumerate without null-guarding. (TS:
+		// packages/dds/sequence/src/sequenceDeltaEvent.ts.)
+		public PropertySet PropertyDeltas { get; set; } = new();
 	}
 
 	public delegate void SequenceDeltaEventHandler(object sender, SequenceDeltaEventArgs e);
@@ -569,6 +574,12 @@ namespace Microsoft.Office.Web.Fluid
 				throw new ArgumentNullException(nameof(props));
 			}
 
+			// V2-A14: match TS Client.getValidOpRange local-op validation.
+			// Zero-width or inverted ranges must be rejected before mutation
+			// or wire submission — TS throws RangeOutOfBounds
+			// ({end <= start}) on the local caller path.
+			ValidateAnnotateRange(start, end);
+
 			using IDisposable mutation = EnterLocalMutation();
 			MergeTreeAnnotateMsg annotateMsg;
 			IReadOnlyList<SequenceDeltaRange> ranges;
@@ -593,6 +604,24 @@ namespace Microsoft.Office.Web.Fluid
 				AnnotatedProperties = CloneAnnotateProps(props),
 				Ranges = ranges,
 			});
+		}
+
+		private void ValidateAnnotateRange(int start, int end)
+		{
+			int length = _client.MergeTree.GetLength();
+			if (start < 0 || start > length || start == length)
+			{
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					$"RangeOutOfBounds: start={start} is invalid for annotate on length={length}.");
+			}
+
+			if (end <= start)
+			{
+				throw new OcsException(
+					OcsGateErrorCode.InvalidOperation,
+					$"RangeOutOfBounds: end={end} must be greater than start={start} for annotate.");
+			}
 		}
 
 		public void LoadFromSnapshot(SharedStringSnapshotDto snapshot)
@@ -774,7 +803,7 @@ namespace Microsoft.Office.Web.Fluid
 					Position = deltaRange.Position,
 					Length = deltaRange.Length,
 					Segment = deltaRange.Segment,
-					PropertyDeltas = propertyDeltas,
+					PropertyDeltas = PropertyMap.DeepClonePropertySet(propertyDeltas) ?? new PropertySet(),
 				});
 			}
 
@@ -810,7 +839,7 @@ namespace Microsoft.Office.Web.Fluid
 					Position = rangePosition,
 					Length = length,
 					Segment = CloneSegmentSlice(segment, startOffset, endOffset),
-					PropertyDeltas = PropertyMap.ClonePropertySet(propertyDeltas),
+					PropertyDeltas = PropertyMap.DeepClonePropertySet(propertyDeltas) ?? new PropertySet(),
 				});
 			}
 
@@ -1058,18 +1087,12 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static PropertySet CloneAnnotateProps(IReadOnlyDictionary<string, object?>? props)
 		{
-			PropertySet clone = new();
-			if (props is null)
-			{
-				return clone;
-			}
-
-			foreach (KeyValuePair<string, object?> property in props)
-			{
-				clone[property.Key] = property.Value;
-			}
-
-			return clone;
+			// V2-A13: deep-clone so event listeners can't reach through to
+			// the enqueued canonical batch op's nested values. Scalars,
+			// strings, and IFluidDataObject handle refs are shared by
+			// reference (safe — they are immutable from a listener's
+			// perspective); nested dicts/lists are cloned recursively.
+			return PropertyMap.DeepClonePropertySet(props) ?? new PropertySet();
 		}
 
 		private IDisposable EnterLocalMutation()
@@ -1264,14 +1287,20 @@ namespace Microsoft.Office.Web.Fluid
 			SendLocalOp(op, opTypeName);
 		}
 
-		private static IMergeTreeOp CloneOpForEvent(IMergeTreeOp op)
+		private IMergeTreeOp CloneOpForEvent(IMergeTreeOp op)
 		{
-			// TS ref: sequence.ts / opBuilder.ts — TS's SequenceDeltaEvent exposes
-			// a live op reference; a listener that mutates it corrupts subsequent
-			// consumers. We insulate the port by handing the listener a serialized
-			// round-trip clone. ClientSeq is intentionally local-only and does not
-			// need to survive the clone (the wire path retains the original).
-			return SharedStringOpSerializer.Deserialize(SharedStringOpSerializer.Serialize(op));
+			// V2-A12: TS's SequenceDeltaEvent exposes a live op reference; a
+			// listener that mutates it corrupts subsequent consumers. We
+			// insulate the port by handing the listener a serialized
+			// round-trip clone. Threading the registry through both sides
+			// preserves live IFluidDataObject handles in the property tree
+			// — without it, an annotate carrying a handle value throws in
+			// Serialize.
+			// ClientSeq is intentionally local-only and does not need to
+			// survive the clone (the wire path retains the original).
+			return SharedStringOpSerializer.Deserialize(
+				SharedStringOpSerializer.Serialize(op, _registry),
+				_registry);
 		}
 
 		private void FlushBatchOps(IReadOnlyList<IMergeTreeOp> ops)

@@ -262,6 +262,34 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("/dataObjects/target", handle.Url);
 		}
 
+		[Fact]
+		public void LocalAnnotate_LiveHandleValue_DoesNotThrowInSequenceDeltaEvent()
+		{
+			// V2-A12 regression. The port defensively clones the event op via
+			// a JSON round-trip so listeners can't mutate the enqueued
+			// canonical op. Without threading the registry through, that
+			// serialization step throws OcsException when the props tree
+			// contains a live IFluidDataObject handle. Registry-threading
+			// must preserve live handles through the clone.
+			var sender = new FakeFluidDataObjectSender();
+			var registry = new FakeFluidDataObjectRegistry();
+			var handle = new TestFluidDataObject("target");
+			registry.Register(handle, "/dataObjects/target");
+			var sharedString = new SharedString("shared-string", sender, registry);
+			sharedString.InsertText(0, "hello");
+			sender.Sent.Clear();
+
+			SequenceDeltaEventArgs? received = null;
+			sharedString.OnSequenceDelta += (_, e) => received = e;
+
+			// Must not throw.
+			sharedString.AnnotateRange(0, 5, new PropertySet() { ["target"] = handle });
+
+			Assert.NotNull(received);
+			Assert.NotNull(received!.AnnotatedProperties);
+			Assert.NotNull(received.AnnotatedProperties!["target"]);
+		}
+
 		private static PropertySet MarkerProps(string markerId, string tileLabel, IFluidDataObject handle)
 		{
 			return new PropertySet()

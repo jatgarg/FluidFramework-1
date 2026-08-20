@@ -316,6 +316,102 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			AssertNoProperty(sharedString, 0, "color");
 		}
 
+		[Fact]
+		public void AnnotateRange_ZeroWidth_Throws()
+		{
+			// V2-A14 regression. TS Client.getValidOpRange rejects zero-width
+			// annotate as RangeOutOfBounds because `end <= start` is invalid
+			// for local ops. The port must not silently queue an empty
+			// annotate op.
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "hello world");
+
+			Assert.Throws<OcsException>(() =>
+				sharedString.AnnotateRange(3, 3, new PropertySet() { ["color"] = "red" }));
+		}
+
+		[Fact]
+		public void AnnotateRange_InvertedRange_Throws()
+		{
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "hello world");
+
+			Assert.Throws<OcsException>(() =>
+				sharedString.AnnotateRange(5, 2, new PropertySet() { ["color"] = "red" }));
+		}
+
+		[Fact]
+		public void AnnotateRange_StartAtLength_Throws()
+		{
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "hello world");
+
+			Assert.Throws<OcsException>(() =>
+				sharedString.AnnotateRange(sharedString.GetLength(), sharedString.GetLength(), new PropertySet() { ["color"] = "red" }));
+		}
+
+		[Fact]
+		public void SequenceDelta_InsertEvent_HasEmptyPropertyDeltas()
+		{
+			// V2-A15 regression. TS SequenceDeltaEvent.ranges[i].propertyDeltas
+			// is always a PropertySet — empty for non-annotate ops, populated
+			// for annotate. The port must not surface `null` here; listeners
+			// should be able to enumerate without null-guarding.
+			SharedString sharedString = new();
+			List<SequenceDeltaEventArgs> events = new();
+			sharedString.OnSequenceDelta += (_, e) => events.Add(e);
+
+			sharedString.InsertText(0, "hello");
+
+			SequenceDeltaEventArgs args = Assert.Single(events);
+			Assert.NotEmpty(args.Ranges);
+			foreach (SequenceDeltaRange range in args.Ranges)
+			{
+				Assert.NotNull(range.PropertyDeltas);
+				Assert.Empty(range.PropertyDeltas);
+			}
+		}
+
+		[Fact]
+		public void SequenceDelta_AnnotateEvent_NestedPropertyClonedDeeply()
+		{
+			// V2-A13 regression. Event listeners must not be able to mutate
+			// nested property values that also live inside the enqueued
+			// canonical op / segment property map.
+			SharedString sharedString = new();
+			sharedString.InsertText(0, "hello");
+
+			Dictionary<string, object?> originalMeta = new()
+			{
+				["author"] = "alice",
+				["ts"] = 1234,
+			};
+
+			List<SequenceDeltaEventArgs> events = new();
+			sharedString.OnSequenceDelta += (_, e) =>
+			{
+				events.Add(e);
+				// Mutate the nested dict that the listener received via the
+				// event. This must not reach through to the segment or the
+				// batched op.
+				if (e.AnnotatedProperties is not null
+					&& e.AnnotatedProperties["meta"] is IDictionary<string, object?> nested)
+				{
+					nested["author"] = "eve";
+				}
+			};
+
+			sharedString.AnnotateRange(0, 5, new PropertySet() { ["meta"] = originalMeta });
+
+			// The caller's original dict must be untouched.
+			Assert.Equal("alice", originalMeta["author"]);
+			// The segment's stored nested dict must be untouched.
+			PropertySet? props = sharedString.GetPropertiesAtPosition(0);
+			Assert.NotNull(props);
+			IDictionary<string, object?> storedMeta = Assert.IsAssignableFrom<IDictionary<string, object?>>(props!["meta"]);
+			Assert.Equal("alice", storedMeta["author"]);
+		}
+
 		private static SharedString CreateSharedStringWithAckedText(string text)
 		{
 			var sender = new FakeFluidDataObjectSender();
