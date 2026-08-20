@@ -192,7 +192,11 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RemoteAddChangeDelete_EventsCarryRemoteOperation()
 		{
-			SharedString sharedString = CreateSharedStringWithText("abcdef");
+			// Uses an ACKed SharedString so the remote perspective (refSeq
+			// matching the local insert seq) resolves interval endpoints
+			// against a coherent tree — matches V2-A01's TS-parallel behavior.
+			(SharedString sharedString, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdef");
+			sender.Sent.Clear();
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
 			List<IntervalAddedEventArgs> addEvents = new();
 			List<IntervalChangedEventArgs> changeEvents = new();
@@ -201,13 +205,13 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			collection.OnChangeInterval += (_, args) => changeEvents.Add(args);
 			collection.OnDeleteInterval += (_, args) => deleteEvents.Add(args);
 
-			ProcessRemoteIntervalAdd(sharedString, "comments", "remote", 1, 2, refSeq: 0, seq: 1);
+			ProcessRemoteIntervalAdd(sharedString, "comments", "remote", 1, 2, refSeq: 1, seq: 2);
 			IntervalAddedEventArgs addEvent = Assert.Single(addEvents);
 			Assert.False(addEvent.Local);
 			Assert.IsType<IntervalAddOpMsg>(addEvent.Operation);
 			AssertIntervalPositions(collection.GetIntervalById("remote")!, 1, 2);
 
-			ProcessRemoteIntervalChange(sharedString, "comments", "remote", 2, 4, refSeq: 1, seq: 2);
+			ProcessRemoteIntervalChange(sharedString, "comments", "remote", 2, 4, refSeq: 2, seq: 3);
 			IntervalChangedEventArgs changeEvent = Assert.Single(changeEvents);
 			Assert.False(changeEvent.Local);
 			Assert.IsType<IntervalChangeOpMsg>(changeEvent.Operation);
@@ -215,7 +219,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(2, changeEvent.PreviousEnd);
 			AssertIntervalPositions(collection.GetIntervalById("remote")!, 2, 4);
 
-			ProcessRemoteIntervalDelete(sharedString, "comments", "remote", refSeq: 2, seq: 3);
+			ProcessRemoteIntervalDelete(sharedString, "comments", "remote", refSeq: 3, seq: 4);
 			IntervalDeletedEventArgs deleteEvent = Assert.Single(deleteEvents);
 			Assert.False(deleteEvent.Local);
 			Assert.IsType<IntervalDeleteOpMsg>(deleteEvent.Operation);

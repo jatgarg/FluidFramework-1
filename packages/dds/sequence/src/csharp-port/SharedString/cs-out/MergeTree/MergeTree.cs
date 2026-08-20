@@ -312,6 +312,72 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
         /// <summary>
         /// <summary>
+        /// Creates a <see cref="LocalReferencePosition" /> at the given position resolved
+        /// in the supplied (referenceSequenceNumber, clientId) perspective. Used to anchor
+        /// interval endpoints from remote ops to the segment they addressed in their author's
+        /// view, not the receiver's current view.
+        /// </summary>
+        internal LocalReferencePosition CreateReferencePositionInPerspective(
+            int position,
+            long refSeq,
+            string? clientId,
+            ReferenceType refType,
+            SlidingPreference slidingPreference = SlidingPreference.Forward,
+            PropertySet? properties = null,
+            bool canSlideToEndpoint = false)
+        {
+            int length = GetLength(refSeq, clientId);
+            if (position == length)
+            {
+                // The remote op addressed "end of string" in its perspective.
+                // Resolve to the last visible segment in that perspective if
+                // any, so slide-on-remove still functions later.
+                (ISegment segment, int offset)? tail = FindTailSegmentInPerspective(refSeq, clientId);
+                if (tail is null)
+                {
+                    if (canSlideToEndpoint)
+                    {
+                        return CreateReferencePositionAtEndpoint(ReferenceEndpointKind.End, refType, slidingPreference, properties);
+                    }
+
+                    throw new ArgumentOutOfRangeException(nameof(position), "Position must identify a visible segment in the message perspective.");
+                }
+
+                return CreateReferencePosition(tail.Value.segment, tail.Value.offset, refType, slidingPreference, properties, canSlideToEndpoint);
+            }
+
+            (ISegment segment, int offsetInSegment)? resolved = TryGetContainingSegment(position, refSeq, clientId);
+            if (resolved is null)
+            {
+                if (canSlideToEndpoint)
+                {
+                    return CreateReferencePositionAtEndpoint(ReferenceEndpointKind.End, refType, slidingPreference, properties);
+                }
+
+                throw new ArgumentOutOfRangeException(nameof(position), "Position must identify a visible segment in the message perspective.");
+            }
+
+            return CreateReferencePosition(resolved.Value.segment, resolved.Value.offsetInSegment, refType, slidingPreference, properties, canSlideToEndpoint);
+        }
+
+        private (ISegment segment, int offset)? FindTailSegmentInPerspective(long refSeq, string? clientId)
+        {
+            int? perspectiveClientId = clientId is null ? null : GetClientId(clientId);
+            long perspectiveSeq = CurrentSeq + 1;
+            ISegment? tail = null;
+            foreach (ISegment segment in WalkAllSegments())
+            {
+                int visible = GetNodeLength(segment, refSeq, perspectiveClientId, perspectiveSeq);
+                if (visible > 0)
+                {
+                    tail = segment;
+                }
+            }
+
+            return tail is null ? null : (tail, tail.CachedLength);
+        }
+
+        /// <summary>
         /// Creates a <see cref="LocalReferencePosition" /> anchored to the synthetic
         /// start-of-tree or end-of-tree endpoint. Matches TS's `startOfTree`/`endOfTree`
         /// sentinel segments used when the wire encodes an interval endpoint as

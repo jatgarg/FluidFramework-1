@@ -659,7 +659,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 					return ApplyRemoteGroup((MergeTreeGroupMsg)op, seq, refSeq, clientId);
 
 				case MergeTreeDeltaType.IntervalAdd:
-					ApplyRemoteIntervalAdd((IntervalAddOpMsg)op);
+					ApplyRemoteIntervalAdd((IntervalAddOpMsg)op, refSeq, clientId);
 					return Array.Empty<MergeTreeDelta>();
 
 				case MergeTreeDeltaType.IntervalDelete:
@@ -667,7 +667,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 					return Array.Empty<MergeTreeDelta>();
 
 				case MergeTreeDeltaType.IntervalChange:
-					ApplyRemoteIntervalChange((IntervalChangeOpMsg)op);
+					ApplyRemoteIntervalChange((IntervalChangeOpMsg)op, refSeq, clientId);
 					return Array.Empty<MergeTreeDelta>();
 
 				case MergeTreeDeltaType.IntervalPropertyChanged:
@@ -2446,9 +2446,9 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			return ranges;
 		}
 
-		private void ApplyRemoteIntervalAdd(IntervalAddOpMsg op)
+		private void ApplyRemoteIntervalAdd(IntervalAddOpMsg op, long refSeq, string clientId)
 		{
-			GetOrCreateIntervalCollectionForOp(op).ApplyRemoteAdd(op);
+			GetOrCreateIntervalCollectionForOp(op).ApplyRemoteAdd(op, refSeq, clientId);
 		}
 
 		private void ApplyRemoteIntervalDelete(IntervalDeleteOpMsg op)
@@ -2456,9 +2456,9 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			GetOrCreateIntervalCollectionForOp(op).ApplyRemoteDelete(op);
 		}
 
-		private void ApplyRemoteIntervalChange(IntervalChangeOpMsg op)
+		private void ApplyRemoteIntervalChange(IntervalChangeOpMsg op, long refSeq, string clientId)
 		{
-			GetOrCreateIntervalCollectionForOp(op).ApplyRemoteChange(op);
+			GetOrCreateIntervalCollectionForOp(op).ApplyRemoteChange(op, refSeq, clientId);
 		}
 
 		private void ApplyRemoteIntervalPropertyChanged(IntervalPropertyChangedOpMsg op)

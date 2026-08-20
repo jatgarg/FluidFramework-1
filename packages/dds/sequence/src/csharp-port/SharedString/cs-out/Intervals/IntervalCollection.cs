@@ -632,7 +632,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			}
 		}
 
-		internal void ApplyRemoteAdd(MergeTree.IntervalAddOpMsg op)
+		internal void ApplyRemoteAdd(MergeTree.IntervalAddOpMsg op, long refSeq, string clientId)
 		{
 			ArgumentNullException.ThrowIfNull(op);
 
@@ -649,7 +649,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 					op.StartSide,
 					op.EndSide,
 					op.StartSentinel,
-					op.EndSentinel);
+					op.EndSentinel,
+					remotePerspective: new RemotePerspective(refSeq, clientId));
 			}
 
 			RaiseAdd(interval, local: false, operation: op);
@@ -673,7 +674,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			}
 		}
 
-		internal void ApplyRemoteChange(MergeTree.IntervalChangeOpMsg op)
+		internal void ApplyRemoteChange(MergeTree.IntervalChangeOpMsg op, long refSeq, string clientId)
 		{
 			ArgumentNullException.ThrowIfNull(op);
 
@@ -699,7 +700,15 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				}
 
 				string intervalId = op.IntervalId ?? throw new OcsException(OcsGateErrorCode.InvalidOperation, "Interval change op is missing required IntervalId.");
-				(interval, previousStart, previousEnd) = ChangeCore(intervalId, op.Start, op.End, op.StartSide, op.EndSide, op.StartSentinel, op.EndSentinel);
+				(interval, previousStart, previousEnd) = ChangeCore(
+					intervalId,
+					op.Start,
+					op.End,
+					op.StartSide,
+					op.EndSide,
+					op.StartSentinel,
+					op.EndSentinel,
+					remotePerspective: new RemotePerspective(refSeq, clientId));
 
 				// The combined change op carries both endpoint and property
 				// delta — apply properties alongside the endpoint change so
@@ -1008,6 +1017,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			RaiseDelete(interval, previousStart: null, previousEnd: null, local: true, operation: null);
 		}
 
+		private readonly record struct RemotePerspective(long RefSeq, string ClientId);
+
 		private SequenceInterval AddCore(
 			int start,
 			int end,
@@ -1028,7 +1039,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				startSide,
 				endSide,
 				MergeTree.EndpointSentinel.None,
-				MergeTree.EndpointSentinel.None);
+				MergeTree.EndpointSentinel.None,
+				remotePerspective: null);
 		}
 
 		private SequenceInterval AddCore(
@@ -1041,7 +1053,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			Side startSide,
 			Side endSide,
 			MergeTree.EndpointSentinel startSentinel,
-			MergeTree.EndpointSentinel endSentinel)
+			MergeTree.EndpointSentinel endSentinel,
+			RemotePerspective? remotePerspective = null)
 		{
 			if (startSentinel == MergeTree.EndpointSentinel.None && endSentinel == MergeTree.EndpointSentinel.None)
 			{
@@ -1054,11 +1067,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				throw new InvalidOperationException($"Interval '{id}' already exists in collection '{Name}'.");
 			}
 
-			MergeTree.LocalReferencePosition startReference = CreateEndpointReference(start, intervalType, isStartEndpoint: true, startSide, endSide, startSentinel);
+			MergeTree.LocalReferencePosition startReference = CreateEndpointReference(start, intervalType, isStartEndpoint: true, startSide, endSide, startSentinel, remotePerspective);
 			MergeTree.LocalReferencePosition endReference;
 			try
 			{
-				endReference = CreateEndpointReference(end, intervalType, isStartEndpoint: false, startSide, endSide, endSentinel);
+				endReference = CreateEndpointReference(end, intervalType, isStartEndpoint: false, startSide, endSide, endSentinel, remotePerspective);
 			}
 			catch
 			{
@@ -1114,7 +1127,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				newStartSide,
 				newEndSide,
 				MergeTree.EndpointSentinel.None,
-				MergeTree.EndpointSentinel.None);
+				MergeTree.EndpointSentinel.None,
+				remotePerspective: null);
 		}
 
 		private (SequenceInterval? Interval, int? PreviousStart, int? PreviousEnd) ChangeCore(
@@ -1124,7 +1138,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			Side? newStartSide,
 			Side? newEndSide,
 			MergeTree.EndpointSentinel newStartSentinel,
-			MergeTree.EndpointSentinel newEndSentinel)
+			MergeTree.EndpointSentinel newEndSentinel,
+			RemotePerspective? remotePerspective = null)
 		{
 			ArgumentException.ThrowIfNullOrEmpty(id);
 
@@ -1159,7 +1174,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 						isStartEndpoint: true,
 						resultingStartSide,
 						resultingEndSide,
-						newStartSentinel);
+						newStartSentinel,
+						remotePerspective);
 				}
 				else if (newStart.HasValue || (newStartSide.HasValue && previousStart.HasValue))
 				{
@@ -1168,7 +1184,9 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 						interval.IntervalType,
 						isStartEndpoint: true,
 						resultingStartSide,
-						resultingEndSide);
+						resultingEndSide,
+						MergeTree.EndpointSentinel.None,
+						remotePerspective);
 				}
 
 				if (endIsSentinel)
@@ -1179,7 +1197,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 						isStartEndpoint: false,
 						resultingStartSide,
 						resultingEndSide,
-						newEndSentinel);
+						newEndSentinel,
+						remotePerspective);
 				}
 				else if (newEnd.HasValue || (newEndSide.HasValue && previousEnd.HasValue))
 				{
@@ -1188,7 +1207,9 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 						interval.IntervalType,
 						isStartEndpoint: false,
 						resultingStartSide,
-						resultingEndSide);
+						resultingEndSide,
+						MergeTree.EndpointSentinel.None,
+						remotePerspective);
 				}
 			}
 			catch
@@ -1233,7 +1254,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			Side startSide,
 			Side endSide)
 		{
-			return CreateEndpointReference(position, intervalType, isStartEndpoint, startSide, endSide, MergeTree.EndpointSentinel.None);
+			return CreateEndpointReference(position, intervalType, isStartEndpoint, startSide, endSide, MergeTree.EndpointSentinel.None, remotePerspective: null);
 		}
 
 		private MergeTree.LocalReferencePosition CreateEndpointReference(
@@ -1244,9 +1265,22 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			Side endSide,
 			MergeTree.EndpointSentinel sentinel)
 		{
+			return CreateEndpointReference(position, intervalType, isStartEndpoint, startSide, endSide, sentinel, remotePerspective: null);
+		}
+
+		private MergeTree.LocalReferencePosition CreateEndpointReference(
+			int position,
+			IntervalType intervalType,
+			bool isStartEndpoint,
+			Side startSide,
+			Side endSide,
+			MergeTree.EndpointSentinel sentinel,
+			RemotePerspective? remotePerspective)
+		{
 			MergeTree.SlidingPreference slidingPreference = isStartEndpoint
 				? IntervalUtils.StartReferenceSlidingPreference(startSide, endSide)
 				: IntervalUtils.EndReferenceSlidingPreference(startSide, endSide);
+			MergeTree.ReferenceType refType = EndpointTypeToReferenceType(intervalType, isStartEndpoint);
 
 			if (sentinel != MergeTree.EndpointSentinel.None)
 			{
@@ -1263,13 +1297,31 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 				return _mergeTree.CreateReferencePositionAtEndpoint(
 					endpointKind,
-					EndpointTypeToReferenceType(intervalType, isStartEndpoint),
+					refType,
 					slidingPreference);
+			}
+
+			// V2-A01: when the endpoint comes from a remote op, resolve the
+			// position in the message's (referenceSequenceNumber, clientId)
+			// perspective — that's the view the author saw when they issued
+			// the op. Using the receiver's current view can bind the
+			// reference to a segment the author never addressed. (TS:
+			// sequenceInterval.ts createPositionReference passes op.refSeq
+			// and op.clientId to client.getContainingSegment.)
+			if (remotePerspective is RemotePerspective perspective)
+			{
+				return _mergeTree.CreateReferencePositionInPerspective(
+					position,
+					perspective.RefSeq,
+					perspective.ClientId,
+					refType,
+					slidingPreference,
+					canSlideToEndpoint: true);
 			}
 
 			return _mergeTree.CreateReferencePosition(
 				position,
-				EndpointTypeToReferenceType(intervalType, isStartEndpoint),
+				refType,
 				slidingPreference);
 		}
 
