@@ -252,7 +252,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			SequenceInterval interval;
 			lock (_lock)
 			{
-				interval = AddCore(start, end, properties, intervalId, intervalType ?? EndpointType, validateDuplicate: true, startSide, endSide);
+				interval = AddCore(start, end, properties, intervalId, intervalType ?? EndpointType, startSide, endSide);
 				_opSender.SendIntervalAdd(
 					Name,
 					interval.Id!,
@@ -658,7 +658,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 					op.Props,
 					op.IntervalId,
 					op.IntervalType,
-					validateDuplicate: true,
 					op.StartSide,
 					op.EndSide,
 					op.StartSentinel,
@@ -1038,7 +1037,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			MergeTree.PropertySet? properties,
 			string? intervalId,
 			IntervalType intervalType,
-			bool validateDuplicate,
 			Side startSide,
 			Side endSide)
 		{
@@ -1048,7 +1046,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				properties,
 				intervalId,
 				intervalType,
-				validateDuplicate,
 				startSide,
 				endSide,
 				MergeTree.EndpointSentinel.None,
@@ -1062,7 +1059,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			MergeTree.PropertySet? properties,
 			string? intervalId,
 			IntervalType intervalType,
-			bool validateDuplicate,
 			Side startSide,
 			Side endSide,
 			MergeTree.EndpointSentinel startSentinel,
@@ -1075,11 +1071,22 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			}
 
 			string id = string.IsNullOrEmpty(intervalId) ? Guid.NewGuid().ToString() : intervalId;
-			if (validateDuplicate && GetActiveIntervalById(id) is not null)
+
+			// V2-W03: TS accepts duplicate explicit interval IDs — the wire
+			// shape passes idIntervalIndex.add(interval) which does
+			// `Map.set(id, interval)`, silently replacing the existing entry.
+			// The port used to throw here, which terminated the application
+			// on any TS-produced duplicate add. Now we silently replace,
+			// matching TS. Unlike TS we also drop the old interval's
+			// references and remove it from all indexes so the non-ID
+			// indexes don't leak the shadowed interval. TS: intervalCollection.ts
+			// addInterval / add / idIntervalIndex.ts add.
+			SequenceInterval? existing = _idIndex.GetStoredIntervalById(id);
+			if (existing is not null)
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
-					$"Interval '{id}' already exists in collection '{Name}'.");
+				RemoveFromIndexes(existing);
+				_mergeTree.RemoveReferencePosition(existing.Start);
+				_mergeTree.RemoveReferencePosition(existing.End);
 			}
 
 			MergeTree.LocalReferencePosition startReference = CreateEndpointReference(start, intervalType, isStartEndpoint: true, startSide, endSide, startSentinel, remotePerspective);

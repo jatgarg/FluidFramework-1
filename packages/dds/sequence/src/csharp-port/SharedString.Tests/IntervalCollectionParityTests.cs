@@ -682,6 +682,75 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal("blue", collection.GetIntervalById("i1")!.Properties?["color"]);
 		}
 
+		[Fact]
+		public void RemoteAdd_DuplicateId_ReplacesSilently()
+		{
+			// V2-W03 regression. TS's idIntervalIndex.add does Map.set(id,
+			// interval) which silently replaces the existing entry. A
+			// duplicate-ID remote add used to throw OcsException and
+			// terminate the port; now the second add replaces the first.
+			(SharedString sharedString, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			sender.Sent.Clear();
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+
+			ProcessRemoteIntervalAdd(sharedString, "comments", "dup", 1, 3, refSeq: 1, seq: 2);
+			SequenceInterval? first = collection.GetIntervalById("dup");
+			Assert.NotNull(first);
+			Assert.Equal(1, first!.StartPosition);
+			Assert.Equal(3, first.EndPosition);
+
+			// Second remote add with same id must NOT throw and must replace.
+			ProcessRemoteIntervalAdd(sharedString, "comments", "dup", 5, 7, refSeq: 2, seq: 3);
+			SequenceInterval? second = collection.GetIntervalById("dup");
+			Assert.NotNull(second);
+			Assert.Equal(5, second!.StartPosition);
+			Assert.Equal(7, second.EndPosition);
+			// The new instance replaces the old one in the ID map.
+			Assert.NotSame(first, second);
+		}
+
+		[Fact]
+		public void LocalAdd_DuplicateId_ReplacesSilently()
+		{
+			// V2-W03: same silent-replace semantics for local adds. Matches TS
+			// addInterval → idIntervalIndex.add which never rejects on ID
+			// collision.
+			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+
+			SequenceInterval first = collection.Add(1, 3, intervalId: "dup");
+			SequenceInterval second = collection.Add(5, 7, intervalId: "dup");
+
+			Assert.NotSame(first, second);
+			SequenceInterval? current = collection.GetIntervalById("dup");
+			Assert.Same(second, current);
+			Assert.Equal(5, current!.StartPosition);
+			Assert.Equal(7, current.EndPosition);
+		}
+
+		[Fact]
+		public void LocalAdd_DuplicateId_DropsOldFromOverlappingIndex()
+		{
+			// V2-W03: the port cleans up the old interval from every index on
+			// replace so the non-ID indexes don't accumulate shadowed
+			// entries. (Stricter than TS's leaky behavior; TS's Map.set does
+			// not remove from other indexes.)
+			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+
+			collection.Add(1, 3, intervalId: "dup");
+			collection.Add(5, 7, intervalId: "dup");
+
+			// Only the current interval should show up in overlap queries;
+			// the old [1,3] is fully removed.
+			SequenceInterval[] over13 = collection.FindOverlappingIntervals(1, 3).ToArray();
+			Assert.Empty(over13);
+
+			SequenceInterval[] over57 = collection.FindOverlappingIntervals(5, 7).ToArray();
+			Assert.Single(over57);
+			Assert.Equal("dup", over57[0].Id);
+		}
+
 		private static SharedString CreateSharedStringWithText(string text)
 		{
 			SharedString sharedString = new();
