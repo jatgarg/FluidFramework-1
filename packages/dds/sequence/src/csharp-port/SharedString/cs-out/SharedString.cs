@@ -251,7 +251,11 @@ namespace Microsoft.Office.Web.Fluid
 
 		/// <summary>
 		/// Returns the current absolute position of a segment in the string.
-		/// Returns null if the segment is not currently in the tree (e.g., removed).
+		/// For a tombstoned (still-attached-but-removed) segment, returns the
+		/// collapsed position where the segment used to sit — matching TS's
+		/// client.getPosition semantics. Returns -1 (DetachedReferencePosition)
+		/// only when the segment is not in the tree at all (e.g., zamboni'd
+		/// out). SS-A15 fix.
 		/// </summary>
 		public int? GetPosition(Microsoft.Office.Web.Fluid.MergeTree.ISegment segment)
 		{

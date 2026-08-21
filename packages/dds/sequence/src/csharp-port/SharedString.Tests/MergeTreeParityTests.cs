@@ -363,14 +363,23 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void M9_GetPositionOfRemovedSegmentReturnsMinusOne()
+		public void M9_GetPositionOfRemovedSegmentReturnsCollapsedPosition()
 		{
+			// SS-A15 regression. TS's client.getPosition returns the
+			// collapsed tree position for a tombstoned segment — the sum
+			// of preceding visible lengths where the segment used to sit.
+			// See packages/dds/merge-tree/src/test/client.getPosition.spec.ts
+			// 'Deleted Segment'. The port previously returned -1 for
+			// tombstoned segments; now matches TS.
 			MergeTreeModel tree = CreateAckedTree("hello");
 			ISegment segment = Assert.Single(tree.WalkAllSegments());
 
 			tree.MarkRangeRemoved(0, 5, refSeq: 1, seq: 10, clientId: "remover");
 
-			Assert.Equal(MergeTreeModel.DetachedReferencePosition, tree.GetPositionOfSegment(segment));
+			// Segment "hello" was at position 0; after remove it stays
+			// attached but has length 0. Collapsed position = 0 (nothing
+			// visible before it in the tree).
+			Assert.Equal(0, tree.GetPositionOfSegment(segment));
 		}
 
 		[Fact]

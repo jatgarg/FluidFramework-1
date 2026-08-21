@@ -70,14 +70,39 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void GetPosition_OfRemovedSegment_ReturnsNull()
+		public void GetPosition_OfRemovedSegment_ReturnsCollapsedPosition()
 		{
+			// SS-A15 regression. TS returns the collapsed tree position for
+			// a tombstoned segment (see
+			// packages/dds/merge-tree/src/test/client.getPosition.spec.ts
+			// 'Deleted Segment'). Prior port behavior returned null for
+			// locally-removed segments; now matches TS.
 			var sharedString = CreateSharedStringWithText("hello");
 			ISegment segment = GetRequiredContainingSegment(sharedString, 0).segment;
 
 			sharedString.DeleteText(0, 5);
 
-			Assert.Null(sharedString.GetPosition(segment));
+			// The full segment was removed and it's the only segment, so
+			// the collapsed position is 0.
+			Assert.Equal(0, sharedString.GetPosition(segment));
+		}
+
+		[Fact]
+		public void GetPosition_OfRemovedMiddleSegment_ReturnsPreservedBoundaryPosition()
+		{
+			// SS-A15: with content on both sides, the tombstone reports the
+			// boundary position (sum of visible lengths before it).
+			var sharedString = CreateSharedStringWithText("abcdefghij");
+			// Split into three segments by annotating a middle range so we
+			// have a clean "middle" segment.
+			sharedString.AnnotateRange(3, 7, new PropertySet() { ["k"] = 1 });
+			ISegment middle = GetRequiredContainingSegment(sharedString, 3).segment;
+
+			// Remove just the middle segment (positions 3..7).
+			sharedString.DeleteText(3, 7);
+
+			// Middle tombstone's collapsed position = length of "abc" = 3.
+			Assert.Equal(3, sharedString.GetPosition(middle));
 		}
 
 		[Fact]

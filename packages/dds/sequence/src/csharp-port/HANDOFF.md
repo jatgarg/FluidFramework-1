@@ -333,7 +333,7 @@ Every audit-closed bug has at least one regression test that would fail if the f
 
 ## 12. Documented deviations from TS
 
-An independent SharedString correctness audit surfaced 30 findings. Twenty-eight were fixed. Two remain as deliberate scope or design choices, listed here so future audits don't re-flag them.
+An independent SharedString correctness audit surfaced 30 findings. Twenty-nine were fixed. One remains as a deliberate Word rendering constraint (§12.2), listed here so future audits don't re-flag it.
 
 ### 12.1 (RESOLVED) Sided-interval endpoint-side query edge cases
 
@@ -351,10 +351,8 @@ Note: the shared comparator tie-break (originally part of this cluster) was also
 - **Effort to change:** Trivial (one string concatenation) but would break Word's text-rendering pipeline.
 - **Consumer impact:** A consumer expecting TS-format inline marker IDs would see U+200E instead. No known Word consumers depend on the TS shape.
 
-### 12.3 Tombstone position returns -1
+### 12.3 (RESOLVED) Tombstone position returns -1
 
-When a segment has been marked removed but not yet physically unlinked (tombstone window), `MergeTree.GetPosition` returns `-1` for that segment. TS returns the collapsed tree position where the segment used to be.
+**Status:** Fixed. `MergeTree.GetPositionOfSegment` now returns the collapsed tree position for a tombstoned (still-attached-but-removed) segment — the sum of preceding visible lengths at the boundary where the removed segment used to sit. Matches TS's `client.getPosition` semantics (see `packages/dds/merge-tree/src/test/client.getPosition.spec.ts` "Deleted Segment"). `DetachedReferencePosition` (-1) is now reserved for the truly-detached case (segment zamboni'd out).
 
-- **Why deliberate:** Coupled to the deferred obliterate + partial-zamboni scope. The port's tombstone lifecycle is simpler than TS's; a partial fix would leave inconsistencies with obliterate.
-- **Effort to add:** Small in isolation (~20 LOC in `GetPosition`), but only safe to do once obliterate scope is settled.
-- **Consumer impact:** Callers using `GetPosition` on a mid-remove segment get `-1` instead of a position. Word's remove flow doesn't inspect positions during the tombstone window.
+The prior deferral was tied to the deferred obliterate scope. Since Waves 21-22 landed full-parity obliterate, the blocker is gone.

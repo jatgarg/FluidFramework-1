@@ -493,26 +493,37 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         /// Returns the current absolute position of a segment by walking the tree.
         /// </summary>
         /// <param name="segment">The segment to locate.</param>
-        /// <returns>The current local-view position, or <see cref="DetachedReferencePosition" /> when the segment is not in the tree or is removed.</returns>
+        /// <returns>
+        /// The current local-view position when the segment is attached to the
+        /// tree (whether visible or tombstoned — SS-A15 fixed to return the
+        /// collapsed position for still-attached-but-removed segments,
+        /// matching TS). Returns <see cref="DetachedReferencePosition" />
+        /// only when the segment is not in the tree (e.g., zamboni'd out).
+        /// </returns>
         public int? GetPositionOfSegment(ISegment segment)
         {
             ArgumentNullException.ThrowIfNull(segment);
 
+            // SS-A15: TS's getPosition returns the collapsed tree position for
+            // tombstoned segments — the sum of preceding visible lengths at
+            // the boundary where the removed segment used to sit. The port
+            // used to return -1 (or null for unacked removes) which
+            // conflicted with TS's client.getPosition contract and the
+            // 'Deleted Segment' test in
+            // packages/dds/merge-tree/src/test/client.getPosition.spec.ts.
+            // Now the walk returns the accumulated position when we find the
+            // target segment even if its VisibleLength is 0. -1 is reserved
+            // for the truly-detached case where the walk never finds the
+            // segment (e.g., zamboni removed it).
             int position = 0;
             foreach (ISegment currentSegment in WalkAllSegments())
             {
-                int length = VisibleLength(currentSegment, UnassignedSequenceNumber);
                 if (ReferenceEquals(currentSegment, segment))
                 {
-                    if (length == 0)
-                    {
-                        return HasUnackedRemoveStamp(segment) ? null : DetachedReferencePosition;
-                    }
-
                     return position;
                 }
 
-                position += length;
+                position += VisibleLength(currentSegment, UnassignedSequenceNumber);
             }
 
             return DetachedReferencePosition;
