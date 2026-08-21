@@ -247,6 +247,53 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.Equal(MergeTreeModel.DetachedReferencePosition, tree.GetPositionOfReference(reference));
 		}
 
+		[Fact]
+		public void SlideOnRemove_LocalUnackedInsert_NotChosenAsSlideTarget()
+		{
+			// V2-A10 regression. When a remote remove sequences over a
+			// segment that holds a SlideOnRemove reference, TS picks the
+			// slide target from the "all-acked including this op"
+			// perspective — local unacked inserts are excluded so the
+			// reference doesn't anchor to a segment that peers cannot see.
+			// The port used to use current-view visibility and could pick a
+			// local unacked segment as a permanent slide destination.
+			Client client = new("local");
+
+			// Two acked segments authored by the remote peer.
+			IMergeTreeInsertMsg keep = new MergeTreeInsertMsg() { Pos1 = 0, Seg = "keep" };
+			client.ApplyOp(keep, seq: 1, refSeq: 0, clientId: "peer");
+			IMergeTreeInsertMsg drop = new MergeTreeInsertMsg() { Pos1 = 4, Seg = "drop" };
+			client.ApplyOp(drop, seq: 2, refSeq: 1, clientId: "peer");
+
+			// Reference on "drop" at offset 1.
+			ISegment droppedSegment = client.MergeTree.GetContainingSegment(5, MergeTreeModel.UnassignedSequenceNumber).segment;
+			LocalReferencePosition reference = client.MergeTree.CreateReferencePosition(
+				droppedSegment,
+				1,
+				ReferenceType.SlideOnRemove,
+				SlidingPreference.Forward);
+
+			// Local UNACKED insert AFTER "drop". This is the segment that
+			// would be a slide target under current-view visibility but
+			// must be excluded under TS's all-acked perspective.
+			client.InsertText(8, "LOCAL");
+
+			// Remote remove of "drop" (positions 4..8 in the peer's view,
+			// which matches our acked view since local unacked hasn't
+			// affected acked positions).
+			IMergeTreeRemoveMsg remove = new MergeTreeRemoveMsg() { Pos1 = 4, Pos2 = 8 };
+			client.ApplyOp(remove, seq: 3, refSeq: 2, clientId: "peer");
+
+			// After slide: reference must NOT land on the local unacked
+			// segment. It should either detach (Forward slide had no
+			// visible-in-acked-perspective successor) or land on an acked
+			// segment (fallback direction: "keep").
+			bool landsOnLocalUnacked = reference.Segment is TextSegment ts && ts.Text == "LOCAL";
+			Assert.False(
+				landsOnLocalUnacked,
+				"V2-A10: SlideOnRemove picked a local unacked segment as target; the all-acked perspective should exclude it.");
+		}
+
 		private static MergeTreeModel CreateTreeWithSegments(params string[] texts)
 		{
 			MergeTreeModel tree = new();

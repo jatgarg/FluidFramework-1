@@ -816,7 +816,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 effectivePerspectiveSeq,
                 seq,
                 clientId);
-            SlideReferencesOffRemovedSegments(flatSegments, obliteratedSegments);
+            SlideReferencesOffRemovedSegments(flatSegments, obliteratedSegments, opSeq: seq);
             UpdateAffectedBlockPathsForObliterationOnInsert(CollectParentBlocks(obliteratedSegments), stamp, obliteratedSegments);
             RecordSequence(seq);
             List<ISegment> deltaSegments = new();
@@ -903,7 +903,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 out List<ISegment> changedSegments,
                 out List<ISegment> deltaSegments,
                 out bool requiresStructureRecompute);
-            SlideReferencesOffRemovedSegments(flatSegments, removedSegments);
+            SlideReferencesOffRemovedSegments(flatSegments, removedSegments, opSeq: seq);
             AddParentBlocks(affectedBlocks, changedSegments);
             if (requiresStructureRecompute || seq == UnassignedSequenceNumber || perspectiveSeq.HasValue)
             {
@@ -984,7 +984,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 out List<ISegment> changedSegments,
                 out List<ISegment> deltaSegments,
                 out bool requiresStructureRecompute);
-            SlideReferencesOffRemovedSegments(flatSegments, obliteratedSegments);
+            SlideReferencesOffRemovedSegments(flatSegments, obliteratedSegments, opSeq: seq);
             AddParentBlocks(affectedBlocks, changedSegments);
             if (requiresStructureRecompute || seq == UnassignedSequenceNumber || perspectiveSeq.HasValue)
             {
@@ -1585,7 +1585,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             List<LocalReferencePosition> references = new(segment.LocalRefs);
             foreach (LocalReferencePosition reference in references)
             {
-                SlideReferenceOffRemovedSegment(attachedSegments, removedIndex, reference);
+                // Zamboni slides after removed segments leave the collab
+                // window. Use the current-acked perspective so local unacked
+                // inserts aren't picked as permanent slide destinations. TS
+                // ref: mergeTree.ts zamboniSegments — all-acked slide.
+                SlideReferenceOffRemovedSegment(attachedSegments, removedIndex, reference, slidePerspectiveRefSeq: CurrentSeq);
             }
         }
 
@@ -1879,7 +1883,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
             if (obliteratedSegments.Count > 0)
             {
-                SlideReferencesOffRemovedSegments(flatSegments, obliteratedSegments);
+                SlideReferencesOffRemovedSegments(flatSegments, obliteratedSegments, opSeq: insertSeq);
                 OperationStamp stamp = new()
                 {
                     Seq = insertSeq,
@@ -2859,8 +2863,21 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
         private void SlideReferencesOffRemovedSegments(
             IReadOnlyList<ISegment> segments,
-            IEnumerable<ISegment> removedSegments)
+            IEnumerable<ISegment> removedSegments,
+            long opSeq)
         {
+            // V2-A10: slide-target selection uses the perspective "all acked
+            // ops INCLUDING the one currently being applied." For a remote op
+            // at sequence N, `refSeq = N` skips local unacked segments while
+            // still treating this op's just-added remove/obliterate stamps as
+            // applied (stamp.Seq == N <= N). For a local op (opSeq is the
+            // Unassigned sentinel), the perspective falls back to the local
+            // current view — the caller already sees their own mutation and
+            // the slide should honor local-visible segments.
+            long slidePerspectiveRefSeq = opSeq == UnassignedSequenceNumber
+                ? UnassignedSequenceNumber
+                : opSeq;
+
             foreach (ISegment removedSegment in removedSegments)
             {
                 int removedIndex = IndexOfSegment(segments, removedSegment);
@@ -2872,7 +2889,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 List<LocalReferencePosition> references = new(removedSegment.LocalRefs);
                 foreach (LocalReferencePosition reference in references)
                 {
-                    SlideReferenceOffRemovedSegment(segments, removedIndex, reference);
+                    SlideReferenceOffRemovedSegment(segments, removedIndex, reference, slidePerspectiveRefSeq);
                 }
             }
         }
@@ -2880,7 +2897,8 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         private static void SlideReferenceOffRemovedSegment(
             IReadOnlyList<ISegment> segments,
             int removedIndex,
-            LocalReferencePosition reference)
+            LocalReferencePosition reference,
+            long slidePerspectiveRefSeq)
         {
             if (RefTypeIncludesFlag(reference.RefType, ReferenceType.StayOnRemove))
             {
@@ -2893,16 +2911,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return;
             }
 
-            // TS uses the all-acked perspective for slide-target selection to
-            // avoid picking an unacked local insertion as a permanent remote
-            // destination. V2-A10 is documented as a partial deviation: the
-            // port keeps current-view slide-target selection for now because
-            // switching to all-acked without a fully-perspective-aware
-            // walk-and-record around every op call site produced regressions
-            // (some remove/obliterate paths depend on the current-view slide
-            // choice). Follow-up: parameterize the slide perspective with the
-            // op's own seq / refSeq once the surrounding call sites carry it.
-            if (TryGetSlideTarget(segments, removedIndex, reference, out SlideTarget slideTarget))
+            if (TryGetSlideTarget(segments, removedIndex, reference, slidePerspectiveRefSeq, out SlideTarget slideTarget))
             {
                 if (slideTarget.Segment is ISegment targetSegment)
                 {
