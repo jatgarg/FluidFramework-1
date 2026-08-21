@@ -153,7 +153,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			Assert.True(PropertyMap.MatchProperties(null, new PropertySet()));
 		}
 
-		// V2-A11 regression. Wire-equivalent numeric values must compare
+		// regression. Wire-equivalent numeric values must compare
 		// equal regardless of CLR runtime type. TS uses `===` which treats
 		// numbers by value, not type — so `1 === 1.0 === 1L === 1u` all
 		// hold. Without this, delta-event range coalescing over-splits any

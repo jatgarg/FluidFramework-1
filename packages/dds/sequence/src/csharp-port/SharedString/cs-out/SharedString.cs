@@ -37,8 +37,7 @@ namespace Microsoft.Office.Web.Fluid
 		public Marker? Marker { get; set; }
 
 		// TS SequenceDeltaEvent exposes a single `isLocal` boolean. The
-		// port uses `Local` throughout (PascalCase C# convention). Kept as
-		// the sole spelling per V2-I09 — the alias `IsLocal` was removed.
+		// port uses `Local` throughout (PascalCase C# convention).
 		public bool Local { get; set; }
 
 		public PropertySet? AnnotatedProperties { get; set; }
@@ -251,11 +250,10 @@ namespace Microsoft.Office.Web.Fluid
 
 		/// <summary>
 		/// Returns the current absolute position of a segment in the string.
-		/// For a tombstoned (still-attached-but-removed) segment, returns the
-		/// collapsed position where the segment used to sit — matching TS's
-		/// client.getPosition semantics. Returns -1 (DetachedReferencePosition)
-		/// only when the segment is not in the tree at all (e.g., zamboni'd
-		/// out). SS-A15 fix.
+		/// For a tombstoned (still-attached-but-removed) segment, returns
+		/// the collapsed position where the segment used to sit, matching
+		/// TS's client.getPosition. Returns -1 (DetachedReferencePosition)
+		/// when the segment is not in the tree (e.g., zamboni'd out).
 		/// </summary>
 		public int? GetPosition(Microsoft.Office.Web.Fluid.MergeTree.ISegment segment)
 		{
@@ -384,9 +382,8 @@ namespace Microsoft.Office.Web.Fluid
 			});
 		}
 
-		// V2-I03: public API takes the concrete RelativePosition type. The
-		// reflection-based reader is kept internal for wire deserialization
-		// where relativePos1 comes off the JSON as a parsed shape.
+		// Public API takes the concrete RelativePosition type. The
+		// reflection-based reader is kept internal for wire deserialization.
 		public void InsertTextRelative(RelativePosition relativePos1, string text, PropertySet? props = null)
 		{
 			if (relativePos1 is null)
@@ -555,9 +552,8 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		// TS ISharedString.searchForMarker requires the marker label. V2-I02:
-		// the legacy overload with `tileLabel = null` returning null was
-		// removed to match the TS contract — callers must supply a label.
+		// TS ISharedString.searchForMarker requires the marker label. The
+		// legacy overload with `tileLabel = null` was removed to match TS.
 		public Marker? SearchForMarker(int startPos, string markerLabel, bool forwards = true)
 		{
 			if (markerLabel is null)
@@ -571,12 +567,10 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		// V2-I07: public props inputs accept IReadOnlyDictionary<string,
-		// object?> so callers can pass their own map shapes. The internal
-		// path still consumes a PropertySet — we materialize at the
-		// boundary if the caller supplies a different concrete type. TS
-		// treats PropertySet as a structural Record<string, unknown>; the
-		// port matches by widening the input contract.
+		// Public props inputs accept IReadOnlyDictionary<string, object?>
+		// so callers can pass their own map shapes; we materialize to
+		// PropertySet at the boundary. TS treats PropertySet as a
+		// structural Record<string, unknown>.
 		public void AnnotateRange(int start, int end, IReadOnlyDictionary<string, object?> props)
 		{
 			if (props is null)
@@ -584,10 +578,8 @@ namespace Microsoft.Office.Web.Fluid
 				throw new ArgumentNullException(nameof(props));
 			}
 
-			// V2-A14: match TS Client.getValidOpRange local-op validation.
-			// Zero-width or inverted ranges must be rejected before mutation
-			// or wire submission — TS throws RangeOutOfBounds
-			// ({end <= start}) on the local caller path.
+			// Match TS Client.getValidOpRange: reject zero-width or
+			// inverted ranges before mutation or wire submission.
 			ValidateAnnotateRange(start, end);
 
 			PropertySet propsAsSet = MaterializePropertySet(props);
@@ -1114,11 +1106,10 @@ namespace Microsoft.Office.Web.Fluid
 
 		private static PropertySet CloneAnnotateProps(IReadOnlyDictionary<string, object?>? props)
 		{
-			// V2-A13: deep-clone so event listeners can't reach through to
-			// the enqueued canonical batch op's nested values. Scalars,
-			// strings, and IFluidDataObject handle refs are shared by
-			// reference (safe — they are immutable from a listener's
-			// perspective); nested dicts/lists are cloned recursively.
+			// Deep-clone so event listeners can't reach through to the
+			// enqueued canonical batch op's nested values. Scalars and
+			// handle refs are shared by reference; nested dicts/lists are
+			// cloned recursively.
 			return PropertyMap.DeepClonePropertySet(props) ?? new PropertySet();
 		}
 
@@ -1328,13 +1319,10 @@ namespace Microsoft.Office.Web.Fluid
 			{
 				if (_batchOps is not null)
 				{
-					// V2-W02: preserve local mutation order on the wire. TS
-					// puts both merge-tree and interval ops through the same
-					// runtime message queue so a text mutation preceding an
-					// interval add reaches peers in that order. Interval ops
-					// are recorded in the batch alongside merge-tree ops and
-					// dispatched individually at flush time (they cannot be
-					// members of a MergeTreeGroupMsg).
+					// Preserve local mutation order on the wire. Interval
+					// ops share the merge-tree batch queue but flush
+					// individually (they cannot be members of a
+					// MergeTreeGroupMsg).
 					_batchOps.Add(op);
 					return;
 				}
@@ -1345,15 +1333,11 @@ namespace Microsoft.Office.Web.Fluid
 
 		private IMergeTreeOp CloneOpForEvent(IMergeTreeOp op)
 		{
-			// V2-A12: TS's SequenceDeltaEvent exposes a live op reference; a
-			// listener that mutates it corrupts subsequent consumers. We
-			// insulate the port by handing the listener a serialized
-			// round-trip clone. Threading the registry through both sides
-			// preserves live IFluidDataObject handles in the property tree
-			// — without it, an annotate carrying a handle value throws in
-			// Serialize.
-			// ClientSeq is intentionally local-only and does not need to
-			// survive the clone (the wire path retains the original).
+			// TS's SequenceDeltaEvent exposes a live op reference; a
+			// listener that mutates it corrupts subsequent consumers. Hand
+			// the listener a serialized round-trip clone. Threading the
+			// registry preserves live IFluidDataObject handles in the
+			// property tree. ClientSeq is intentionally local-only.
 			return SharedStringOpSerializer.Deserialize(
 				SharedStringOpSerializer.Serialize(op, _registry),
 				_registry);

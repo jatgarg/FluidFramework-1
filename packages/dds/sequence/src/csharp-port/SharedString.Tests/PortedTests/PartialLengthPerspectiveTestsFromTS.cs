@@ -121,7 +121,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				seq: MergeTreeModel.UnassignedSequenceNumber,
 				clientId: "localUser");
 
-			// SS-A15: TS returns the collapsed tombstone position (position 1
+			// TS returns the collapsed tombstone position (position 1
 			// — where "b" used to sit, i.e., between "a" and "c"). Prior
 			// port returned null; now matches TS 'Deleted Segment' spec.
 			Assert.Equal(1, tree.GetPositionOfSegment(bSegment));

@@ -215,7 +215,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RunInBatch_TextThenInterval_PreservesLocalOrderOnWire()
 		{
-			// V2-W02 regression. TS runtime queues submitLocalMessage calls in
+			// regression. TS runtime queues submitLocalMessage calls in
 			// call order (both merge-tree ops via sequence.ts submitDelta and
 			// interval ops via intervalCollectionMap.submitMessage go through
 			// the same runtime queue). The port must not send interval ops
@@ -242,7 +242,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RunInBatch_IntervalBetweenInserts_SplitsGroupPreservingOrder()
 		{
-			// V2-W02 regression. Interval ops in the middle of a batch split
+			// regression. Interval ops in the middle of a batch split
 			// any group of merge-tree ops around them so wire order matches
 			// local order: insert, interval, insert.
 			SharedString sharedString = CreateSharedStringWithAckedText("abc");
@@ -265,7 +265,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RunInBatch_TwoMergeTreeOpsAfterInterval_StillGroupsTail()
 		{
-			// V2-W02 regression. Batching still coalesces adjacent merge-tree
+			// regression. Batching still coalesces adjacent merge-tree
 			// ops into a single group. An interval op breaks the group only
 			// at its position — subsequent merge-tree ops start a fresh
 			// group.

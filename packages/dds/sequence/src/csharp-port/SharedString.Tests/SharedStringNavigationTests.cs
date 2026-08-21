@@ -72,7 +72,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void GetPosition_OfRemovedSegment_ReturnsCollapsedPosition()
 		{
-			// SS-A15 regression. TS returns the collapsed tree position for
+			// regression. TS returns the collapsed tree position for
 			// a tombstoned segment (see
 			// packages/dds/merge-tree/src/test/client.getPosition.spec.ts
 			// 'Deleted Segment'). Prior port behavior returned null for
@@ -90,7 +90,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void GetPosition_OfRemovedMiddleSegment_ReturnsPreservedBoundaryPosition()
 		{
-			// SS-A15: with content on both sides, the tombstone reports the
+			// with content on both sides, the tombstone reports the
 			// boundary position (sum of visible lengths before it).
 			var sharedString = CreateSharedStringWithText("abcdefghij");
 			// Split into three segments by annotating a middle range so we

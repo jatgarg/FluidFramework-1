@@ -365,7 +365,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void M9_GetPositionOfRemovedSegmentReturnsCollapsedPosition()
 		{
-			// SS-A15 regression. TS's client.getPosition returns the
+			// regression. TS's client.getPosition returns the
 			// collapsed tree position for a tombstoned segment — the sum
 			// of preceding visible lengths where the segment used to sit.
 			// See packages/dds/merge-tree/src/test/client.getPosition.spec.ts

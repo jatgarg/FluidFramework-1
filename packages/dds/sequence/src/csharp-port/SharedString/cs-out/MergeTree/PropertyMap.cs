@@ -144,13 +144,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             return cloneMap;
         }
 
-        // V2-A13: deep-clone a property set. Values that are themselves
-        // dictionaries or lists are cloned recursively so a listener holding
-        // the clone cannot mutate nested structures that other consumers
-        // (batched ops, segment property maps) still reference. Scalars,
-        // strings, and IFluidDataObject handles are shared by reference —
-        // safe because those are effectively immutable from a listener's
-        // perspective.
+        // Deep-clone a property set. Nested dictionaries and lists are
+        // cloned recursively so a listener holding the clone cannot mutate
+        // structures other consumers still reference. Scalars, strings,
+        // and IFluidDataObject handles are shared by reference (effectively
+        // immutable from a listener's perspective).
         public static PropertySet? DeepClonePropertySet(IReadOnlyDictionary<string, object?>? extension)
         {
             if (extension is null)
@@ -277,11 +275,10 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return valueA is string && valueB is string && (string)valueA == (string)valueB;
             }
 
-            // V2-A11: wire-equivalent numeric values must compare equal
-            // regardless of CLR runtime type. TS uses `===` which for numbers
-            // compares values, not types. int/long/double/JsonElement number
-            // that all encode the same JSON number should not split delta
-            // ranges. Match TS by unifying comparison at `double`.
+            // Wire-equivalent numeric values must compare equal regardless
+            // of CLR runtime type. TS `===` on numbers compares values, not
+            // types; int/long/double/JsonElement encoding the same JSON
+            // number should not split delta ranges. Unify at `double`.
             if (TryReadNumeric(valueA, out double numericA) && TryReadNumeric(valueB, out double numericB))
             {
                 return numericA == numericB;
@@ -299,11 +296,10 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return isDictionaryA && isDictionaryB && MatchProperties(dictionaryA, dictionaryB);
             }
 
-            // TS ref: packages/dds/merge-tree/src/properties.ts matchProperties —
-            // TS deep-compares array/object property values. Object.is on
-            // different array references returns false, so JS uses element-wise
-            // comparison. Match that here so equal-content arrays/lists don't
-            // report as unequal via CLR object-identity fallback.
+            // TS matchProperties deep-compares array/object property values.
+            // Object.is on different array references returns false, so JS
+            // element-wise compares. Match that so equal-content lists
+            // don't report unequal via CLR object-identity fallback.
             IList? listA = valueA as IList;
             IList? listB = valueB as IList;
             if (listA is not null || listB is not null)

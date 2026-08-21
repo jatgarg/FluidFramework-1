@@ -222,7 +222,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void SearchForMarker_TsSignatureRequiresLabel_ThrowsOnNull()
 		{
-			// V2-I02 regression. The legacy overload with tileLabel = null
+			// regression. The legacy overload with tileLabel = null
 			// returning null silently was removed to match TS which requires
 			// the marker label. Callers must now supply a non-null label.
 			SharedString sharedString = new();

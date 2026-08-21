@@ -250,7 +250,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void SlideOnRemove_LocalUnackedInsert_NotChosenAsSlideTarget()
 		{
-			// V2-A10 regression. When a remote remove sequences over a
+			// regression. When a remote remove sequences over a
 			// segment that holds a SlideOnRemove reference, TS picks the
 			// slide target from the "all-acked including this op"
 			// perspective — local unacked inserts are excluded so the
@@ -291,7 +291,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			bool landsOnLocalUnacked = reference.Segment is TextSegment ts && ts.Text == "LOCAL";
 			Assert.False(
 				landsOnLocalUnacked,
-				"V2-A10: SlideOnRemove picked a local unacked segment as target; the all-acked perspective should exclude it.");
+				"SlideOnRemove picked a local unacked segment as target; the all-acked perspective should exclude it.");
 		}
 
 		private static MergeTreeModel CreateTreeWithSegments(params string[] texts)

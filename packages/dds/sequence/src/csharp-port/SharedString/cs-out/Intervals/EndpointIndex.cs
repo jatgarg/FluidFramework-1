@@ -21,7 +21,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         public void Remove(SequenceInterval interval) =>
             IntervalIndexComparers.Remove(_intervals, interval, IntervalIndexComparers.CompareByEndThenId);
 
-        // SS-A04: side-aware boundary comparisons. Query positions are
+        // side-aware boundary comparisons. Query positions are
         // numeric so implicitly use defaultSide (Before). See detailed
         // reasoning in OverlappingIntervalsIndex.OverlapsInclusive.
 

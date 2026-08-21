@@ -238,7 +238,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         /// <returns><see langword="true" /> when the ranges have a non-empty intersection.</returns>
         public static bool RangesOverlap(int leftStart, int leftEnd, int rightStart, int rightEnd)
         {
-            // V2-A07: match TS overlapsPos semantics — strict less-than on
+            // match TS overlapsPos semantics — strict less-than on
             // both endpoints without requiring either range to be non-empty.
             // A zero-length interval or range still overlaps another range
             // that strictly contains its position (e.g., [5,5] overlaps

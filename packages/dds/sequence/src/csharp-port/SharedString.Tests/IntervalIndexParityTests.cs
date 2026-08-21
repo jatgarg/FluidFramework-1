@@ -157,7 +157,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OverlappingIntervalsIndex_StartSideAfter_AtQueryEndBoundary_Excluded()
 		{
-			// SS-A04 regression. An interval with StartSide=After at position
+			// regression. An interval with StartSide=After at position
 			// N sits effectively "just after N". A query [_, N] must exclude
 			// it (interval start is strictly beyond query end). TS uses
 			// compareReferencePositions with side-encoded ordinals; the port
@@ -177,7 +177,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OverlappingIntervalsIndex_EndSideBefore_AtQueryStartBoundary_StillIncluded()
 		{
-			// SS-A04: The lower-bound side check is symmetric — an interval
+			// The lower-bound side check is symmetric — an interval
 			// with EndSide=Before at position N still overlaps a query
 			// starting at N (both sides Before → equal → overlap).
 			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
@@ -193,7 +193,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void StartpointInRange_StartSideAfter_AtQueryEndBoundary_Excluded()
 		{
-			// SS-A04: startpoint in [start, end] uses side at the upper
+			// startpoint in [start, end] uses side at the upper
 			// bound. Interval with StartSide=After at endpos of query is
 			// "just after" and thus outside the range.
 			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
@@ -209,7 +209,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void EndpointInRange_EndSideAfter_AtQueryEndBoundary_Excluded()
 		{
-			// SS-A04: endpoint-in-range applies the side check to EndSide.
+			// endpoint-in-range applies the side check to EndSide.
 			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
 			SequenceInterval before = collection.Add(1, Side.Before, 3, Side.Before, intervalId: "before");
 			SequenceInterval after = collection.Add(1, Side.Before, 3, Side.After, intervalId: "after");
@@ -223,7 +223,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void EndpointIndex_PreviousInterval_EndSideAfter_AtQueryPosition_Excluded()
 		{
-			// SS-A04: PreviousInterval(N) excludes an interval whose end is
+			// PreviousInterval(N) excludes an interval whose end is
 			// EndSide=After at position N, because that end is "just after"
 			// N, i.e. NOT <= N.
 			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
@@ -263,9 +263,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void IdIntervalIndex_FullyDetachedInterval_StillAddressableAfterEntireDocumentRemoved()
 		{
-			// V2-T01 regression. TS specifies that a truly detached interval
+			// regression. TS specifies that a truly detached interval
 			// (both endpoints slid off after the backing content vanished) is
-			// still reachable via getIntervalById. The SS-A03 fix originally
+			// still reachable via getIntervalById. The originally
 			// added detached-interval addressability but only exercised the
 			// case where positions changed while segments still existed.
 			SharedString sharedString = new();
@@ -353,7 +353,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void StartpointInRangeIndex_ResultsSurviveIndexMutationDuringEnumeration()
 		{
-			// V2-T03 regression. Same call-time snapshot contract as
+			// regression. Same call-time snapshot contract as
 			// OverlappingIntervalsIndex — deferred enumeration must not surface
 			// index mutations that happened after the query was issued.
 			IntervalCollection collection = CreateCollectionWithText("abcdefghij");
@@ -374,7 +374,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void EndpointInRangeIndex_ResultsSurviveIndexMutationDuringEnumeration()
 		{
-			// V2-T03 regression.
+			// regression.
 			IntervalCollection collection = CreateCollectionWithText("abcdefghij");
 			SequenceInterval a = collection.Add(1, 3, intervalId: "a");
 			SequenceInterval b = collection.Add(4, 6, intervalId: "b");
@@ -393,7 +393,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void EndpointIndex_ResultsSurviveIndexMutationDuringEnumeration()
 		{
-			// V2-T03 regression. FindEndpointsInRange returns a snapshot;
+			// regression. FindEndpointsInRange returns a snapshot;
 			// index mutations after the query issue must not surface in the
 			// enumeration.
 			IntervalCollection collection = CreateCollectionWithText("abcdefghij");

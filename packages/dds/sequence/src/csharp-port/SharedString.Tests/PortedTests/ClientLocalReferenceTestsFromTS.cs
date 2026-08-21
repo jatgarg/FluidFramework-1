@@ -10,7 +10,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 	// Ported from packages/dds/merge-tree/src/test/client.localReference.spec.ts
 	//
 	// Focused subset covering slide-on-remove semantics — the space where
-	// V2-A10 (slide-target all-acked perspective) applies. The port already
+	// (slide-target all-acked perspective) applies. The port already
 	// has LocalReferenceParityTests and LocalReferenceTests; this file adds
 	// the specific behavioral scenarios TS's spec calls out.
 	public sealed class ClientLocalReferenceTestsFromTS

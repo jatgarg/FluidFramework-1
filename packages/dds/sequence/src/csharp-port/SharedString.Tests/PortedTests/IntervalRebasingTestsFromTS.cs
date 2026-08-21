@@ -51,7 +51,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ChangeIntervalDuringReconnect_ToConcurrentlyRemovedSegment_Detaches()
 		{
-			// V2-A05 territory: a pending interval change whose endpoints
+			// territory: a pending interval change whose endpoints
 			// slide off during rebase should not crash, and should either
 			// resolve to a valid position or drop the pending op.
 			PortedTestUtilities.TwoClientHarness harness = new();

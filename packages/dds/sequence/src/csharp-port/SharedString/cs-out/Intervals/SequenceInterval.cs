@@ -212,7 +212,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         }
 
         /// <summary>
-        /// V2-A07: half-open overlap that matches TS <c>SequenceInterval.overlapsPos</c>.
+        /// half-open overlap that matches TS <c>SequenceInterval.overlapsPos</c>.
         /// Returns <see langword="true" /> when the interval end is strictly past
         /// <paramref name="bstart" /> and the interval start is strictly before
         /// <paramref name="bend" /> — same strict-less-than form as

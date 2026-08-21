@@ -250,7 +250,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Rebase_PendingIntervalAdd_BothEndpointsDetached_DropsInterval()
 		{
-			// V2-A05 regression. TS's rebaseLocalInterval returns undefined
+			// regression. TS's rebaseLocalInterval returns undefined
 			// (drops the pending op) AND calls deleteExistingInterval when
 			// the endpoint slides to 'detached'. The port previously only
 			// dropped Transient intervals; normal SlideOnRemove intervals
@@ -643,7 +643,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Rebase_PendingCombinedIntervalChange_PreservesProperties()
 		{
-			// V2-W01 regression. TS ref: packages/dds/sequence/src/
+			// regression. TS ref: packages/dds/sequence/src/
 			// intervalCollection.ts rebasePositionalOp — TS spreads the entire
 			// change op (`{...op, value: {...op.value}}`) so `properties`
 			// survives alongside recomputed endpoint fields. The port's

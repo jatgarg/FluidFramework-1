@@ -447,14 +447,10 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			return Change(id, newStart: null, newEnd: null, props: props);
 		}
 
-		// V2-A06: iterator filter matches BOTH the endpoint position AND the
-		// side. TS creates a transient interval with the plain number
-		// endpoint and Side.Before (the default), then walks the interval
-		// tree looking for exact `compareStart == 0` / `compareEnd == 0`
-		// matches — which is a position + side test. The port filters by
-		// position only would include intervals with the same position but
-		// different sides (e.g. a Before-sticky interval and an After-sticky
-		// interval at the same offset). Add the side check to match TS.
+		// Iterator matches position AND side. TS creates a transient
+		// interval with the plain number endpoint and Side.Before (the
+		// default), then walks the tree looking for exact
+		// compareStart/compareEnd == 0 matches — a position + side test.
 		public IEnumerable<SequenceInterval> CreateForwardIteratorWithStartPosition(int startPos)
 		{
 			lock (_lock)
@@ -522,9 +518,8 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				return Array.Empty<SequenceInterval>();
 			}
 
-			// V2-I01: consume the maintained OverlappingIntervalsIndex rather
-			// than re-scanning the ID map. The index materializes a snapshot
-			// per call, so callers get the same stability guarantees.
+			// Query the maintained OverlappingIntervalsIndex rather than
+			// re-scanning the ID map.
 			lock (_lock)
 			{
 				return _overlappingIndex.FindOverlapping(startPosition, endPosition)
@@ -542,7 +537,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				return Array.Empty<SequenceInterval>();
 			}
 
-			// V2-I01: consume StartpointInRangeIndex.
 			lock (_lock)
 			{
 				return _startpointIndex.FindStartpointsInRange(start, end)
@@ -560,7 +554,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				return Array.Empty<SequenceInterval>();
 			}
 
-			// V2-I01: consume EndpointInRangeIndex.
 			lock (_lock)
 			{
 				return _endpointInRangeIndex.FindEndpointsInRange(start, end)
@@ -573,7 +566,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 		public SequenceInterval? PreviousInterval(int position)
 		{
-			// V2-I01: consume EndpointIndex.
 			lock (_lock)
 			{
 				return _endpointIndex.PreviousInterval(position);
@@ -838,7 +830,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 				if (hasPending)
 				{
-					// V2-A02: remote property-only changes must fold into the
+					// remote property-only changes must fold into the
 					// per-id consensus while our local changes are pending,
 					// mirroring the combined-change reconciliation path. TS
 					// dispatches property-only ackChange through the same
@@ -922,7 +914,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				// updates pending.consensus after ackChange returns.)
 				AdvanceConsensusForAckedChangeNoLock(pending, head);
 
-				// V2-A03: only clear the id's pending state when the queue is
+				// only clear the id's pending state when the queue is
 				// empty. Retaining state while other pending changes remain
 				// preserves protection for subsequent local mutations.
 				if (pending.Queue.Count == 0)
@@ -935,7 +927,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 					return;
 				}
 
-				// V2-A04: slide detection scoped to changes that carried an
+				// slide detection scoped to changes that carried an
 				// endpoint delta. For property-only changes there is no
 				// endpoint to slide, so we skip the segment comparison and
 				// avoid firing spurious slide events.
@@ -1072,15 +1064,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 			string id = string.IsNullOrEmpty(intervalId) ? Guid.NewGuid().ToString() : intervalId;
 
-			// V2-W03: TS accepts duplicate explicit interval IDs — the wire
-			// shape passes idIntervalIndex.add(interval) which does
-			// `Map.set(id, interval)`, silently replacing the existing entry.
-			// The port used to throw here, which terminated the application
-			// on any TS-produced duplicate add. Now we silently replace,
-			// matching TS. Unlike TS we also drop the old interval's
-			// references and remove it from all indexes so the non-ID
-			// indexes don't leak the shadowed interval. TS: intervalCollection.ts
-			// addInterval / add / idIntervalIndex.ts add.
+			// TS accepts duplicate explicit interval IDs: idIntervalIndex.add
+			// does Map.set(id, interval), silently replacing the entry.
+			// Unlike TS we also drop the old interval's references and
+			// remove it from every index so non-ID indexes don't leak the
+			// shadowed interval.
 			SequenceInterval? existing = _idIndex.GetStoredIntervalById(id);
 			if (existing is not null)
 			{
@@ -1323,13 +1311,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 					slidingPreference);
 			}
 
-			// V2-A01: when the endpoint comes from a remote op, resolve the
-			// position in the message's (referenceSequenceNumber, clientId)
-			// perspective — that's the view the author saw when they issued
-			// the op. Using the receiver's current view can bind the
-			// reference to a segment the author never addressed. (TS:
-			// sequenceInterval.ts createPositionReference passes op.refSeq
-			// and op.clientId to client.getContainingSegment.)
+			// For remote-op endpoints, resolve the position in the message's
+			// (referenceSequenceNumber, clientId) perspective — the view
+			// the author saw when they issued the op. Using the receiver's
+			// current view can bind the reference to a segment the author
+			// never addressed. (TS: sequenceInterval.ts createPositionReference.)
 			if (remotePerspective is RemotePerspective perspective)
 			{
 				return _mergeTree.CreateReferencePositionInPerspective(
@@ -1373,9 +1359,9 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			return _idIndex.GetIntervalById(id);
 		}
 
-		// V2-I06: unified public-API validation. Interval endpoint order,
-		// duplicate ID, and unsupported change shapes all surface as
-		// OcsException(InvalidOperation) so callers catch a single family.
+		// Public-API validation: endpoint order, duplicate ID, and
+		// unsupported change shapes all surface as
+		// OcsException(InvalidOperation) so callers catch one family.
 		private static void ValidateEndpointOrder(int start, int end)
 		{
 			if (start > end)

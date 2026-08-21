@@ -152,11 +152,9 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             return AnnotateRange(start, end, props, refSeq, seq, GetClientId(clientId), perspectiveSeq);
         }
 
-        // V2-I10: partial-length invariant verification is expensive
-        // (rebuilds the block's aggregates from scratch and compares). It
-        // used to run on every structural update on production paths. Now
-        // gated behind a per-tree diagnostics flag defaulting to off; tests
-        // and diagnostics can opt in via EnablePartialLengthInvariantChecks.
+        // Partial-length invariant verification rebuilds each block's
+        // aggregates from scratch and compares — expensive. Gated behind
+        // this diagnostics flag (default off); tests can opt in.
         public bool PartialLengthInvariantChecksEnabled { get; set; }
 
         internal void EnablePartialLengthInvariantChecks(bool enabled = true)
@@ -457,14 +455,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return GetLength();
             }
 
-            // V2-I08 note: TS returns -1 (DetachedReferencePosition) rather
-            // than null for detached endpoints — see
-            // client.ts:localReferencePositionToPosition. Finding L7
-            // established this parity for the port; SequenceInterval and
+            // TS returns -1 (DetachedReferencePosition) rather than null for
+            // detached endpoints; SequenceInterval and
             // LocalReferencePositionToPosition surface the same sentinel.
-            // The `int?` return type on this method is a legacy shape kept
-            // for C# ergonomics; callers should treat -1 as the detached
-            // sentinel rather than expect null.
+            // The `int?` return type is kept for C# ergonomics; callers
+            // should treat -1 as the detached sentinel rather than null.
             if (reference.Segment is null)
             {
                 return DetachedReferencePosition;
@@ -494,27 +489,20 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         /// </summary>
         /// <param name="segment">The segment to locate.</param>
         /// <returns>
-        /// The current local-view position when the segment is attached to the
-        /// tree (whether visible or tombstoned — SS-A15 fixed to return the
-        /// collapsed position for still-attached-but-removed segments,
-        /// matching TS). Returns <see cref="DetachedReferencePosition" />
-        /// only when the segment is not in the tree (e.g., zamboni'd out).
+        /// The current local-view position when the segment is attached
+        /// (visible or tombstoned — TS's client.getPosition returns the
+        /// collapsed position for still-attached-but-removed segments).
+        /// <see cref="DetachedReferencePosition" /> when the segment is
+        /// not in the tree (e.g., zamboni'd out).
         /// </returns>
         public int? GetPositionOfSegment(ISegment segment)
         {
             ArgumentNullException.ThrowIfNull(segment);
 
-            // SS-A15: TS's getPosition returns the collapsed tree position for
-            // tombstoned segments — the sum of preceding visible lengths at
-            // the boundary where the removed segment used to sit. The port
-            // used to return -1 (or null for unacked removes) which
-            // conflicted with TS's client.getPosition contract and the
-            // 'Deleted Segment' test in
-            // packages/dds/merge-tree/src/test/client.getPosition.spec.ts.
-            // Now the walk returns the accumulated position when we find the
-            // target segment even if its VisibleLength is 0. -1 is reserved
-            // for the truly-detached case where the walk never finds the
-            // segment (e.g., zamboni removed it).
+            // TS's getPosition returns the collapsed tree position for
+            // tombstoned segments — the sum of preceding visible lengths.
+            // -1 is reserved for the truly-detached case where the walk
+            // never finds the segment (e.g., zamboni removed it).
             int position = 0;
             foreach (ISegment currentSegment in WalkAllSegments())
             {
@@ -2877,14 +2865,12 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             IEnumerable<ISegment> removedSegments,
             long opSeq)
         {
-            // V2-A10: slide-target selection uses the perspective "all acked
-            // ops INCLUDING the one currently being applied." For a remote op
-            // at sequence N, `refSeq = N` skips local unacked segments while
-            // still treating this op's just-added remove/obliterate stamps as
-            // applied (stamp.Seq == N <= N). For a local op (opSeq is the
-            // Unassigned sentinel), the perspective falls back to the local
-            // current view — the caller already sees their own mutation and
-            // the slide should honor local-visible segments.
+            // Slide-target selection uses "all acked ops INCLUDING the one
+            // being applied." For a remote op at seq N, refSeq = N skips
+            // local unacked segments while still treating this op's own
+            // remove/obliterate stamps as applied. For a local op (opSeq
+            // is Unassigned), the perspective falls back to local current
+            // view so the slide honors local-visible segments.
             long slidePerspectiveRefSeq = opSeq == UnassignedSequenceNumber
                 ? UnassignedSequenceNumber
                 : opSeq;
@@ -2985,12 +2971,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             return TryGetSlideTarget(segments, removedIndex, reference, allAckedRefSeq: UnassignedSequenceNumber, out target);
         }
 
-        // V2-A10: TS selects slide targets from the all-acked perspective so
-        // an unacknowledged local insertion cannot become a permanent remote
-        // slide destination. When the caller supplies `allAckedRefSeq` (=
-        // CurrentSeq), the visibility check treats local unacked segments as
-        // not-yet-inserted. (TS: mergeTree.ts slide selection uses the all-
-        // acked perspective.)
+        // TS selects slide targets from the all-acked perspective so an
+        // unacked local insertion cannot become a permanent remote slide
+        // destination. When `allAckedRefSeq` is supplied (= CurrentSeq),
+        // the visibility check treats local unacked segments as
+        // not-yet-inserted.
         private static bool TryGetSlideTarget(
             IReadOnlyList<ISegment> segments,
             int removedIndex,

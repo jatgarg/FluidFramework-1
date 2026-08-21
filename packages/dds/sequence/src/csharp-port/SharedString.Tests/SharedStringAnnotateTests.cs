@@ -319,7 +319,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void AnnotateRange_ZeroWidth_Throws()
 		{
-			// V2-A14 regression. TS Client.getValidOpRange rejects zero-width
+			// regression. TS Client.getValidOpRange rejects zero-width
 			// annotate as RangeOutOfBounds because `end <= start` is invalid
 			// for local ops. The port must not silently queue an empty
 			// annotate op.
@@ -353,7 +353,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void SequenceDelta_InsertEvent_HasEmptyPropertyDeltas()
 		{
-			// V2-A15 regression. TS SequenceDeltaEvent.ranges[i].propertyDeltas
+			// regression. TS SequenceDeltaEvent.ranges[i].propertyDeltas
 			// is always a PropertySet — empty for non-annotate ops, populated
 			// for annotate. The port must not surface `null` here; listeners
 			// should be able to enumerate without null-guarding.
@@ -375,7 +375,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void SequenceDelta_AnnotateEvent_NestedPropertyClonedDeeply()
 		{
-			// V2-A13 regression. Event listeners must not be able to mutate
+			// regression. Event listeners must not be able to mutate
 			// nested property values that also live inside the enqueued
 			// canonical op / segment property map.
 			SharedString sharedString = new();

@@ -14,7 +14,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 	// them already live in PortedTests/PartialLengthPerspectiveTestsFromTS.cs
 	// (DetachedSegmentReturnsMinusOne, DeletedSegmentReturnsTombstonePosition).
 	// The remaining two — Existing and Removed — round out the coverage of
-	// SS-A15 (tombstones report the collapsed position, not -1).
+	// (tombstones report the collapsed position, not -1).
 	public sealed class ClientGetPositionTestsFromTS
 	{
 		// Segment "o" in "hello world" sits at position 4. The whole file
@@ -36,7 +36,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void GetPosition_DeletedSegment_ReturnsTombstonePosition()
 		{
-			// SS-A15: TS reports the collapsed position — where the segment
+			// TS reports the collapsed position — where the segment
 			// used to sit before removal — not -1 or null.
 			SharedString sharedString = CreateFixture(out ISegment segment);
 

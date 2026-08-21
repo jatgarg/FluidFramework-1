@@ -32,7 +32,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
             // TS ref: packages/dds/sequence/src/intervalIndex/endpointInRangeIndex.ts —
             // TS builds and returns a snapshot array at call time.
             //
-            // SS-A04: side-aware boundary. Query bounds are numeric so both
+            // side-aware boundary. Query bounds are numeric so both
             // use defaultSide (Before). An interval's end is "in range" iff
             //   end >= query.start (pos >= start; any side >= Before at ==)
             //   AND end <= query.end (pos < end OR pos == end AND

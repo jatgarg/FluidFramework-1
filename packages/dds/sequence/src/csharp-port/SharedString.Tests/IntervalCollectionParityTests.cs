@@ -194,7 +194,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			// Uses an ACKed SharedString so the remote perspective (refSeq
 			// matching the local insert seq) resolves interval endpoints
-			// against a coherent tree — matches V2-A01's TS-parallel behavior.
+			// against a coherent tree, matching TS's remote-message behavior.
 			(SharedString sharedString, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdef");
 			sender.Sent.Clear();
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
@@ -406,7 +406,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ChangeProperties_EqualValue_StillSubmitsWireOp()
 		{
-			// V2-W04 regression. TS ref: packages/dds/sequence/src/
+			// regression. TS ref: packages/dds/sequence/src/
 			// intervalCollection.ts changeInterval — submitSerializedOperation
 			// runs unconditionally when props is supplied. The port must not
 			// filter no-op writes out of the wire stream.
@@ -430,7 +430,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ChangeProperties_DeleteAbsentKey_StillSubmitsWireOp()
 		{
-			// V2-W04 regression. TS ref: packages/dds/sequence/src/
+			// regression. TS ref: packages/dds/sequence/src/
 			// intervalCollection.ts changeInterval — deleting a key that was
 			// never present still submits the op. The receiver-side
 			// property-manager handles the no-op semantics.
@@ -449,7 +449,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ChangeProperties_EqualValue_DoesNotSuppressLaterRemoteEndpointChange()
 		{
-			// V2-W04 regression. Before the fix, ChangeProperties() with an
+			// regression. Before the fix, ChangeProperties() with an
 			// equal value would allocate _pendingChanges[id] but never emit a
 			// wire op, so no ACK could clear it; a subsequent remote endpoint
 			// change would then be routed into UpdatePendingConsensusNoLock
@@ -483,7 +483,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void Change_NoEndpointNoProps_DoesNotAllocatePendingState()
 		{
-			// V2-W04 regression. A Change() call with nothing to do must not
+			// regression. A Change() call with nothing to do must not
 			// leak a pending record. The observable effect is that a later
 			// remote endpoint change on the same interval reaches the live
 			// interval.
@@ -510,7 +510,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ConcurrentChange_TwoLocalChanges_AckFirst_SecondStillProtectedFromRemote()
 		{
-			// V2-A03 regression. Before the queue-based fix, a single pending
+			// regression. Before the queue-based fix, a single pending
 			// record was created on the first Change and cleared on its ACK,
 			// exposing the second local change's state to any intervening
 			// remote endpoint update. TS keeps a FIFO queue per id; the head
@@ -564,7 +564,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ConcurrentChange_RemotePropertyOnly_DuringLocalPending_FoldsIntoConsensus()
 		{
-			// V2-A02 regression. Remote property-only changes must fold into
+			// regression. Remote property-only changes must fold into
 			// the id's pending consensus while our local changes are pending;
 			// they must not apply directly to the live interval and overwrite
 			// our optimistic local view.
@@ -603,7 +603,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ChangeAck_NoRemoteMutation_DoesNotFireFalseSlideEvent()
 		{
-			// V2-A04 regression. The old slide detection compared the
+			// regression. The old slide detection compared the
 			// pre-mutation segment (captured before our local Change) with
 			// the post-ACK segment (after our own mutation), which trivially
 			// differed even for normal moves and produced spurious
@@ -640,7 +640,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ConcurrentPropertyChange_LocalAndRemote_BothAck_ConvergesToLastAcked()
 		{
-			// V2-T02 regression. Traces a full pending-property-change cycle
+			// regression. Traces a full pending-property-change cycle
 			// with a concurrent remote property change and both ACKs. Asserts
 			// final convergence, event fires, and consensus advancement.
 			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
@@ -685,7 +685,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void RemoteAdd_DuplicateId_ReplacesSilently()
 		{
-			// V2-W03 regression. TS's idIntervalIndex.add does Map.set(id,
+			// regression. TS's idIntervalIndex.add does Map.set(id,
 			// interval) which silently replaces the existing entry. A
 			// duplicate-ID remote add used to throw OcsException and
 			// terminate the port; now the second add replaces the first.
@@ -712,7 +712,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void LocalAdd_DuplicateId_ReplacesSilently()
 		{
-			// V2-W03: same silent-replace semantics for local adds. Matches TS
+			// same silent-replace semantics for local adds. Matches TS
 			// addInterval → idIntervalIndex.add which never rejects on ID
 			// collision.
 			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
@@ -731,7 +731,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void LocalAdd_DuplicateId_DropsOldFromOverlappingIndex()
 		{
-			// V2-W03: the port cleans up the old interval from every index on
+			// the port cleans up the old interval from every index on
 			// replace so the non-ID indexes don't accumulate shadowed
 			// entries. (Stricter than TS's leaky behavior; TS's Map.set does
 			// not remove from other indexes.)

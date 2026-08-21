@@ -285,7 +285,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void IntervalAddOp_SentinelEndpoints_RoundTripSerializes()
 		{
-			// SS-W02 regression. Emitting an op DTO with sentinel-encoded
+			// regression. Emitting an op DTO with sentinel-encoded
 			// endpoints must serialize back as the string sentinels TS peers
 			// understand.
 			IntervalAddOpMsg add = new()
@@ -308,7 +308,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void SharedString_ApplyRemoteIntervalAdd_WithSentinelEndpoints_Succeeds()
 		{
-			// SS-W02 regression (reopened v1). The codec now decodes the wire
+			// (reopened v1). The codec now decodes the wire
 			// sentinels, and IntervalCollection routes them to
 			// MergeTree.CreateReferencePositionAtEndpoint. Applying such an op
 			// used to throw because the position validator rejected the

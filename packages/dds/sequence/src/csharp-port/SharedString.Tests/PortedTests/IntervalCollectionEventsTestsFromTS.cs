@@ -9,15 +9,10 @@ namespace Microsoft.Office.Web.Fluid.Tests
 {
 	// Ported from packages/dds/sequence/src/test/intervalCollection.events.spec.ts
 	//
-	// Focused subset targeting the event-contract fixes from Waves V2-A11
-	// through V2-A15: propertyChanged with previous values, changeInterval
-	// with previous endpoints, and event firing on remote-op ack.
-	//
-	// Skipped:
-	// - Handle-related event tests (covered by SharedStringHandleTests
-	//   V2-A12 regression).
-	// - Op.contents.type == "act" wire-shape assertions (covered by
-	//   IntervalOpSerializerTests).
+	// Focused subset covering event contracts: propertyChanged with
+	// previous values, changeInterval with previous endpoints, and
+	// event firing on remote-op ack. Handle-related events and
+	// wire-shape assertions are covered by dedicated port test files.
 	public sealed class IntervalCollectionEventsTestsFromTS
 	{
 		// Ported from intervalCollection.events.spec.ts —
@@ -197,7 +192,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void PropertyChanged_LocalChange_ExposesPreviousValuesInDeltas()
 		{
-			// V2-A13 regression at the event contract. When a property is
+			// at the event contract. When a property is
 			// mutated, propertyChanged's delta bag reports the PREVIOUS
 			// value at each key — set to null for keys that had no prior
 			// value.

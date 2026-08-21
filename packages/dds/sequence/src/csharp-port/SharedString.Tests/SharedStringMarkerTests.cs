@@ -269,7 +269,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void NamedMarker_ClearedThroughObliterate()
 		{
-			// V2-T04 regression. TS specifies that a named-marker's id-index
+			// regression. TS specifies that a named-marker's id-index
 			// entry is removed when the marker segment is obliterated (not
 			// just when it's plain-removed). The existing marker-cleanup
 			// test uses delete; the obliterate test uses an anonymous marker.

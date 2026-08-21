@@ -861,14 +861,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return new List<IMergeTreeOp>();
 			}
 
-			// V2-A05: TS rebaseLocalInterval treats any detached endpoint (not
-			// just transient) as a signal to remove the interval and drop the
-			// op. A normal SlideOnRemove interval whose endpoints both slid
-			// off the string during the disconnected window should also be
-			// dropped rather than resubmitted clamped. Transient intervals
-			// hit the same code path in TS (they have no slide behavior). (TS:
-			// intervalCollection.ts rebaseLocalInterval `rebasedEndpoint ===
-			// 'detached'` branch.)
+			// TS rebaseLocalInterval drops any interval whose endpoint is
+			// detached, whether transient or SlideOnRemove: an interval
+			// whose endpoints slid off during the disconnected window
+			// should be dropped rather than resubmitted clamped.
+			// (TS: intervalCollection.ts rebaseLocalInterval detached branch.)
 			if (ShouldDropDetachedPendingInterval(pending))
 			{
 				DropDetachedPendingInterval(pending);
@@ -2531,14 +2528,10 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 					segment => segment.PendingAnnotates is not null && segment.PendingAnnotates.ContainsKey(pending.LocalSeq));
 				foreach ((int start, int end) in BuildRebasedRanges(annotateSegments, pending.LocalSeq - 1))
 				{
-					// V2-A08: apply the annotate against the same perspective
-					// the positions were computed in. Using
-					// UnassignedSequenceNumber would resolve the range against
-					// the current view, which may have shifted the segments
-					// due to intervening remote edits. Match TS by keeping
-					// position resolution and application in the same
-					// reconnect perspective (pending.RefSeq / pending.LocalSeq
-					// - 1).
+					// Apply the annotate against the same perspective the
+					// positions were computed in. Using UnassignedSequenceNumber
+					// would resolve the range against the current view, which
+					// may have shifted due to intervening remote edits.
 					MergeTree.AnnotateRange(
 						start,
 						end,
@@ -2742,12 +2735,10 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				throw new ArgumentException("Relative position marker could not be found.", name);
 			}
 
-			// V2-A09: resolve the marker's position in the message perspective
-			// so relative-position ops from remote authors bind to the segment
-			// they addressed. Local pending edits that shifted the marker in
-			// the current view are excluded from the perspective walk. (TS:
-			// mergeTree.ts posFromRelativePos passes the message's perspective
-			// to segment lookup.)
+			// Resolve the marker's position in the message perspective so
+			// relative-position ops from remote authors bind to the
+			// segment they addressed. Local pending edits are excluded.
+			// (TS: mergeTree.ts posFromRelativePos.)
 			int? position = remoteRefSeq.HasValue
 				? GetPositionOfMarkerInPerspective(marker, remoteRefSeq.Value, remoteClientId)
 				: GetPositionOfMarker(marker);

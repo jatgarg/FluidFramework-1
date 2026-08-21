@@ -265,7 +265,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void LocalAnnotate_LiveHandleValue_DoesNotThrowInSequenceDeltaEvent()
 		{
-			// V2-A12 regression. The port defensively clones the event op via
+			// regression. The port defensively clones the event op via
 			// a JSON round-trip so listeners can't mutate the enqueued
 			// canonical op. Without threading the registry through, that
 			// serialization step throws OcsException when the props tree

@@ -180,7 +180,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void CreateForwardIteratorWithStartPosition_FiltersOnStartSide()
 		{
-			// V2-A06 regression. TS's walkExactMatchesForward matches on
+			// regression. TS's walkExactMatchesForward matches on
 			// compareStart == 0, which is position + side. Before the fix the
 			// port matched on position only, so a StartSide.After interval
 			// at the same position would leak in.
@@ -199,7 +199,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void CreateForwardIteratorWithEndPosition_FiltersOnEndSide()
 		{
-			// V2-A06 regression. Same fix on the end-position path.
+			// regression. Same fix on the end-position path.
 			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
 
@@ -212,7 +212,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OverlapsPos_ZeroLengthInterval_OverlapsContainingRange()
 		{
-			// V2-A07 regression. TS overlapsPos permits zero-length intervals
+			// regression. TS overlapsPos permits zero-length intervals
 			// to overlap ranges that strictly contain the position — the old
 			// port required both ranges to be non-empty.
 			SharedString sharedString = CreateSharedStringWithText("abcdefghij");
@@ -227,7 +227,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void OverlapsPos_ZeroLengthRange_OverlapsContainingInterval()
 		{
-			// V2-A07 regression. The reverse case — a zero-length probe range
+			// regression. The reverse case — a zero-length probe range
 			// strictly inside an interval — must also report overlap under
 			// TS's strict-less-than semantics.
 			SharedString sharedString = CreateSharedStringWithText("abcdefghij");

@@ -29,7 +29,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return Enumerable.Empty<SequenceInterval>();
             }
 
-            // SS-A04: side-aware boundary. Query bounds are numeric so both
+            // side-aware boundary. Query bounds are numeric so both
             // use defaultSide (Before). An interval's start is "in range" iff
             //   start >= query.start (pos >= start; any side >= Before at ==)
             //   AND start <= query.end (pos < end OR pos == end AND

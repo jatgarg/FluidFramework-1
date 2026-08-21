@@ -44,12 +44,10 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         /// </summary>
         ObliterateSided = 5,
 
-        // V2-I04: interval discriminators (10-13) are port-internal only —
-        // TS carries interval ops through the intervalCollectionMap "act"
-        // envelope, not as merge-tree delta types. Kept in this enum for
-        // backwards compat with existing port dispatch code; new code should
-        // prefer IntervalOpKind (defined on IntervalOpMsg) or route via the
-        // "act" wire shape.
+        // Interval discriminators (10-13) are port-internal only. TS
+        // routes interval ops through the intervalCollectionMap "act"
+        // envelope. Kept for existing port dispatch code; new code should
+        // prefer IntervalOpKind or the "act" wire shape.
         /// <summary>Port-internal: interval add. Not a TS wire discriminator.</summary>
         IntervalAdd = 10,
 
