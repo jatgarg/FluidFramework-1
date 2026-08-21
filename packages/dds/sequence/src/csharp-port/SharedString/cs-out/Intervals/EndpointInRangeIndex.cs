@@ -30,14 +30,19 @@ namespace Microsoft.Office.Web.Fluid.Intervals
             }
 
             // TS ref: packages/dds/sequence/src/intervalIndex/endpointInRangeIndex.ts —
-            // TS builds and returns a snapshot array at call time. Materialize
-            // the LINQ query so callers get a stable snapshot and are safe
-            // against subsequent index mutations while enumerating.
+            // TS builds and returns a snapshot array at call time.
+            //
+            // SS-A04: side-aware boundary. Query bounds are numeric so both
+            // use defaultSide (Before). An interval's end is "in range" iff
+            //   end >= query.start (pos >= start; any side >= Before at ==)
+            //   AND end <= query.end (pos < end OR pos == end AND
+            //                         interval.EndSide == Before)
             return _intervals.Where(
                 interval => !interval.HasDetachedEndpoint
                     && interval.EndPosition is int position
                     && position >= start
-                    && position <= end)
+                    && (position < end
+                        || (position == end && interval.EndSide == Side.Before)))
                 .OrderBy(interval => interval, IntervalIndexComparers.EndpointComparer)
                 .ToArray();
         }

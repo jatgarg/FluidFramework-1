@@ -21,11 +21,18 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         public void Remove(SequenceInterval interval) =>
             IntervalIndexComparers.Remove(_intervals, interval, IntervalIndexComparers.CompareByEndThenId);
 
+        // SS-A04: side-aware boundary comparisons. Query positions are
+        // numeric so implicitly use defaultSide (Before). See detailed
+        // reasoning in OverlappingIntervalsIndex.OverlapsInclusive.
+
         /// <summary>Returns the previous interval based on the given position number.</summary>
         public SequenceInterval? PreviousInterval(int position)
         {
             return _intervals
-                .Where(interval => !interval.HasDetachedEndpoint && interval.EndPosition is int endPosition && endPosition <= position)
+                .Where(interval => !interval.HasDetachedEndpoint
+                    && interval.EndPosition is int endPosition
+                    && (endPosition < position
+                        || (endPosition == position && interval.EndSide == Side.Before)))
                 .OrderBy(interval => interval, IntervalIndexComparers.EndpointComparer)
                 .LastOrDefault();
         }
@@ -33,8 +40,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         /// <summary>Returns the next interval based on the given position number.</summary>
         public SequenceInterval? NextInterval(int position)
         {
+            // end >= query.pos (any side >= Before at ==) → numeric >= suffices.
             return _intervals
-                .Where(interval => !interval.HasDetachedEndpoint && interval.EndPosition is int endPosition && endPosition >= position)
+                .Where(interval => !interval.HasDetachedEndpoint
+                    && interval.EndPosition is int endPosition
+                    && endPosition >= position)
                 .OrderBy(interval => interval, IntervalIndexComparers.EndpointComparer)
                 .FirstOrDefault();
         }
@@ -47,13 +57,20 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return Enumerable.Empty<SequenceInterval>();
             }
 
-            // Materialize at call time to match TS's snapshot semantics
-            // (intervalIndex/endpointIndex.ts).
+            // Materialize at call time to match TS's snapshot semantics.
+            // Either endpoint must be in [start, end] with side awareness at
+            // the upper bound (pos == end → side must be Before).
             return _intervals.Where(
                 interval =>
                     !interval.HasDetachedEndpoint &&
-                    ((interval.StartPosition is int startPosition && startPosition >= start && startPosition <= end) ||
-                        (interval.EndPosition is int endPosition && endPosition >= start && endPosition <= end)))
+                    ((interval.StartPosition is int startPosition
+                        && startPosition >= start
+                        && (startPosition < end
+                            || (startPosition == end && interval.StartSide == Side.Before))) ||
+                        (interval.EndPosition is int endPosition
+                            && endPosition >= start
+                            && (endPosition < end
+                                || (endPosition == end && interval.EndSide == Side.Before)))))
                 .OrderBy(interval => interval, IntervalIndexComparers.IntervalComparer)
                 .ToArray();
         }

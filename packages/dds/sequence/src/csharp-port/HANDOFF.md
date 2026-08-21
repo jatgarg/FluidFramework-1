@@ -333,17 +333,15 @@ Every audit-closed bug has at least one regression test that would fail if the f
 
 ## 12. Documented deviations from TS
 
-An independent SharedString correctness audit surfaced 30 findings. Twenty-seven were fixed. Three remain as deliberate scope or design choices, listed here so future audits don't re-flag them.
+An independent SharedString correctness audit surfaced 30 findings. Twenty-eight were fixed. Two remain as deliberate scope or design choices, listed here so future audits don't re-flag them.
 
-### 12.1 Sided-interval endpoint-side query edge cases
+### 12.1 (RESOLVED) Sided-interval endpoint-side query edge cases
 
-TS's numeric interval-range queries use `Side.After` / `Side.Before` to decide whether to include boundary intervals; the port's queries treat intervals as closed on both sides regardless of side.
+**Status:** Fixed. All four range indexes (`OverlappingIntervalsIndex`, `StartpointInRangeIndex`, `EndpointInRangeIndex`, `EndpointIndex`) now apply the endpoint `Side` at boundary comparisons, matching TS's `compareReferencePositions` semantics at same-position boundaries.
 
-- **Why deliberate:** Word doesn't use `Side.After`/`Side.Before` for boundary inclusion — the discriminator only drives interval sliding direction on segment removal. Adding side-aware boundary logic would need to touch all four range indexes.
-- **Effort to add:** ~40 LOC per index × 4 indexes if a sided-interval consumer emerges.
-- **Consumer impact:** Range queries may include an interval that TS would exclude when the query boundary exactly touches the interval's opposite-side endpoint.
+At a same-position boundary, `Side.Before` sorts before `Side.After` — so an interval with `StartSide = Side.After` at position N is treated as sitting "just after N" and excluded from queries whose upper bound is exactly N. Consumer impact is limited to sided intervals whose numeric endpoint sits exactly at a query bound — Word's usage doesn't hit this, but cross-runtime peers that construct sided intervals do.
 
-Note: the shared comparator tie-break (originally part of this cluster) IS fixed — `SequenceInterval.CompareStart`/`CompareEnd` now return 0 when the named endpoint matches, matching TS.
+Note: the shared comparator tie-break (originally part of this cluster) was also fixed — `SequenceInterval.CompareStart`/`CompareEnd` now return 0 when the named endpoint matches, matching TS.
 
 ### 12.2 Marker-aware text encoding
 

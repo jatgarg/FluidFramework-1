@@ -36,6 +36,24 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 .ToArray();
         }
 
+        // SS-A04: TS's compareReferencePositions places references on
+        // different segment/ordinal positions when the side differs, so the
+        // boundary comparisons in `SequenceInterval.overlaps` implicitly
+        // depend on start/end side. The port collapses each endpoint to a
+        // single numeric position via StartPosition/EndPosition — so we
+        // apply the side comparison explicitly at the boundaries. A numeric
+        // query has both endpoints implicitly Side.Before (defaultSide),
+        // matching TS's normalizePlace of a plain number.
+        //
+        // TS overlap:
+        //   compareReferencePositions(iv.start, qEnd) <= 0
+        //     && compareReferencePositions(iv.end, qStart) >= 0
+        //
+        // Same-position case with qEnd.side=Before / qStart.side=Before:
+        //   iv.start <= qEnd iff iv.start.pos < qEnd.pos
+        //                       || (equal AND iv.startSide == Before)
+        //   iv.end >= qStart iff iv.end.pos >= qStart.pos
+        //                       (any iv.endSide is >= Before at equal pos)
         private static bool OverlapsInclusive(SequenceInterval interval, int start, int end)
         {
             if (interval.StartPosition is not int intervalStart || interval.EndPosition is not int intervalEnd)
@@ -43,7 +61,10 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return false;
             }
 
-            return intervalStart <= end && intervalEnd >= start;
+            bool startNotAfterQueryEnd = intervalStart < end
+                || (intervalStart == end && interval.StartSide == Side.Before);
+            bool endNotBeforeQueryStart = intervalEnd >= start;
+            return startNotAfterQueryEnd && endNotBeforeQueryStart;
         }
     }
 }

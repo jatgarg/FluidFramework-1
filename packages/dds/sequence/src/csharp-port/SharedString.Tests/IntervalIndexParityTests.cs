@@ -155,6 +155,90 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void OverlappingIntervalsIndex_StartSideAfter_AtQueryEndBoundary_Excluded()
+		{
+			// SS-A04 regression. An interval with StartSide=After at position
+			// N sits effectively "just after N". A query [_, N] must exclude
+			// it (interval start is strictly beyond query end). TS uses
+			// compareReferencePositions with side-encoded ordinals; the port
+			// applies the side check explicitly at boundaries.
+			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
+			SequenceInterval inclusive = collection.Add(3, Side.Before, 6, Side.Before, intervalId: "before");
+			SequenceInterval exclusiveByAfter = collection.Add(3, Side.After, 6, Side.Before, intervalId: "after");
+			OverlappingIntervalsIndex index = new();
+			index.Add(inclusive);
+			index.Add(exclusiveByAfter);
+
+			// Query [1, 3]. `before` has startPos=3/Before → overlaps.
+			// `after` has startPos=3/After → sits "just after 3" → excluded.
+			AssertIds(index.FindOverlapping(1, 3), "before");
+		}
+
+		[Fact]
+		public void OverlappingIntervalsIndex_EndSideBefore_AtQueryStartBoundary_StillIncluded()
+		{
+			// SS-A04: The lower-bound side check is symmetric — an interval
+			// with EndSide=Before at position N still overlaps a query
+			// starting at N (both sides Before → equal → overlap).
+			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
+			SequenceInterval touchesLeft = collection.Add(1, Side.Before, 4, Side.Before, intervalId: "l");
+			OverlappingIntervalsIndex index = new();
+			index.Add(touchesLeft);
+
+			// Query [4, 6]. Interval end=4/Before → same-position same-side →
+			// interval.end >= query.start → overlaps.
+			AssertIds(index.FindOverlapping(4, 6), "l");
+		}
+
+		[Fact]
+		public void StartpointInRange_StartSideAfter_AtQueryEndBoundary_Excluded()
+		{
+			// SS-A04: startpoint in [start, end] uses side at the upper
+			// bound. Interval with StartSide=After at endpos of query is
+			// "just after" and thus outside the range.
+			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
+			SequenceInterval before = collection.Add(3, Side.Before, 4, Side.Before, intervalId: "before");
+			SequenceInterval after = collection.Add(3, Side.After, 4, Side.Before, intervalId: "after");
+			StartpointInRangeIndex index = new();
+			index.Add(before);
+			index.Add(after);
+
+			AssertIds(index.FindStartpointsInRange(1, 3), "before");
+		}
+
+		[Fact]
+		public void EndpointInRange_EndSideAfter_AtQueryEndBoundary_Excluded()
+		{
+			// SS-A04: endpoint-in-range applies the side check to EndSide.
+			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
+			SequenceInterval before = collection.Add(1, Side.Before, 3, Side.Before, intervalId: "before");
+			SequenceInterval after = collection.Add(1, Side.Before, 3, Side.After, intervalId: "after");
+			EndpointInRangeIndex index = new();
+			index.Add(before);
+			index.Add(after);
+
+			AssertIds(index.FindEndpointsInRange(1, 3), "before");
+		}
+
+		[Fact]
+		public void EndpointIndex_PreviousInterval_EndSideAfter_AtQueryPosition_Excluded()
+		{
+			// SS-A04: PreviousInterval(N) excludes an interval whose end is
+			// EndSide=After at position N, because that end is "just after"
+			// N, i.e. NOT <= N.
+			IntervalCollection collection = CreateCollectionWithText("abcdefgh");
+			SequenceInterval before = collection.Add(1, Side.Before, 3, Side.Before, intervalId: "before");
+			SequenceInterval after = collection.Add(1, Side.Before, 3, Side.After, intervalId: "after");
+			EndpointIndex index = new();
+			index.Add(before);
+			index.Add(after);
+
+			SequenceInterval? previous = index.PreviousInterval(3);
+			Assert.NotNull(previous);
+			Assert.Equal("before", previous!.Id);
+		}
+
+		[Fact]
 		public void IdIntervalIndex_DetachedNormalInterval_IsStillAddressableById()
 		{
 			// TS ref: packages/dds/sequence/src/intervalIndex/idIntervalIndex.ts —

@@ -29,13 +29,17 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return Enumerable.Empty<SequenceInterval>();
             }
 
-            // Materialize at call time to match TS's snapshot semantics
-            // (intervalIndex/startpointInRangeIndex.ts).
+            // SS-A04: side-aware boundary. Query bounds are numeric so both
+            // use defaultSide (Before). An interval's start is "in range" iff
+            //   start >= query.start (pos >= start; any side >= Before at ==)
+            //   AND start <= query.end (pos < end OR pos == end AND
+            //                           interval.StartSide == Before)
             return _intervals.Where(
                 interval => !interval.HasDetachedEndpoint
                     && interval.StartPosition is int position
                     && position >= start
-                    && position <= end)
+                    && (position < end
+                        || (position == end && interval.StartSide == Side.Before)))
                 .OrderBy(interval => interval, IntervalIndexComparers.StartpointComparer)
                 .ToArray();
         }
