@@ -223,6 +223,52 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
+		public void RemoteAnnotate_WithLocalPendingInsertBefore_PreviousPropsFromRemotePerspective()
+		{
+			// Remote annotate walks in the message's (refSeq, clientId)
+			// perspective; pre-annotate property snapshotting must use the
+			// same perspective so PreviousProperties align with the segments
+			// actually mutated. Walking the current local view misaligns
+			// after local pending inserts before the range.
+			var sender = new FakeFluidDataObjectSender();
+			SharedString sharedString = new("doc", sender);
+			sharedString.InsertText(0, "abcde");
+			ProcessLocalAck(sharedString, Assert.Single(sender.Sent), refSeq: 0, seq: 1);
+			sender.Sent.Clear();
+
+			// Pre-existing color=blue on the whole string, acked.
+			sharedString.AnnotateRange(0, 5, new PropertySet() { ["color"] = "blue" });
+			ProcessLocalAck(sharedString, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			// Local pending insert of 5 chars at the front. Local view
+			// shifts by 5; remote's perspective still sees the original 5.
+			sharedString.InsertText(0, "XXXXX");
+			sender.Sent.Clear();
+
+			var events = new List<SequenceDeltaEventArgs>();
+			sharedString.OnSequenceDelta += (_, e) => events.Add(e);
+
+			// Remote annotate on the ORIGINAL 5 chars in remote perspective.
+			ProcessRemoteAnnotate(
+				sharedString,
+				0,
+				5,
+				new PropertySet() { ["color"] = "red" },
+				refSeq: 2,
+				seq: 3);
+
+			SequenceDeltaEventArgs captured = Assert.Single(events);
+			Assert.False(captured.Local);
+			// Previous color must be "blue" — the value on the segments the
+			// remote actually mutates. Prior to the fix the snapshot walked
+			// the local view and covered only the pending "XXXXX" segment
+			// (no color), so PropertyDeltas came back null.
+			SequenceDeltaRange range = Assert.Single(captured.Ranges);
+			Assert.Equal("blue", Assert.IsType<string>(range.PropertyDeltas["color"]));
+		}
+
+		[Fact]
 		public void TwoClients_SequentialAnnotate_Converges()
 		{
 			var harness = new TwoClientHarness();

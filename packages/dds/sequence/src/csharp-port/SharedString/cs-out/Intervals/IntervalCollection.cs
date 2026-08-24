@@ -914,6 +914,12 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				// updates pending.consensus after ackChange returns.)
 				AdvanceConsensusForAckedChangeNoLock(pending, head);
 
+				// Reconcile live interval properties with consensus so remote
+				// property changes folded during pending window aren't lost
+				// when the pending record clears. Endpoints are NOT
+				// reconciled (see method comment).
+				interval = ReconcileLiveToConsensusAndPendingNoLock(id, pending);
+
 				// only clear the id's pending state when the queue is
 				// empty. Retaining state while other pending changes remain
 				// preserves protection for subsequent local mutations.
@@ -998,6 +1004,47 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 					}
 				}
 			}
+		}
+
+		// Re-apply consensus properties to the live interval so remote
+		// property changes folded during pending window remain visible after
+		// ACK. TS's `sequenceInterval.modify()` aliases the props map by
+		// reference between consensus and live instances; the port stores
+		// them separately, so we copy consensus back to live at ACK time,
+		// then re-apply remaining pending property deltas on top.
+		//
+		// Endpoints are NOT reconciled. TS's ackChange (local branch) only
+		// calls ackPropertiesChange + ackInterval. Live endpoints track
+		// segment movements via LocalReferencePosition; resetting them from
+		// stored consensus positions would revert legit slides caused by
+		// intervening text inserts.
+		private SequenceInterval? ReconcileLiveToConsensusAndPendingNoLock(string id, PendingChangesForId pending)
+		{
+			SequenceInterval? interval = GetActiveIntervalById(id);
+			if (interval is null)
+			{
+				return null;
+			}
+
+			// Reset properties to consensus. Deep-clone so post-ACK mutations
+			// of the interval don't leak back into the pending record's copy.
+			MergeTree.PropertySet? consensusProps = pending.ConsensusProperties.Count > 0
+				? (MergeTree.PropertyMap.DeepClonePropertySet(pending.ConsensusProperties) ?? new MergeTree.PropertySet())
+				: null;
+			interval.Properties = consensusProps;
+
+			// Re-apply the remaining (still-unacked) local property deltas on
+			// top of consensus so the local view continues to reflect its own
+			// pending changes.
+			foreach (PendingIntervalChange change in pending.Queue)
+			{
+				if (change.DeltaProperties is not null && change.DeltaProperties.Count > 0)
+				{
+					ApplyPropertyChanges(interval, change.DeltaProperties);
+				}
+			}
+
+			return interval;
 		}
 
 		internal void DropDetachedIntervalForRebase(string id)

@@ -75,6 +75,32 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             CanSlideToEndpoint = canSlideToEndpoint;
         }
 
+        // Detached-reference ctor: reference not attached to any segment or
+        // endpoint. Used when a remote op's position doesn't resolve to a
+        // segment in the receiver's perspective (e.g. concurrently removed).
+        // Matches TS createDetachedLocalReferencePosition.
+        internal LocalReferencePosition(
+            ReferenceType refType,
+            SlidingPreference slidingPreference,
+            PropertySet? properties,
+            bool canSlideToEndpoint,
+            bool detached)
+        {
+            if (!detached)
+            {
+                throw new ArgumentException("Detached ctor requires detached=true.", nameof(detached));
+            }
+
+            ValidateReferenceType(refType);
+            Segment = null;
+            Endpoint = ReferenceEndpointKind.None;
+            Offset = 0;
+            RefType = refType;
+            SlidingPreference = slidingPreference;
+            Properties = properties;
+            CanSlideToEndpoint = canSlideToEndpoint;
+        }
+
         internal ISegment? Segment { get; set; }
 
         internal int Offset { get; set; }
