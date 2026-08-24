@@ -640,9 +640,12 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		[Fact]
 		public void ConcurrentPropertyChange_LocalAndRemote_BothAck_ConvergesToLastAcked()
 		{
-			// regression. Traces a full pending-property-change cycle
-			// with a concurrent remote property change and both ACKs. Asserts
-			// final convergence, event fires, and consensus advancement.
+			// Same-key concurrent change: local sets color=blue, remote sets
+			// color=green during pending window. Remote seq=3 folded into
+			// consensus. Local ACK seq=4 > remote seq=3 so local wins by
+			// LWW — matches TS. Under strict FIFO Fluid ordering, a remote
+			// seq folded during a pending window is always < the subsequent
+			// local ACK's seq.
 			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
 			IntervalCollection collection = local.GetIntervalCollection("comments");
 
@@ -677,9 +680,110 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			// No propertyChanged event fired for the folded remote (consensus-only).
 			Assert.Empty(propertyEvents);
 
-			// ACK our local change — consensus (which was green) receives our blue on top.
+			// ACK our local change — local delta layered on top of consensus.
+			// Local ACK seq=4 > remote seq=3 → local wins by LWW. Matches TS.
 			ProcessLocalAck(local, localSent, refSeq: 3, seq: 4);
 			Assert.Equal("blue", collection.GetIntervalById("i1")!.Properties?["color"]);
+		}
+
+		[Fact]
+		public void ConcurrentPropertyChange_DifferentKeys_BothVisibleAfterAck()
+		{
+			// Different-key concurrent change: local sets color=blue, remote
+			// sets fontSize=12 during pending. On local ACK, consensus fold
+			// (fontSize=12) must be reconciled back to live so BOTH values
+			// are visible. TS aliases the props map by reference between
+			// consensus and live instances; the port copies it explicitly
+			// via ReconcileLiveToConsensusAndPendingNoLock.
+			(SharedString local, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			IntervalCollection collection = local.GetIntervalCollection("comments");
+
+			collection.Add(2, 5, intervalId: "i1", properties: new PropertySet() { ["a"] = 1 });
+			ProcessLocalAck(local, Assert.Single(sender.Sent), refSeq: 1, seq: 2);
+			sender.Sent.Clear();
+
+			collection.ChangeProperties("i1", new PropertySet() { ["color"] = "blue" });
+			var localSent = Assert.Single(sender.Sent);
+			sender.Sent.Clear();
+
+			// Concurrent remote change on a DIFFERENT key.
+			ProcessRemoteIntervalPropertyChanged(
+				local,
+				"comments",
+				"i1",
+				new PropertySet() { ["fontSize"] = 12 },
+				refSeq: 2,
+				seq: 3);
+
+			// Before ACK: live still shows only the local change.
+			SequenceInterval preAck = collection.GetIntervalById("i1")!;
+			Assert.Equal("blue", preAck.Properties?["color"]);
+			Assert.False(preAck.Properties?.ContainsKey("fontSize") ?? false);
+
+			// After local ACK: reconcile pulls fontSize back to live from
+			// consensus, and the local color=blue is layered on top.
+			ProcessLocalAck(local, localSent, refSeq: 3, seq: 4);
+			SequenceInterval postAck = collection.GetIntervalById("i1")!;
+			Assert.Equal("blue", postAck.Properties?["color"]);
+			Assert.Equal(12, postAck.Properties?["fontSize"]);
+			Assert.Equal(1, postAck.Properties?["a"]);
+		}
+
+		[Fact]
+		public void RemoteAdd_OutOfRangeNumericPosition_ProducesDetachedEndpoints()
+		{
+			// Malformed remote positions that don't resolve in the message
+			// perspective must produce a detached reference (matches TS
+			// createDetachedLocalReferencePosition). Prior behavior coerced
+			// them to the End sentinel, silently mapping to document end.
+			(SharedString sharedString, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			sender.Sent.Clear();
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+
+			// Length is 10; positions 100 and 200 have no valid resolution.
+			ProcessRemoteIntervalAdd(sharedString, "comments", "bad", 100, 200, refSeq: 1, seq: 2);
+
+			SequenceInterval? interval = collection.GetIntervalById("bad");
+			Assert.NotNull(interval);
+			Assert.True(interval!.HasDetachedEndpoint);
+			// Detached refs surface as -1 (DetachedReferencePosition sentinel).
+			Assert.Equal(MergeTree.MergeTree.DetachedReferencePosition, interval.StartPosition);
+			Assert.Equal(MergeTree.MergeTree.DetachedReferencePosition, interval.EndPosition);
+		}
+
+		[Fact]
+		public void RemoteAdd_NegativeNumericPosition_ProducesDetachedEndpoints()
+		{
+			// Negative positions must also produce a detached ref, not
+			// silently map to a valid endpoint sentinel.
+			(SharedString sharedString, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			sender.Sent.Clear();
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+
+			ProcessRemoteIntervalAdd(sharedString, "comments", "bad", -5, -1, refSeq: 1, seq: 2);
+
+			SequenceInterval? interval = collection.GetIntervalById("bad");
+			Assert.NotNull(interval);
+			Assert.True(interval!.HasDetachedEndpoint);
+		}
+
+		[Fact]
+		public void RemoteAdd_NumericPositionEqualToLength_UsesTailSegment()
+		{
+			// position == length with a non-empty perspective resolves to the
+			// last visible segment's tail ("end of string" numeric
+			// convention). NOT the malformed case above — must NOT detach.
+			(SharedString sharedString, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
+			sender.Sent.Clear();
+			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
+
+			ProcessRemoteIntervalAdd(sharedString, "comments", "tail", 5, 10, refSeq: 1, seq: 2);
+
+			SequenceInterval? interval = collection.GetIntervalById("tail");
+			Assert.NotNull(interval);
+			Assert.False(interval!.HasDetachedEndpoint);
+			Assert.Equal(5, interval.StartPosition);
+			Assert.Equal(10, interval.EndPosition);
 		}
 
 		[Fact]

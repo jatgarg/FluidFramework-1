@@ -2255,7 +2255,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			// Snapshot pre-annotate props on each affected segment; used by
 			// the delta ranges to expose previous values on the remote-annotate
 			// event. (TS: sequenceDeltaEvent.ts propertyDeltas.)
-			Dictionary<ISegment, PropertySet> previousBySegment = SnapshotPropertiesForAnnotate(start, end, props);
+			Dictionary<ISegment, PropertySet> previousBySegment = SnapshotPropertiesForAnnotate(start, end, props, refSeq, clientId);
 
 			List<ISegment> deltaSegments = MergeTree.AnnotateRange(start, end, props, refSeq, seq, clientId, perspectiveSeq);
 			IReadOnlyList<MergeTreeDelta> deltas = CreateRemoteAnnotateDelta(op, deltaSegments, clientId, props, previousBySegment);
@@ -2263,23 +2263,15 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			return deltas;
 		}
 
-		private Dictionary<ISegment, PropertySet> SnapshotPropertiesForAnnotate(int start, int end, PropertySet mutatedKeys)
+		private Dictionary<ISegment, PropertySet> SnapshotPropertiesForAnnotate(int start, int end, PropertySet mutatedKeys, long refSeq, string clientId)
 		{
-			// Clamp the range to the current visible length: the annotate
-			// start/end may be expressed against a remote perspective that
-			// predates local pending edits. AnnotateRange itself performs the
-			// perspective-aware walk; we only need the pre-annotate props on
-			// segments whose properties are about to be mutated.
-			int currentLength = MergeTree.GetLength();
-			if (start < 0)
-			{
-				start = 0;
-			}
-
-			if (end > currentLength)
-			{
-				end = currentLength;
-			}
+			// Snapshot in the same (refSeq, clientId) perspective as
+			// AnnotateRange so "previous properties" align with the segments
+			// the annotate actually mutates. Walking the current local view
+			// misaligns after local pending inserts before the range.
+			int perspectiveLength = MergeTree.GetLength(refSeq, clientId);
+			start = Math.Clamp(start, 0, perspectiveLength);
+			end = Math.Clamp(end, 0, perspectiveLength);
 
 			Dictionary<ISegment, PropertySet> snapshots = new();
 			if (start >= end)
@@ -2287,7 +2279,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return snapshots;
 			}
 
-			foreach ((ISegment segment, int _, int _) in MergeTree.GetSegments(start, end))
+			foreach ((ISegment segment, int _, int _) in MergeTree.GetSegments(start, end, refSeq, clientId))
 			{
 				if (segment.CachedLength == 0 || snapshots.ContainsKey(segment))
 				{

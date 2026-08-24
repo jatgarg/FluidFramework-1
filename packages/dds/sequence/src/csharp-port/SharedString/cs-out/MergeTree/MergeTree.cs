@@ -349,18 +349,16 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             int length = GetLength(refSeq, clientId);
             if (position == length)
             {
-                // The remote op addressed "end of string" in its perspective.
-                // Resolve to the last visible segment in that perspective if
-                // any, so slide-on-remove still functions later.
+                // Remote op addressed "end of string" in its perspective.
+                // Resolve to the last visible segment if any, so
+                // slide-on-remove still functions. Empty perspective →
+                // detached ref (matches TS createPositionReferenceFromSegoff).
+                // Endpoint sentinels are reserved for explicit "start"/"end"
+                // wire inputs (separate call site).
                 (ISegment segment, int offset)? tail = FindTailSegmentInPerspective(refSeq, clientId);
                 if (tail is null)
                 {
-                    if (canSlideToEndpoint)
-                    {
-                        return CreateReferencePositionAtEndpoint(ReferenceEndpointKind.End, refType, slidingPreference, properties);
-                    }
-
-                    throw new ArgumentOutOfRangeException(nameof(position), "Position must identify a visible segment in the message perspective.");
+                    return CreateDetachedReferencePosition(refType, slidingPreference, properties, canSlideToEndpoint);
                 }
 
                 return CreateReferencePosition(tail.Value.segment, tail.Value.offset, refType, slidingPreference, properties, canSlideToEndpoint);
@@ -369,15 +367,24 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             (ISegment segment, int offsetInSegment)? resolved = TryGetContainingSegment(position, refSeq, clientId);
             if (resolved is null)
             {
-                if (canSlideToEndpoint)
-                {
-                    return CreateReferencePositionAtEndpoint(ReferenceEndpointKind.End, refType, slidingPreference, properties);
-                }
-
-                throw new ArgumentOutOfRangeException(nameof(position), "Position must identify a visible segment in the message perspective.");
+                // Position doesn't resolve — detached ref (matches TS
+                // createDetachedLocalReferencePosition). Coercing to End
+                // sentinel would silently map malformed remote positions
+                // (negative, past-end, or referencing a concurrently-removed
+                // segment) to document end.
+                return CreateDetachedReferencePosition(refType, slidingPreference, properties, canSlideToEndpoint);
             }
 
             return CreateReferencePosition(resolved.Value.segment, resolved.Value.offsetInSegment, refType, slidingPreference, properties, canSlideToEndpoint);
+        }
+
+        private static LocalReferencePosition CreateDetachedReferencePosition(
+            ReferenceType refType,
+            SlidingPreference slidingPreference,
+            PropertySet? properties,
+            bool canSlideToEndpoint)
+        {
+            return new LocalReferencePosition(refType, slidingPreference, properties, canSlideToEndpoint, detached: true);
         }
 
         private (ISegment segment, int offset)? FindTailSegmentInPerspective(long refSeq, string? clientId)
