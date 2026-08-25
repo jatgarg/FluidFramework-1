@@ -22,6 +22,14 @@ namespace Microsoft.Office.Web.Fluid.Intervals
             IntervalIndexComparers.Remove(_intervals, interval, IntervalIndexComparers.CompareByIntervalThenId);
 
         /// <summary>Returns intervals overlapping [start, end].</summary>
+        /// <summary>Returns intervals overlapping [start, end], inclusive on both bounds with side awareness.</summary>
+        /// <remarks>
+        /// Materializes at call time so the returned collection is a snapshot
+        /// of the index at query time. Deferred LINQ over the mutable
+        /// backing list would surface subsequent Add/Remove as
+        /// InvalidOperationException on enumeration; a snapshot avoids that
+        /// and matches TS's return-array contract.
+        /// </remarks>
         public IEnumerable<SequenceInterval> FindOverlapping(int start, int end)
         {
             if (end < start || _intervals.Count == 0)
@@ -29,8 +37,6 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return Enumerable.Empty<SequenceInterval>();
             }
 
-            // Materialize at call time to match TS's snapshot semantics
-            // (intervalIndex/overlappingIntervalsIndex.ts).
             return _intervals.Where(interval => !interval.HasDetachedEndpoint && OverlapsInclusive(interval, start, end))
                 .OrderBy(interval => interval, IntervalIndexComparers.IntervalComparer)
                 .ToArray();

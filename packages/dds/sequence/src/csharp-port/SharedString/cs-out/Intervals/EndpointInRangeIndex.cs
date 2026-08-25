@@ -22,6 +22,13 @@ namespace Microsoft.Office.Web.Fluid.Intervals
             IntervalIndexComparers.Remove(_intervals, interval, IntervalIndexComparers.CompareByEndThenId);
 
         /// <summary>Returns intervals whose end position is in [start, end].</summary>
+        /// <remarks>
+        /// Materializes at call time so the returned collection is a snapshot
+        /// of the index at query time. Deferred LINQ over the mutable
+        /// backing list would surface subsequent Add/Remove as
+        /// InvalidOperationException on enumeration; a snapshot avoids that
+        /// and matches TS's return-array contract.
+        /// </remarks>
         public IEnumerable<SequenceInterval> FindEndpointsInRange(int start, int end)
         {
             if (start <= 0 || start > end || _intervals.Count == 0)
@@ -29,14 +36,11 @@ namespace Microsoft.Office.Web.Fluid.Intervals
                 return Enumerable.Empty<SequenceInterval>();
             }
 
-            // TS ref: packages/dds/sequence/src/intervalIndex/endpointInRangeIndex.ts —
-            // TS builds and returns a snapshot array at call time.
-            //
-            // side-aware boundary. Query bounds are numeric so both
-            // use defaultSide (Before). An interval's end is "in range" iff
-            //   end >= query.start (pos >= start; any side >= Before at ==)
-            //   AND end <= query.end (pos < end OR pos == end AND
-            //                         interval.EndSide == Before)
+            // Side-aware boundary at the upper edge. Query bounds are numeric
+            // so both use defaultSide (Before). An interval's end is "in
+            // range" iff pos >= start (any side qualifies at pos==start; see
+            // OverlappingIntervalsIndex.OverlapsInclusive for reasoning) AND
+            // (pos < end OR pos == end with EndSide == Before).
             return _intervals.Where(
                 interval => !interval.HasDetachedEndpoint
                     && interval.EndPosition is int position

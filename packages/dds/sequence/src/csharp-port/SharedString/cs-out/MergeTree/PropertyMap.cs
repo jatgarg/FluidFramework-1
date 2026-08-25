@@ -312,6 +312,14 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
         private static bool TryReadNumeric(object value, out double numeric)
         {
+            // Ordering doesn't affect correctness: each case is a type pattern
+            // (case int i:, case long l:, etc.) that matches by exact runtime
+            // type. Primitive numeric types are disjoint at runtime — a boxed
+            // long never matches `case int i:` no matter where either sits.
+            // The bool case is an explicit rejection: bool is IConvertible and
+            // would silently coerce to 0/1 in some numeric contexts, but here
+            // we want a hard "no" so downstream MatchProperties doesn't treat
+            // `true` and `1` as equal.
             switch (value)
             {
                 case bool:

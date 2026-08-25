@@ -1068,7 +1068,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			RaiseDelete(interval, previousStart: null, previousEnd: null, local: true, operation: null);
 		}
 
-		private readonly record struct RemotePerspective(long RefSeq, string ClientId);
+		private sealed record RemotePerspective(long RefSeq, string ClientId);
 
 		private SequenceInterval AddCore(
 			int start,
