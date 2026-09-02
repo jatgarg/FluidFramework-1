@@ -282,7 +282,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 return localSeq;
             }
 
-            throw new System.InvalidOperationException("Local sequence number is required for unassigned operation stamps.");
+            throw new LoggingError("Local sequence number is required for unassigned operation stamps.");
         }
     }
 }

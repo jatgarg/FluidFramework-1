@@ -134,13 +134,13 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
             if (target.ChildCount + count > MaxChildren)
             {
-                throw new System.InvalidOperationException("Moved children must fit in the target block.");
+                throw new LoggingError("Moved children must fit in the target block.");
             }
 
             for (int i = 0; i < count; i++)
             {
                 IMergeNode child = Children[0]
-                    ?? throw new System.InvalidOperationException("Cannot move a missing child.");
+                    ?? throw new LoggingError("Cannot move a missing child.");
                 RemoveChildAt(0);
                 target.AppendChild(child, updateOrdinal);
             }
@@ -154,7 +154,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             }
 
             IMergeNode removedChild = Children[index]
-                ?? throw new System.InvalidOperationException("Cannot remove a missing child.");
+                ?? throw new LoggingError("Cannot remove a missing child.");
             for (int i = index; i < ChildCount - 1; i++)
             {
                 IMergeNode? movedChild = Children[i + 1];
@@ -191,7 +191,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             ValidateChildIndex(index);
             if (ChildCount < 1 || ChildCount > MaxChildren)
             {
-                throw new System.InvalidOperationException("Child count must be within [1,8] before assigning ordinals.");
+                throw new LoggingError("Child count must be within [1,8] before assigning ordinals.");
             }
 
             string? previousOrdinal = index == 0 ? null : Children[index - 1]?.Ordinal;

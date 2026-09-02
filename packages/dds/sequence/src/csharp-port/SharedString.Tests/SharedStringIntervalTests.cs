@@ -438,13 +438,11 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
 			collection.Add(2, 5, intervalId: "c1");
 
-			OcsException exceptionStart = Assert.Throws<OcsException>(
+			UsageError exceptionStart = Assert.Throws<UsageError>(
 				() => collection.Change("c1", newStart: 1, newEnd: null));
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exceptionStart.ErrorCode);
 
-			OcsException exceptionEnd = Assert.Throws<OcsException>(
+			UsageError exceptionEnd = Assert.Throws<UsageError>(
 				() => collection.Change("c1", newStart: null, newEnd: 8));
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exceptionEnd.ErrorCode);
 		}
 
 		private static SharedString CreateSharedStringWithText(string text)

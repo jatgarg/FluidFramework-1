@@ -122,7 +122,7 @@ namespace Microsoft.Office.Web.Fluid
 				case MergeTree.MergeTreeDeltaType.Insert:
 					if (op is not MergeTree.IMergeTreeInsertMsg insertOperation)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree insert op runtime type: {op.GetType().FullName}");
+						throw new LoggingError($"Unknown merge-tree insert op runtime type: {op.GetType().FullName}");
 					}
 
 					writer.WriteNumber(_typePropertyName, (int)MergeTree.MergeTreeDeltaType.Insert);
@@ -147,7 +147,7 @@ namespace Microsoft.Office.Web.Fluid
 				case MergeTree.MergeTreeDeltaType.Remove:
 					if (op is not MergeTree.IMergeTreeRemoveMsg removeOperation)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree remove op runtime type: {op.GetType().FullName}");
+						throw new LoggingError($"Unknown merge-tree remove op runtime type: {op.GetType().FullName}");
 					}
 
 					writer.WriteNumber(_typePropertyName, (int)MergeTree.MergeTreeDeltaType.Remove);
@@ -170,7 +170,7 @@ namespace Microsoft.Office.Web.Fluid
 				case MergeTree.MergeTreeDeltaType.Obliterate:
 					if (op is not MergeTree.IMergeTreeObliterateMsg obliterateOperation)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree obliterate op runtime type: {op.GetType().FullName}");
+						throw new LoggingError($"Unknown merge-tree obliterate op runtime type: {op.GetType().FullName}");
 					}
 
 					writer.WriteNumber(_typePropertyName, (int)MergeTree.MergeTreeDeltaType.Obliterate);
@@ -181,7 +181,7 @@ namespace Microsoft.Office.Web.Fluid
 				case MergeTree.MergeTreeDeltaType.ObliterateSided:
 					if (op is not MergeTree.IMergeTreeObliterateSidedMsg sidedObliterateOperation)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree sided obliterate op runtime type: {op.GetType().FullName}");
+						throw new LoggingError($"Unknown merge-tree sided obliterate op runtime type: {op.GetType().FullName}");
 					}
 
 					writer.WriteNumber(_typePropertyName, (int)MergeTree.MergeTreeDeltaType.ObliterateSided);
@@ -194,7 +194,7 @@ namespace Microsoft.Office.Web.Fluid
 				case MergeTree.MergeTreeDeltaType.Annotate:
 					if (op is not MergeTree.MergeTreeAnnotateMsg annotateOperation)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree annotate op runtime type: {op.GetType().FullName}");
+						throw new LoggingError($"Unknown merge-tree annotate op runtime type: {op.GetType().FullName}");
 					}
 
 					writer.WriteNumber(_typePropertyName, (int)MergeTree.MergeTreeDeltaType.Annotate);
@@ -227,7 +227,7 @@ namespace Microsoft.Office.Web.Fluid
 				case MergeTree.MergeTreeDeltaType.Group:
 					if (op is not MergeTree.MergeTreeGroupMsg groupOperation)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree group op runtime type: {op.GetType().FullName}");
+						throw new LoggingError($"Unknown merge-tree group op runtime type: {op.GetType().FullName}");
 					}
 
 					writer.WriteNumber(_typePropertyName, (int)MergeTree.MergeTreeDeltaType.Group);
@@ -247,7 +247,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				default:
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree op type: {(int)op.Type}");
+					throw new LoggingError($"Unknown merge-tree op type: {(int)op.Type}");
 			}
 
 			writer.WriteEndObject();
@@ -554,7 +554,7 @@ namespace Microsoft.Office.Web.Fluid
 					return groupOperation;
 
 				default:
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree op type: {type?.ToString() ?? "<missing>"}");
+					throw new LoggingError($"Unknown merge-tree op type: {type?.ToString() ?? "<missing>"}");
 			}
 		}
 
@@ -636,7 +636,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				default:
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown interval op runtime type: {intervalOperation.GetType().FullName}");
+					throw new LoggingError($"Unknown interval op runtime type: {intervalOperation.GetType().FullName}");
 			}
 
 			writer.WriteEndObject();
@@ -1094,7 +1094,7 @@ namespace Microsoft.Office.Web.Fluid
 					};
 
 				default:
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown interval map op name: {operationValue.OpName}");
+					throw new LoggingError($"Unknown interval map op name: {operationValue.OpName}");
 			}
 		}
 
@@ -1213,7 +1213,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				default:
-					throw new NotSupportedException("Only TextSegment and Marker insert payloads are supported by the port serializer.");
+					throw new LoggingError("Only TextSegment and Marker insert payloads are supported by the port serializer.");
 			}
 		}
 
@@ -1587,7 +1587,7 @@ namespace Microsoft.Office.Web.Fluid
 					{
 						if (entry.Key is not string key)
 						{
-							throw new NotSupportedException("JSON property dictionaries must use string keys.");
+							throw new LoggingError("JSON property dictionaries must use string keys.");
 						}
 
 						writer.WritePropertyName(key);
@@ -1608,7 +1608,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				default:
-					throw new NotSupportedException($"Unsupported JSON property value type: {serializableValue.GetType().FullName}");
+					throw new LoggingError($"Unsupported JSON property value type: {serializableValue.GetType().FullName}");
 			}
 		}
 
@@ -1668,8 +1668,7 @@ namespace Microsoft.Office.Web.Fluid
 				&& typeMarker is string typeMarkerStr
 				&& typeMarkerStr == HandleWireFormat.SerializedHandleTypeName)
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new LoggingError(
 					"Serialized Fluid handle is missing required 'url' property.");
 			}
 
@@ -1737,7 +1736,7 @@ namespace Microsoft.Office.Web.Fluid
 					"group" => (int)MergeTree.MergeTreeDeltaType.Group,
 					"obliterate" => (int)MergeTree.MergeTreeDeltaType.Obliterate,
 					"obliterateSided" => (int)MergeTree.MergeTreeDeltaType.ObliterateSided,
-					_ => throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown merge-tree op type: {typeName ?? "<missing>"}"),
+					_ => throw new LoggingError($"Unknown merge-tree op type: {typeName ?? "<missing>"}"),
 				};
 			}
 
@@ -1848,8 +1847,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			if (actual != (int)expected)
 			{
-				throw new OcsException(
-					OcsGateErrorCode.UnknownOp,
+				throw new LoggingError(
 					$"Unknown interval op kind for type {(int)expected}: {actual?.ToString() ?? "<missing>"}");
 			}
 		}

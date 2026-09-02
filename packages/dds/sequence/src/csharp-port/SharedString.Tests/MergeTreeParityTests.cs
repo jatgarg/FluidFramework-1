@@ -213,7 +213,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			sharedString.InsertText(0, "hi");
 			sharedString.InsertMarker(2, ReferenceType.Tile, MarkerProps("m1", "tile"));
 
-			Assert.Throws<InvalidOperationException>(() => sharedString.AnnotateRange(2, 3, new PropertySet()
+			Assert.Throws<LoggingError>(() => sharedString.AnnotateRange(2, 3, new PropertySet()
 			{
 				[Marker.ReservedMarkerIdKey] = "m2",
 			}));
@@ -227,7 +227,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			SharedString sharedString = new();
 			sharedString.InsertMarker(0, ReferenceType.Tile, MarkerProps("m1", "tile"));
 
-			Assert.Throws<InvalidOperationException>(() => sharedString.AnnotateRange(0, 1, new PropertySet()
+			Assert.Throws<LoggingError>(() => sharedString.AnnotateRange(0, 1, new PropertySet()
 			{
 				[Marker.ReservedMarkerIdKey] = null,
 			}));
@@ -244,7 +244,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				Props = new PropertySet() { [Marker.ReservedMarkerIdKey] = "m2" },
 			});
 
-			Assert.Throws<InvalidOperationException>(() => sharedString.ProcessDataObjectOp(RemoteMessage(1, 2), opJson));
+			Assert.Throws<LoggingError>(() => sharedString.ProcessDataObjectOp(RemoteMessage(1, 2), opJson));
 			Assert.NotNull(sharedString.GetMarkerFromId("m1"));
 			Assert.Null(sharedString.GetMarkerFromId("m2"));
 		}

@@ -313,7 +313,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				}
 			};
 
-			InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.InsertText(4, "e"));
 
 			Assert.Contains("Reentrancy detected", exception.Message);

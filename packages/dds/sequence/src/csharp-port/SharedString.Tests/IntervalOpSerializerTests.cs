@@ -114,12 +114,11 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void IntervalAddOp_UnknownKind_ThrowsOcsException()
+		public void IntervalAddOp_UnknownKind_ThrowsLoggingError()
 		{
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => SharedStringOpSerializer.Deserialize("{\"type\":10,\"intervalOpKind\":99,\"collection\":\"comments\",\"id\":\"c1\",\"start\":5,\"end\":10,\"props\":{}}"));
 
-			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
 		}
 
 		[Fact]

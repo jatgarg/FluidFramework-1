@@ -212,7 +212,7 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (target.MergeTree.FirstSegment() is not null)
 			{
-				throw new OcsException(OcsGateErrorCode.InvalidState, "PopulateFromSnapshot requires empty target");
+				throw new LoggingError("PopulateFromSnapshot requires empty target");
 			}
 
 			ValidateWholeSnapshotForPopulate(snapshot);
@@ -1574,9 +1574,9 @@ namespace Microsoft.Office.Web.Fluid
 			return (segment.Text ?? string.Empty).Length;
 		}
 
-		private static OcsException InvalidSnapshot(string message)
+		private static LoggingError InvalidSnapshot(string message)
 		{
-			return new OcsException(OcsGateErrorCode.InvalidOperation, message);
+			return new LoggingError(message);
 		}
 	}
 }

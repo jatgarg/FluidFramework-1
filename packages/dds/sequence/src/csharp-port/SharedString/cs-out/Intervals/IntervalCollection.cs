@@ -314,8 +314,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			// intervalCollection.ts change().)
 			if (newStart.HasValue != newEnd.HasValue)
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new UsageError(
 					"Change API requires both start and end to be defined or undefined.");
 			}
 
@@ -324,8 +323,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			// the API boundary. (TS: intervalCollection.ts change().)
 			if (!newStart.HasValue && (newStartSide.HasValue || newEndSide.HasValue))
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new UsageError(
 					"Change API requires positions when sides are specified.");
 			}
 
@@ -703,7 +701,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 					return;
 				}
 
-				string intervalId = op.IntervalId ?? throw new OcsException(OcsGateErrorCode.InvalidOperation, "Interval change op is missing required IntervalId.");
+				string intervalId = op.IntervalId ?? throw new LoggingError("Interval change op is missing required IntervalId.");
 				(interval, previousStart, previousEnd) = ChangeCore(
 					intervalId,
 					op.Start,
@@ -1349,7 +1347,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 				{
 					MergeTree.EndpointSentinel.Start => MergeTree.ReferenceEndpointKind.Start,
 					MergeTree.EndpointSentinel.End => MergeTree.ReferenceEndpointKind.End,
-					_ => throw new InvalidOperationException($"Unhandled endpoint sentinel: {sentinel}"),
+					_ => throw new LoggingError($"Unhandled endpoint sentinel: {sentinel}"),
 				};
 
 				return _mergeTree.CreateReferencePositionAtEndpoint(
@@ -1407,14 +1405,13 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 		}
 
 		// Public-API validation: endpoint order, duplicate ID, and
-		// unsupported change shapes all surface as
-		// OcsException(InvalidOperation) so callers catch one family.
+		// unsupported change shapes all surface as UsageError so callers
+		// catch one family.
 		private static void ValidateEndpointOrder(int start, int end)
 		{
 			if (start > end)
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new UsageError(
 					$"Interval start ({start}) must be less than or equal to end ({end}).");
 			}
 		}
@@ -1454,8 +1451,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 			// changeProperties.)
 			if (props.ContainsKey("referenceRangeLabels"))
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new UsageError(
 					"The 'referenceRangeLabels' property cannot be modified once an interval is inserted into a collection.");
 			}
 

@@ -439,7 +439,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                     IntervalOpKind.Delete => MergeTreeDeltaType.IntervalDelete,
                     IntervalOpKind.Change => MergeTreeDeltaType.IntervalChange,
                     IntervalOpKind.PropertyChanged => MergeTreeDeltaType.IntervalPropertyChanged,
-                    _ => throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown interval op kind: {(int)IntervalOpKind}"),
+                    _ => throw new LoggingError($"Unknown interval op kind: {(int)IntervalOpKind}"),
                 };
             }
         }

@@ -1092,7 +1092,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             {
                 int sourceIndex = halfCount + i;
                 IMergeNode child = block.Children[sourceIndex]
-                    ?? throw new InvalidOperationException("Cannot split a block with missing children.");
+                    ?? throw new LoggingError("Cannot split a block with missing children.");
                 block.Children[sourceIndex] = null;
                 splitBlock.SetChild(i, child, updateOrdinal: false);
             }
@@ -1430,7 +1430,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             for (int i = 0; i < parent.ChildCount; i++)
             {
                 MergeBlock childBlock = (MergeBlock)(parent.GetChild(i)
-                    ?? throw new InvalidOperationException("Cannot pack a missing child block."));
+                    ?? throw new LoggingError("Cannot pack a missing child block."));
                 sourceBlocks.Add(childBlock);
                 totalNodeCount += childBlock.ChildCount;
             }
@@ -1487,7 +1487,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
                     if (sourceBlockIndex >= sourceBlocks.Count)
                     {
-                        throw new InvalidOperationException("Packed block source nodes were exhausted unexpectedly.");
+                        throw new LoggingError("Packed block source nodes were exhausted unexpectedly.");
                     }
 
                     MergeBlock sourceBlock = sourceBlocks[sourceBlockIndex];
@@ -2469,11 +2469,11 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             ISegment? rightSegment = segment.SplitAt(offset);
             if (rightSegment is null)
             {
-                throw new InvalidOperationException("Segment split failed.");
+                throw new LoggingError("Segment split failed.");
             }
 
             MergeBlock parent = segment.Parent
-                ?? throw new InvalidOperationException("Cannot split a detached segment.");
+                ?? throw new LoggingError("Cannot split a detached segment.");
             InsertChildIntoBlock(parent, segment.Index + 1, rightSegment);
             UpdateAfterChildInsertion(parent, rightSegment, stamp, rebuildAfterInsertion: true);
             if (rightSegment.Parent is MergeBlock rightParent)
@@ -2589,14 +2589,14 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             {
                 ISegment nextSegment = segments[insertionIndex];
                 parent = nextSegment.Parent
-                    ?? throw new InvalidOperationException("Cannot insert before a detached segment.");
+                    ?? throw new LoggingError("Cannot insert before a detached segment.");
                 childIndex = nextSegment.Index;
             }
             else
             {
                 ISegment previousSegment = segments[segments.Count - 1];
                 parent = previousSegment.Parent
-                    ?? throw new InvalidOperationException("Cannot insert after a detached segment.");
+                    ?? throw new LoggingError("Cannot insert after a detached segment.");
                 childIndex = previousSegment.Index + 1;
             }
 
@@ -2614,7 +2614,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
             if (block.ChildCount >= MergeBlock.MaxChildren)
             {
-                throw new InvalidOperationException("Cannot insert into an already-full merge block.");
+                throw new LoggingError("Cannot insert into an already-full merge block.");
             }
 
             for (int i = block.ChildCount; i > childIndex; i--)
@@ -3203,7 +3203,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 || props[Marker.ReservedMarkerIdKey] is not string proposedId
                 || !string.Equals(existingId, proposedId, StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("Cannot change the markerId of an existing marker.");
+                throw new LoggingError("Cannot change the markerId of an existing marker.");
             }
         }
 

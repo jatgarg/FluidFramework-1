@@ -87,12 +87,11 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void Deserialize_UnknownType_ThrowsOcsException()
+		public void Deserialize_UnknownType_ThrowsLoggingError()
 		{
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => SharedStringOpSerializer.Deserialize("{\"type\":99,\"pos1\":0}"));
 
-			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
 		}
 
 		[Fact]

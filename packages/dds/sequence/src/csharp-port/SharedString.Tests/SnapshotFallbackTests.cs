@@ -134,9 +134,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				sequenceNumber: 1,
 				orderedChunkMetadataJson: null);
 
-			OcsException exception = Assert.Throws<OcsException>(() => LoadIntoClient(snapshotJson));
+			LoggingError exception = Assert.Throws<LoggingError>(() => LoadIntoClient(snapshotJson));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("orderedChunkMetadata", exception.Message);
 		}
 

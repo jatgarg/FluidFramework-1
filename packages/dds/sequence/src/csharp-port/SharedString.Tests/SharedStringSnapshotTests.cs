@@ -66,9 +66,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			var sharedString = new SharedString();
 			sharedString.InsertText(0, "existing");
 
-			OcsException exception = Assert.Throws<OcsException>(() => sharedString.LoadFromSnapshot(dto));
+			LoggingError exception = Assert.Throws<LoggingError>(() => sharedString.LoadFromSnapshot(dto));
 
-			Assert.Equal(OcsGateErrorCode.InvalidState, exception.ErrorCode);
 		}
 
 		[Fact]
@@ -146,9 +145,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				totalSegmentCount: 2,
 				totalLength: 2);
 
-			OcsException exception = Assert.Throws<OcsException>(() => sharedString.LoadFromSnapshot(snapshotJson));
+			LoggingError exception = Assert.Throws<LoggingError>(() => sharedString.LoadFromSnapshot(snapshotJson));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("blobResolver", exception.Message);
 		}
 
@@ -283,10 +281,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				totalSegmentCount: 2,
 				totalLength: 2);
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.LoadFromSnapshot(snapshotJson, blobName => null!));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("missing_chunk", exception.Message);
 		}
 
@@ -312,10 +309,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				catchupOpsBlobNamesJson: "[\"catchup\"]");
 			const string catchupOpsJson = "[{\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"r\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}]";
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("sequenceNumber", exception.Message);
 		}
 
@@ -333,10 +329,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				catchupOpsBlobNamesJson: "[\"catchup\"]");
 			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"minimumSequenceNumber\":1,\"clientId\":\"r\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}]";
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("referenceSequenceNumber", exception.Message);
 		}
 
@@ -354,10 +349,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				catchupOpsBlobNamesJson: "[\"catchup\"]");
 			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"clientId\":\"r\",\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}]";
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("minimumSequenceNumber", exception.Message);
 		}
 
@@ -375,10 +369,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				catchupOpsBlobNamesJson: "[\"catchup\"]");
 			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"contents\":{\"type\":0,\"pos1\":1,\"seg\":\"B\"}}]";
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("clientId", exception.Message);
 		}
 
@@ -396,10 +389,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				catchupOpsBlobNamesJson: "[\"catchup\"]");
 			const string catchupOpsJson = "[{\"sequenceNumber\":2,\"referenceSequenceNumber\":1,\"minimumSequenceNumber\":1,\"clientId\":\"r\"}]";
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("contents", exception.Message);
 		}
 
@@ -419,10 +411,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			// ISequencedDocumentMessage object.
 			const string catchupOpsJson = "[\"{\\\"type\\\":0,\\\"pos1\\\":1,\\\"seg\\\":\\\"B\\\"}\"]";
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.LoadFromSnapshot(snapshotJson, _ => catchupOpsJson));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 		}
 
 		private static SharedStringSnapshotDto LoadFixture(string fileName)

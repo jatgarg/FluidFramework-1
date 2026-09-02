@@ -69,13 +69,12 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		}
 
 		[Fact]
-		public void UnknownOpType_ThrowsOcsException()
+		public void UnknownOpType_ThrowsLoggingError()
 		{
 			var sharedString = new SharedString();
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => sharedString.ProcessDataObjectOp(RemoteMessage(refSeq: 0, seq: 1), "{\"type\":99,\"pos1\":0}"));
-			Assert.Equal(OcsGateErrorCode.UnknownOp, exception.ErrorCode);
 		}
 
 		[Fact]

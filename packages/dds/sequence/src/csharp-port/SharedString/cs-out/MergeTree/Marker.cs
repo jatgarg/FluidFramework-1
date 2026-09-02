@@ -217,7 +217,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
         public override void Append(ISegment segment)
         {
-            throw new InvalidOperationException("Can not append to marker.");
+            throw new LoggingError("Can not append to marker.");
         }
 
         public override string ToString()

@@ -275,7 +275,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
 			collection.Add(1, 3, intervalId: "i1");
 
-			OcsException ex = Assert.Throws<OcsException>(
+			UsageError ex = Assert.Throws<UsageError>(
 				() => collection.Change("i1", newStart: null, newEnd: null, newStartSide: Intervals.Side.After, newEndSide: Intervals.Side.Before));
 			Assert.Contains("positions", ex.Message);
 		}
@@ -290,7 +290,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");
 			collection.Add(1, 3, intervalId: "i1");
 
-			OcsException ex = Assert.Throws<OcsException>(
+			UsageError ex = Assert.Throws<UsageError>(
 				() => collection.ChangeProperties("i1", new PropertySet() { ["referenceRangeLabels"] = new[] { "evil" } }));
 			Assert.Contains("referenceRangeLabels", ex.Message);
 		}
@@ -791,8 +791,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			// regression. TS's idIntervalIndex.add does Map.set(id,
 			// interval) which silently replaces the existing entry. A
-			// duplicate-ID remote add used to throw OcsException and
-			// terminate the port; now the second add replaces the first.
+			// duplicate-ID remote add used to throw and terminate the
+			// port; now the second add replaces the first.
 			(SharedString sharedString, FakeFluidDataObjectSender sender) = CreateAckedSharedString("client-a", "abcdefghij");
 			sender.Sent.Clear();
 			IntervalCollection collection = sharedString.GetIntervalCollection("comments");

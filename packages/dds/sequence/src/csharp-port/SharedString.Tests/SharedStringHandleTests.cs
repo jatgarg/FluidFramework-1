@@ -93,7 +93,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			// dereference fails if url is missing. Reject at ingestion.
 			var receiverString = new SharedString();
 
-			OcsException exception = Assert.Throws<OcsException>(() =>
+			LoggingError exception = Assert.Throws<LoggingError>(() =>
 				receiverString.ProcessDataObjectOp(
 					RemoteMessage(refSeq: 0, seq: 1),
 					"{\"type\":0,\"pos1\":0,\"seg\":{\"props\":{\"target\":{\"type\":\"__fluid_handle__\"}}}}"));
@@ -268,9 +268,9 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			// regression. The port defensively clones the event op via
 			// a JSON round-trip so listeners can't mutate the enqueued
 			// canonical op. Without threading the registry through, that
-			// serialization step throws OcsException when the props tree
-			// contains a live IFluidDataObject handle. Registry-threading
-			// must preserve live handles through the clone.
+			// serialization step throws when the props tree contains a
+			// live IFluidDataObject handle. Registry-threading must
+			// preserve live handles through the clone.
 			var sender = new FakeFluidDataObjectSender();
 			var registry = new FakeFluidDataObjectRegistry();
 			var handle = new TestFluidDataObject("target");

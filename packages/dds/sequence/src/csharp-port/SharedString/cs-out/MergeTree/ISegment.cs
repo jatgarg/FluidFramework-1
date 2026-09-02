@@ -567,7 +567,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 }
             }
 
-            throw new InvalidOperationException("Inserted stamp was not found in the segment stamp list.");
+            throw new LoggingError("Inserted stamp was not found in the segment stamp list.");
         }
 
         private SetRemoveOperationStamp CreateSetRemoveStamp()

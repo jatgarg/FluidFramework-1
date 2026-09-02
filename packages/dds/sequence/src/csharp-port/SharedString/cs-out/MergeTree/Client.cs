@@ -675,7 +675,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 					return Array.Empty<MergeTreeDelta>();
 
 				default:
-					throw new NotSupportedException($"Merge-tree op type '{op.Type}' is not supported by the port Client.");
+					throw new LoggingError($"Merge-tree op type '{op.Type}' is not supported by the port Client.");
 			}
 		}
 
@@ -1190,7 +1190,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			}
 
 			int position = MergeTree.GetPositionOfSegmentForReconnect(firstVisibleSegment, ClientId, pending.LocalSeq)
-				?? throw new InvalidOperationException("Pending insert segment must be visible in its reconnect perspective.");
+				?? throw new LoggingError("Pending insert segment must be visible in its reconnect perspective.");
 			MergeTreeInsertMsg op = new()
 			{
 				Pos1 = position,
@@ -1835,7 +1835,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 					};
 
 				default:
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Cannot clone op runtime type: {op.GetType().FullName}");
+					throw new LoggingError($"Cannot clone op runtime type: {op.GetType().FullName}");
 			}
 		}
 
@@ -2915,7 +2915,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return TextSegmentFromJsonElement(jsonElement);
 			}
 
-			throw new NotSupportedException("Only TextSegment and Marker insert payloads are supported by the port Client.");
+			throw new LoggingError("Only TextSegment and Marker insert payloads are supported by the port Client.");
 		}
 
 		private static TextSegment TextSegmentFromJsonElement(JsonElement jsonElement)
@@ -2940,7 +2940,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				return new TextSegment(textProperty.GetString() ?? string.Empty, properties);
 			}
 
-			throw new NotSupportedException("Only JSON text segment insert payloads are supported by the port Client.");
+			throw new LoggingError("Only JSON text segment insert payloads are supported by the port Client.");
 		}
 
 		private static PropertySet JsonElementToPropertySet(JsonElement jsonElement)

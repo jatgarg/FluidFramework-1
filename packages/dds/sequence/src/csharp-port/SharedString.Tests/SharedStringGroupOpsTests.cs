@@ -88,7 +88,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			var sharedString = new SharedString();
 
-			Assert.Throws<InvalidOperationException>(() =>
+			Assert.Throws<LoggingError>(() =>
 				sharedString.RunInBatch(() =>
 					sharedString.RunInBatch(() => sharedString.InsertText(0, "nope"))));
 		}

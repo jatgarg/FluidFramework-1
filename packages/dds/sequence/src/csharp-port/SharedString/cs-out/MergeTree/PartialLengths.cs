@@ -302,7 +302,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                 {
                     if (childBlock.CachedLength != childBlock.PartialLengths.TotalCurrentLength)
                     {
-                        throw new InvalidOperationException("Child block cached length does not match partial lengths.");
+                        throw new LoggingError("Child block cached length does not match partial lengths.");
                     }
 
                     expectedCurrentLength += childBlock.CachedLength;
@@ -320,7 +320,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             if (block.CachedLength != expectedCurrentLength
                 || block.PartialLengths.TotalCurrentLength != expectedCurrentLength)
             {
-                throw new InvalidOperationException("MergeBlock cached length does not match child partial lengths.");
+                throw new LoggingError("MergeBlock cached length does not match child partial lengths.");
             }
 
             if (!AreDeltasEqual(block.PartialLengths._deltasBySeq, expected._deltasBySeq)
@@ -329,7 +329,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                     block.PartialLengths._localUnackedSegmentsByClient,
                     expected._localUnackedSegmentsByClient))
             {
-                throw new InvalidOperationException("Partial-length aggregates do not match child contributions.");
+                throw new LoggingError("Partial-length aggregates do not match child contributions.");
             }
         }
 

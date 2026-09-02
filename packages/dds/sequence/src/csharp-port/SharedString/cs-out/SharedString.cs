@@ -120,7 +120,7 @@ namespace Microsoft.Office.Web.Fluid
 			{
 				if (_batchOps is not null)
 				{
-					throw new InvalidOperationException("Nested SharedString batches are not supported.");
+					throw new LoggingError("Nested SharedString batches are not supported.");
 				}
 
 				_batchOps = new List<IMergeTreeOp>();
@@ -630,15 +630,13 @@ namespace Microsoft.Office.Web.Fluid
 			int length = _client.MergeTree.GetLength();
 			if (start < 0 || start > length || start == length)
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new UsageError(
 					$"RangeOutOfBounds: start={start} is invalid for annotate on length={length}.");
 			}
 
 			if (end <= start)
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new UsageError(
 					$"RangeOutOfBounds: end={end} must be greater than start={start} for annotate.");
 			}
 		}
@@ -980,7 +978,7 @@ namespace Microsoft.Office.Web.Fluid
 				MergeTreeDeltaType.Remove => _removeOpType,
 				MergeTreeDeltaType.Obliterate => _obliterateOpType,
 				MergeTreeDeltaType.Annotate => _annotateOpType,
-				_ => throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unhandled sequence delta op type: {operation}"),
+				_ => throw new LoggingError($"Unhandled sequence delta op type: {operation}"),
 			};
 		}
 
@@ -1119,7 +1117,7 @@ namespace Microsoft.Office.Web.Fluid
 			{
 				if (_localMutationDepth > 0)
 				{
-					throw new InvalidOperationException("Reentrancy detected in sequence local ops");
+					throw new LoggingError("Reentrancy detected in sequence local ops");
 				}
 
 				_localMutationDepth++;
@@ -1371,7 +1369,7 @@ namespace Microsoft.Office.Web.Fluid
 
 				if (op is not MergeTreeOp mergeTreeOp)
 				{
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Cannot flush op runtime type: {op.GetType().FullName}");
+					throw new LoggingError($"Cannot flush op runtime type: {op.GetType().FullName}");
 				}
 
 				pendingGroup.Add(mergeTreeOp);
@@ -1477,7 +1475,7 @@ namespace Microsoft.Office.Web.Fluid
 				MergeTreeDeltaType.IntervalDelete => _intervalOpType,
 				MergeTreeDeltaType.IntervalChange => _intervalOpType,
 				MergeTreeDeltaType.IntervalPropertyChanged => _intervalOpType,
-				_ => throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unhandled local op type: {op.Type}"),
+				_ => throw new LoggingError($"Unhandled local op type: {op.Type}"),
 			};
 		}
 

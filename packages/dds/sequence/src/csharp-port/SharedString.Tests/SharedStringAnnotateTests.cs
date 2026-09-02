@@ -372,7 +372,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			SharedString sharedString = new();
 			sharedString.InsertText(0, "hello world");
 
-			Assert.Throws<OcsException>(() =>
+			Assert.Throws<UsageError>(() =>
 				sharedString.AnnotateRange(3, 3, new PropertySet() { ["color"] = "red" }));
 		}
 
@@ -382,7 +382,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			SharedString sharedString = new();
 			sharedString.InsertText(0, "hello world");
 
-			Assert.Throws<OcsException>(() =>
+			Assert.Throws<UsageError>(() =>
 				sharedString.AnnotateRange(5, 2, new PropertySet() { ["color"] = "red" }));
 		}
 
@@ -392,7 +392,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			SharedString sharedString = new();
 			sharedString.InsertText(0, "hello world");
 
-			Assert.Throws<OcsException>(() =>
+			Assert.Throws<UsageError>(() =>
 				sharedString.AnnotateRange(sharedString.GetLength(), sharedString.GetLength(), new PropertySet() { ["color"] = "red" }));
 		}
 
