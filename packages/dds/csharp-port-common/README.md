@@ -21,7 +21,6 @@ the same names.
 - `OpOrigin`
 - `SequencedDocumentMessageDescriptor` (extended with `RefSeq` + `ClientId`)
 - `FluidObjectId`
-- `OcsException` + `OcsGateErrorCode`
 - `fluidDataStoreMessageAttach` (attach-message shim)
 
 ### Real deliverables (carry over on transfer)

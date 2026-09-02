@@ -132,8 +132,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			// since TS's number-vs-non-number type mismatch would throw at runtime too).
 			const string json = "{\"subdirectories\":{\"foo\":{\"ci\":{\"csn\":\"not-a-number\"}}}}";
 
-			OcsException exception = Assert.Throws<OcsException>(() => DirectorySnapshotLoader.Parse(json));
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
+			LoggingError exception = Assert.Throws<LoggingError>(() => DirectorySnapshotLoader.Parse(json));
 		}
 
 		[Fact]
@@ -141,9 +140,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			const string json = "{\"storage\":{\"broken\":123}}";
 
-			OcsException exception = Assert.Throws<OcsException>(() => DirectorySnapshotLoader.Parse(json));
+			LoggingError exception = Assert.Throws<LoggingError>(() => DirectorySnapshotLoader.Parse(json));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 		}
 
 		[Fact]
@@ -151,9 +149,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			const string json = "{\"blobs\":[\"blob0\"],\"content\":{}}";
 
-			OcsException exception = Assert.Throws<OcsException>(() => DirectorySnapshotLoader.Load(json));
+			LoggingError exception = Assert.Throws<LoggingError>(() => DirectorySnapshotLoader.Load(json));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("blob resolver", exception.Message);
 		}
 

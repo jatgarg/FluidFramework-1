@@ -121,7 +121,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				default:
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown directory op runtime type: {op.GetType().FullName}");
+					throw new LoggingError($"Unknown directory op runtime type: {op.GetType().FullName}");
 			}
 
 			writer.WriteEndObject();
@@ -137,8 +137,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			if (string.IsNullOrEmpty(op.Path))
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new LoggingError(
 					$"Directory operation of type '{op.GetType().Name}' is missing required 'path' field.");
 			}
 
@@ -147,20 +146,17 @@ namespace Microsoft.Office.Web.Fluid
 				case DirectorySetOperation setOperation:
 					if (setOperation.Key is null)
 					{
-						throw new OcsException(OcsGateErrorCode.InvalidOperation,
-							"DirectorySetOperation is missing required 'key' field.");
+						throw new LoggingError(							"DirectorySetOperation is missing required 'key' field.");
 					}
 
 					if (setOperation.Value is null)
 					{
-						throw new OcsException(OcsGateErrorCode.InvalidOperation,
-							"DirectorySetOperation is missing required 'value' field.");
+						throw new LoggingError(							"DirectorySetOperation is missing required 'value' field.");
 					}
 
 					if (string.IsNullOrEmpty(setOperation.Value.Type))
 					{
-						throw new OcsException(OcsGateErrorCode.InvalidOperation,
-							"DirectorySetOperation.Value is missing required 'type' discriminant.");
+						throw new LoggingError(							"DirectorySetOperation.Value is missing required 'type' discriminant.");
 					}
 
 					break;
@@ -168,8 +164,7 @@ namespace Microsoft.Office.Web.Fluid
 				case DirectoryDeleteOperation deleteOperation:
 					if (deleteOperation.Key is null)
 					{
-						throw new OcsException(OcsGateErrorCode.InvalidOperation,
-							"DirectoryDeleteOperation is missing required 'key' field.");
+						throw new LoggingError(							"DirectoryDeleteOperation is missing required 'key' field.");
 					}
 
 					break;
@@ -177,8 +172,7 @@ namespace Microsoft.Office.Web.Fluid
 				case DirectoryCreateSubDirectoryOperation createOperation:
 					if (createOperation.SubdirName is null)
 					{
-						throw new OcsException(OcsGateErrorCode.InvalidOperation,
-							"DirectoryCreateSubDirectoryOperation is missing required 'subdirName' field.");
+						throw new LoggingError(							"DirectoryCreateSubDirectoryOperation is missing required 'subdirName' field.");
 					}
 
 					break;
@@ -186,8 +180,7 @@ namespace Microsoft.Office.Web.Fluid
 				case DirectoryDeleteSubDirectoryOperation deleteSubOperation:
 					if (deleteSubOperation.SubdirName is null)
 					{
-						throw new OcsException(OcsGateErrorCode.InvalidOperation,
-							"DirectoryDeleteSubDirectoryOperation is missing required 'subdirName' field.");
+						throw new LoggingError(							"DirectoryDeleteSubDirectoryOperation is missing required 'subdirName' field.");
 					}
 
 					break;
@@ -285,12 +278,12 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			if (typeString == null)
 			{
-				throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory operation is missing required 'type' field.");
+				throw new LoggingError("Directory operation is missing required 'type' field.");
 			}
 
 			if (path == null)
 			{
-				throw new OcsException(OcsGateErrorCode.UnknownOp, $"Directory '{typeString}' operation is missing required 'path' field.");
+				throw new LoggingError($"Directory '{typeString}' operation is missing required 'path' field.");
 			}
 
 			switch (typeString)
@@ -298,12 +291,12 @@ namespace Microsoft.Office.Web.Fluid
 				case _setTypeName:
 					if (key == null)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'set' operation is missing required 'key' field.");
+						throw new LoggingError("Directory 'set' operation is missing required 'key' field.");
 					}
 
 					if (!valueSeen)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'set' operation is missing required 'value' field.");
+						throw new LoggingError("Directory 'set' operation is missing required 'value' field.");
 					}
 
 					return new DirectorySetOperation()
@@ -317,7 +310,7 @@ namespace Microsoft.Office.Web.Fluid
 				case _deleteTypeName:
 					if (key == null)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'delete' operation is missing required 'key' field.");
+						throw new LoggingError("Directory 'delete' operation is missing required 'key' field.");
 					}
 
 					return new DirectoryDeleteOperation()
@@ -335,7 +328,7 @@ namespace Microsoft.Office.Web.Fluid
 				case _createSubDirectoryTypeName:
 					if (subdirName == null)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'createSubDirectory' operation is missing required 'subdirName' field.");
+						throw new LoggingError("Directory 'createSubDirectory' operation is missing required 'subdirName' field.");
 					}
 
 					return new DirectoryCreateSubDirectoryOperation()
@@ -347,7 +340,7 @@ namespace Microsoft.Office.Web.Fluid
 				case _deleteSubDirectoryTypeName:
 					if (subdirName == null)
 					{
-						throw new OcsException(OcsGateErrorCode.UnknownOp, "Directory 'deleteSubDirectory' operation is missing required 'subdirName' field.");
+						throw new LoggingError("Directory 'deleteSubDirectory' operation is missing required 'subdirName' field.");
 					}
 
 					return new DirectoryDeleteSubDirectoryOperation()
@@ -357,7 +350,7 @@ namespace Microsoft.Office.Web.Fluid
 					};
 
 				default:
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown directory op type: {typeString}");
+					throw new LoggingError($"Unknown directory op type: {typeString}");
 			}
 		}
 
@@ -371,8 +364,7 @@ namespace Microsoft.Office.Web.Fluid
 			// never reaches the wire.
 			if (string.IsNullOrEmpty(value.Type))
 			{
-				throw new OcsException(
-					OcsGateErrorCode.InvalidOperation,
+				throw new LoggingError(
 					"SerializableValue is missing required 'type' discriminant.");
 			}
 

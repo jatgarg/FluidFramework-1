@@ -156,9 +156,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			var directory = new SharedDirectory("dir", new FakeFluidDataObjectSender());
 			string missingPendingOp = CreateSetOpJson("/", "missing", "value");
 
-			OcsException noPending = Assert.Throws<OcsException>(
+			LoggingError noPending = Assert.Throws<LoggingError>(
 				() => directory.ProcessDataObjectOp(LocalAck(1), missingPendingOp));
-			Assert.Equal(OcsGateErrorCode.OutOfOrderSequenceNumber, noPending.ErrorCode);
 
 			var sender = new FakeFluidDataObjectSender(nextClientSeq: 5);
 			var aheadDirectory = new SharedDirectory("ahead-dir", sender);
@@ -166,9 +165,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			var pending = Assert.Single(sender.Sent);
 			Assert.Equal(5, pending.ClientSeq);
 
-			OcsException ackAhead = Assert.Throws<OcsException>(
+			LoggingError ackAhead = Assert.Throws<LoggingError>(
 				() => aheadDirectory.ProcessDataObjectOp(LocalAck(10), pending.OpJson));
-			Assert.Equal(OcsGateErrorCode.OutOfOrderSequenceNumber, ackAhead.ErrorCode);
 		}
 
 		[Fact]
@@ -258,9 +256,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 		{
 			var directory = new SharedDirectory();
 
-			OcsException unknownOp = Assert.Throws<OcsException>(
+			LoggingError unknownOp = Assert.Throws<LoggingError>(
 				() => ProcessRemoteJson(directory, "{\"type\":\"gibberish\",\"path\":\"/\"}"));
-			Assert.Equal(OcsGateErrorCode.UnknownOp, unknownOp.ErrorCode);
 		}
 
 		[Fact]

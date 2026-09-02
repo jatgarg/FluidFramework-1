@@ -172,7 +172,7 @@ namespace Microsoft.Office.Web.Fluid
 				{
 					target = ResolveSubDirectoryByPath(op.Path);
 				}
-				catch (OcsException) when (hasLocalOpTargetSubdir)
+				catch (LoggingError) when (hasLocalOpTargetSubdir)
 				{
 					CompleteRejectedPendingLocalOp(descriptor.Seq, localOpTargetSubdir);
 					return;
@@ -205,7 +205,7 @@ namespace Microsoft.Office.Web.Fluid
 						break;
 
 					default:
-						throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unhandled op type: {op.GetType().Name}");
+						throw new LoggingError($"Unhandled op type: {op.GetType().Name}");
 				}
 
 				if (!ackAccepted)
@@ -241,7 +241,7 @@ namespace Microsoft.Office.Web.Fluid
 					break;
 
 				default:
-					throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unhandled op type: {op.GetType().Name}");
+					throw new LoggingError($"Unhandled op type: {op.GetType().Name}");
 			}
 		}
 
@@ -295,8 +295,7 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (_root.Count > 0 || _root.CountSubDirectory() > 0)
 			{
-				throw new OcsException(OcsGateErrorCode.InvalidState,
-					"SharedDirectory.LoadFromSnapshot: directory must be empty; loading into a non-empty directory is not supported in this wave.");
+				throw new LoggingError(					"SharedDirectory.LoadFromSnapshot: directory must be empty; loading into a non-empty directory is not supported in this wave.");
 			}
 
 			_root.PopulateFromSnapshot(snapshot);
@@ -321,8 +320,7 @@ namespace Microsoft.Office.Web.Fluid
 				SubDirectory? child = cursor.GetSequencedSubDirectoryInternal(segment);
 				if (child == null)
 				{
-					throw new OcsException(OcsGateErrorCode.InvalidOperation,
-						$"SharedDirectory.ResolveSubDirectoryByPath: path '{absolutePath}' does not exist (missing segment '{segment}')");
+					throw new LoggingError(						$"SharedDirectory.ResolveSubDirectoryByPath: path '{absolutePath}' does not exist (missing segment '{segment}')");
 				}
 
 				cursor = child;
@@ -366,7 +364,7 @@ namespace Microsoft.Office.Web.Fluid
 				DirectoryClearOperation => "clear",
 				DirectoryCreateSubDirectoryOperation => "createSubDirectory",
 				DirectoryDeleteSubDirectoryOperation => "deleteSubDirectory",
-				_ => throw new OcsException(OcsGateErrorCode.UnknownOp, $"Unknown directory op runtime type: {op.GetType().FullName}"),
+				_ => throw new LoggingError($"Unknown directory op runtime type: {op.GetType().FullName}"),
 			};
 		}
 

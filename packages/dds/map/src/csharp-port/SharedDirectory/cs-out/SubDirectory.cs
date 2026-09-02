@@ -569,8 +569,7 @@ namespace Microsoft.Office.Web.Fluid
 				}
 				else
 				{
-					throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-						$"SubDirectory.ProcessAckForKey: client seq {seq.clientSequenceNumber} does not reference a pending key entry at path '{_absolutePath}'");
+					throw new LoggingError(						$"SubDirectory.ProcessAckForKey: client seq {seq.clientSequenceNumber} does not reference a pending key entry at path '{_absolutePath}'");
 				}
 
 				_pendingByClientSequenceNumber.Remove(seq.clientSequenceNumber);
@@ -596,15 +595,13 @@ namespace Microsoft.Office.Web.Fluid
 
 				if (pending is not PendingSubDirectoryEntry pendingSubdir || pendingSubdir.SubdirName != subdirName)
 				{
-					throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-						$"SubDirectory.ProcessAckForSubdir: client seq {seq.clientSequenceNumber} does not reference pending subdirectory '{subdirName}' at path '{_absolutePath}'");
+					throw new LoggingError(						$"SubDirectory.ProcessAckForSubdir: client seq {seq.clientSequenceNumber} does not reference pending subdirectory '{subdirName}' at path '{_absolutePath}'");
 				}
 
 				int pendingEntryIndex = FindFirstPendingSubDirectoryEntryIndexNoLock(subdirName);
 				if (pendingEntryIndex < 0 || !ReferenceEquals(_pendingSubDirectoryData[pendingEntryIndex], pendingSubdir))
 				{
-					throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-						$"SubDirectory.ProcessAckForSubdir: ack for subdirectory '{subdirName}' is not the next pending entry (client seq {seq.clientSequenceNumber})");
+					throw new LoggingError(						$"SubDirectory.ProcessAckForSubdir: ack for subdirectory '{subdirName}' is not the next pending entry (client seq {seq.clientSequenceNumber})");
 				}
 
 				_pendingSubDirectoryData.RemoveAt(pendingEntryIndex);
@@ -650,14 +647,12 @@ namespace Microsoft.Office.Web.Fluid
 
 				if (pending is not PendingClear pendingClear)
 				{
-					throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-						$"SubDirectory.ProcessAckForClear: client seq {seq.clientSequenceNumber} does not reference a pending clear at path '{_absolutePath}'");
+					throw new LoggingError(						$"SubDirectory.ProcessAckForClear: client seq {seq.clientSequenceNumber} does not reference a pending clear at path '{_absolutePath}'");
 				}
 
 				if (_pendingStorageData.Count == 0 || !ReferenceEquals(_pendingStorageData[0], pendingClear))
 				{
-					throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-						$"SubDirectory.ProcessAckForClear: clear ack is not the next pending storage entry at path '{_absolutePath}' (client seq {seq.clientSequenceNumber})");
+					throw new LoggingError(						$"SubDirectory.ProcessAckForClear: clear ack is not the next pending storage entry at path '{_absolutePath}' (client seq {seq.clientSequenceNumber})");
 				}
 
 				_pendingStorageData.RemoveAt(0);
@@ -1115,16 +1110,14 @@ namespace Microsoft.Office.Web.Fluid
 			PendingKeyLifetime lifetime = pendingKeySet.Lifetime;
 			if (lifetime.Key != key)
 			{
-				throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-					$"SubDirectory.ProcessAckForKey: client seq {clientSequenceNumber} references key '{lifetime.Key}' instead of '{key}' at path '{_absolutePath}'");
+				throw new LoggingError(					$"SubDirectory.ProcessAckForKey: client seq {clientSequenceNumber} references key '{lifetime.Key}' instead of '{key}' at path '{_absolutePath}'");
 			}
 
 			int lifetimeIndex = _pendingStorageData.IndexOf(lifetime);
 			int firstKeyEntryIndex = FindFirstPendingStorageEntryIndexForKeyNoLock(key);
 			if (lifetimeIndex < 0 || lifetimeIndex != firstKeyEntryIndex || lifetime.KeySets.Count == 0 || !ReferenceEquals(lifetime.KeySets[0], pendingKeySet))
 			{
-				throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-					$"SubDirectory.ProcessAckForKey: set ack for key '{key}' is not the next pending set (client seq {clientSequenceNumber})");
+				throw new LoggingError(					$"SubDirectory.ProcessAckForKey: set ack for key '{key}' is not the next pending set (client seq {clientSequenceNumber})");
 			}
 
 			lifetime.KeySets.RemoveAt(0);
@@ -1140,16 +1133,14 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			if (pendingKeyDelete.Key != key)
 			{
-				throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-					$"SubDirectory.ProcessAckForKey: client seq {clientSequenceNumber} references key '{pendingKeyDelete.Key}' instead of '{key}' at path '{_absolutePath}'");
+				throw new LoggingError(					$"SubDirectory.ProcessAckForKey: client seq {clientSequenceNumber} references key '{pendingKeyDelete.Key}' instead of '{key}' at path '{_absolutePath}'");
 			}
 
 			int pendingEntryIndex = _pendingStorageData.FindIndex(entry => ReferenceEquals(entry, pendingKeyDelete));
 			int firstKeyEntryIndex = FindFirstPendingStorageEntryIndexForKeyNoLock(key);
 			if (pendingEntryIndex < 0 || pendingEntryIndex != firstKeyEntryIndex)
 			{
-				throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-					$"SubDirectory.ProcessAckForKey: delete ack for key '{key}' is not the next pending key entry (client seq {clientSequenceNumber})");
+				throw new LoggingError(					$"SubDirectory.ProcessAckForKey: delete ack for key '{key}' is not the next pending key entry (client seq {clientSequenceNumber})");
 			}
 
 			_pendingStorageData.RemoveAt(pendingEntryIndex);
@@ -1160,7 +1151,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			if (!seq.HasClientSequenceNumber)
 			{
-				throw new OcsException(OcsGateErrorCode.InvalidSequenceNumber, message);
+				throw new LoggingError(message);
 			}
 		}
 
@@ -1168,36 +1159,30 @@ namespace Microsoft.Office.Web.Fluid
 		{
 			if (HasPendingStorageEntryForKeyNoLock(key))
 			{
-				throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-					$"SubDirectory.ProcessAckForKey: ack does not match the pending entry for key '{key}' at path '{_absolutePath}' (client seq {clientSequenceNumber})");
+				throw new LoggingError(					$"SubDirectory.ProcessAckForKey: ack does not match the pending entry for key '{key}' at path '{_absolutePath}' (client seq {clientSequenceNumber})");
 			}
 
-			throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-				$"SubDirectory.ProcessAckForKey: no pending entry for key '{key}' at path '{_absolutePath}' (client seq {clientSequenceNumber})");
+			throw new LoggingError(				$"SubDirectory.ProcessAckForKey: no pending entry for key '{key}' at path '{_absolutePath}' (client seq {clientSequenceNumber})");
 		}
 
 		private void ThrowNoPendingSubdirAckNoLock(string subdirName, long clientSequenceNumber)
 		{
 			if (HasPendingSubDirectoryEntryNoLock(subdirName))
 			{
-				throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-					$"SubDirectory.ProcessAckForSubdir: ack does not match the pending entry for subdirectory '{subdirName}' at path '{_absolutePath}' (client seq {clientSequenceNumber})");
+				throw new LoggingError(					$"SubDirectory.ProcessAckForSubdir: ack does not match the pending entry for subdirectory '{subdirName}' at path '{_absolutePath}' (client seq {clientSequenceNumber})");
 			}
 
-			throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-				$"SubDirectory.ProcessAckForSubdir: no pending entry for subdirectory '{subdirName}' at path '{_absolutePath}' (client seq {clientSequenceNumber})");
+			throw new LoggingError(				$"SubDirectory.ProcessAckForSubdir: no pending entry for subdirectory '{subdirName}' at path '{_absolutePath}' (client seq {clientSequenceNumber})");
 		}
 
 		private void ThrowNoPendingClearAckNoLock(long clientSequenceNumber)
 		{
 			if (HasPendingClearNoLock())
 			{
-				throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-					$"SubDirectory.ProcessAckForClear: ack does not match the pending clear at path '{_absolutePath}' (client seq {clientSequenceNumber})");
+				throw new LoggingError(					$"SubDirectory.ProcessAckForClear: ack does not match the pending clear at path '{_absolutePath}' (client seq {clientSequenceNumber})");
 			}
 
-			throw new OcsException(OcsGateErrorCode.OutOfOrderSequenceNumber,
-				$"SubDirectory.ProcessAckForClear: no pending clear at path '{_absolutePath}' (client seq {clientSequenceNumber})");
+			throw new LoggingError(				$"SubDirectory.ProcessAckForClear: no pending clear at path '{_absolutePath}' (client seq {clientSequenceNumber})");
 		}
 
 		private object? GetOptimisticValueNoLock(string key)

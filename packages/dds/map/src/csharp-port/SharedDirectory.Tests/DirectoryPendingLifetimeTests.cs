@@ -153,8 +153,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			directory.Set("k", "first");
 			directory.Set("k", "second");
 
-			OcsException ex = Assert.Throws<OcsException>(() => ProcessLocalAck(directory, sender.Sent[1]));
-			Assert.Equal(OcsGateErrorCode.OutOfOrderSequenceNumber, ex.ErrorCode);
+			LoggingError ex = Assert.Throws<LoggingError>(() => ProcessLocalAck(directory, sender.Sent[1]));
 			AssertSinglePendingKeyLifetime(directory, "k", 2);
 			Assert.Equal("second", directory.Get("k"));
 

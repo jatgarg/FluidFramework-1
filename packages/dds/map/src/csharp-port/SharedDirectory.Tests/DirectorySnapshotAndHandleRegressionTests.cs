@@ -63,7 +63,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			var dir = new SharedDirectory();
 			const string snapshotJson = "{\"blobs\":[\"blob0\"],\"content\":{}}";
 
-			Assert.Throws<OcsException>(() => dir.LoadFromSnapshot(snapshotJson));
+			Assert.Throws<LoggingError>(() => dir.LoadFromSnapshot(snapshotJson));
 		}
 
 		// -------------------------------------------------------------
@@ -128,8 +128,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			const string snapshotJson = "{\"storage\":{\"new-key\":{\"type\":\"Plain\",\"value\":\"new-value\"}}}";
 
-			OcsException exception = Assert.Throws<OcsException>(() => dir.LoadFromSnapshot(snapshotJson));
-			Assert.Equal(OcsGateErrorCode.InvalidState, exception.ErrorCode);
+			LoggingError exception = Assert.Throws<LoggingError>(() => dir.LoadFromSnapshot(snapshotJson));
 
 			// Pre-existing content untouched.
 			Assert.Equal("keep-me", dir.Get("pre-existing"));
@@ -147,8 +146,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 
 			const string snapshotJson = "{\"storage\":{}}";
 
-			OcsException exception = Assert.Throws<OcsException>(() => dir.LoadFromSnapshot(snapshotJson));
-			Assert.Equal(OcsGateErrorCode.InvalidState, exception.ErrorCode);
+			LoggingError exception = Assert.Throws<LoggingError>(() => dir.LoadFromSnapshot(snapshotJson));
 			Assert.True(dir.HasSubDirectory("just-a-subdir"));
 		}
 
@@ -182,9 +180,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				OpOrigin.Local,
 				clientId: "self");
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => dir.ProcessDataObjectOp(descriptor, sentOp.OpJson));
-			Assert.Equal(OcsGateErrorCode.InvalidSequenceNumber, exception.ErrorCode);
 
 			// The pending entry is unchanged — the key is still visible optimistically.
 			Assert.Equal("v", dir.Get("k"));

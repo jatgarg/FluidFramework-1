@@ -138,9 +138,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			var directory = new SharedDirectory("dir", sender);
 			var handle = new TestFluidDataObject("target");
 
-			OcsException exception = Assert.Throws<OcsException>(() => directory.Set("k", handle));
+			LoggingError exception = Assert.Throws<LoggingError>(() => directory.Set("k", handle));
 
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 			Assert.Contains("SharedDirectory requires an IFluidDataObjectRegistry to serialize handle values.", exception.Message);
 		}
 

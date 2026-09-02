@@ -346,9 +346,9 @@ namespace Microsoft.Office.Web.Fluid
 			}
 		}
 
-		private static OcsException InvalidSnapshot(string message)
+		private static LoggingError InvalidSnapshot(string message)
 		{
-			return new OcsException(OcsGateErrorCode.InvalidOperation, message);
+			return new LoggingError(message);
 		}
 	}
 }

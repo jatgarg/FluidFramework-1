@@ -44,8 +44,7 @@ namespace Microsoft.Office.Web.Fluid
 				// integrity across a retransmit.
 				if (IsHandleShape(element))
 				{
-					throw new OcsException(
-						OcsGateErrorCode.InvalidOperation,
+					throw new LoggingError(
 						"Serialized Fluid handle is missing required 'url' property.");
 				}
 
@@ -274,7 +273,7 @@ namespace Microsoft.Office.Web.Fluid
 					return true;
 				}
 
-				throw new OcsException(OcsGateErrorCode.InvalidOperation, missingRegistryMessage);
+				throw new LoggingError(missingRegistryMessage);
 			}
 
 			url = string.Empty;

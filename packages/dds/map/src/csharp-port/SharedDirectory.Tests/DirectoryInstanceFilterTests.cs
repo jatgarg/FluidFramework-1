@@ -371,14 +371,13 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				},
 			});
 
-			OcsException exception = Assert.Throws<OcsException>(
+			LoggingError exception = Assert.Throws<LoggingError>(
 				() => directory.ProcessDataObjectOp(
 					new SequencedDocumentMessageDescriptor(
 						SequenceNumber.ForTesting(clientSeq: 1, refSeq: 0, seq: 1),
 						OpOrigin.Local,
 						"local-client"),
 					opJson));
-			Assert.Equal(OcsGateErrorCode.InvalidOperation, exception.ErrorCode);
 		}
 
 		private static void ProcessLocalAck(
