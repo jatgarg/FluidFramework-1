@@ -95,17 +95,21 @@ namespace Microsoft.Office.Web.Fluid
 		private readonly object _lock = new object();
 		private readonly IFluidDataObjectSender? _sender;
 		private readonly IFluidDataObjectRegistry? _registry;
+		private readonly IFluidLogger _logger;
 		private readonly Client _client;
 		private readonly HashSet<IntervalCollection> _intervalCollectionsWithOutboundHandlers = new();
 		private List<IMergeTreeOp>? _batchOps;
 		private int _localMutationDepth;
 
-		public SharedString(string? id = null, IFluidDataObjectSender? sender = null, IFluidDataObjectRegistry? registry = null)
+		public SharedString(string? id = null, IFluidDataObjectSender? sender = null, IFluidDataObjectRegistry? registry = null, IFluidLogger? logger = null)
 		{
 			_id = id ?? FluidObjectId.CreateId();
 			_sender = sender;
 			_registry = registry;
-			_client = new Client(clientId: _id);
+			_logger = logger ?? NullLogger.Instance;
+			// TS parallel: sequence.ts creates a child logger with namespace
+			// "SharedSegmentSequence.MergeTreeClient" for the merge-tree Client.
+			_client = new Client(clientId: _id, logger: _logger.CreateChildLogger("SharedSegmentSequence.MergeTreeClient"));
 		}
 
 		public string Id => _id;

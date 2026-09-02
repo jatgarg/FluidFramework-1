@@ -104,13 +104,15 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 		private readonly Dictionary<string, IntervalCollection> _intervalCollections = new(StringComparer.Ordinal);
 		private readonly Queue<IMergeTreeOp> _emittedOps = new();
 		private long _clientSeq;
+		private readonly IFluidLogger _logger;
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="Client" /> class.
 		/// </summary>
 		/// <param name="clientId">The long client id for this client.</param>
 		/// <param name="mergeTree">Optional merge tree to wrap.</param>
-		public Client(string clientId, MergeTree? mergeTree = null)
+		/// <param name="logger">Optional logger. Defaults to <see cref="NullLogger.Instance" />.</param>
+		public Client(string clientId, MergeTree? mergeTree = null, IFluidLogger? logger = null)
 		{
 			if (string.IsNullOrEmpty(clientId))
 			{
@@ -121,6 +123,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			MergeTree = mergeTree ?? new MergeTree();
 			CollabWindowCurrentSeq = MergeTree.CurrentSeq;
 			CollabWindowMinSeq = MergeTree.MinSeq;
+			_logger = logger ?? NullLogger.Instance;
 		}
 
 		/// <summary>
