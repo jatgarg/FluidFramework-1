@@ -198,7 +198,8 @@ namespace Microsoft.Office.Web.Fluid
 		public static void PopulateFromSnapshot(
 			MergeTree.Client target,
 			SharedStringSnapshotDto snapshot,
-			IFluidDataObjectRegistry? registry = null)
+			IFluidDataObjectRegistry? registry = null,
+			IFluidLogger? logger = null)
 		{
 			if (target is null)
 			{
@@ -287,7 +288,7 @@ namespace Microsoft.Office.Web.Fluid
 
 			target.MergeTree.RebuildFromSegments(segments);
 			target.SetCollaborationWindow(headerMetadata.MinSequenceNumber, headerMetadata.SequenceNumber, runZamboni: false);
-			ApplyCatchupOps(target, snapshot, registry);
+			ApplyCatchupOps(target, snapshot, registry, logger);
 		}
 
 		private static MergeTree.ISegment? CreateSegment(
@@ -330,43 +331,54 @@ namespace Microsoft.Office.Web.Fluid
 		private static void ApplyCatchupOps(
 			MergeTree.Client target,
 			SharedStringSnapshotDto snapshot,
-			IFluidDataObjectRegistry? registry)
+			IFluidDataObjectRegistry? registry,
+			IFluidLogger? logger)
 		{
-			int index = 0;
-			foreach (CatchupOpDto catchupOp in snapshot.CatchupOps)
+			try
 			{
-				// All sequence-numbering + clientId fields are required — reject rather than
-				// default to synthetic values that would mask malformed snapshots.
-				long sequenceNumber = catchupOp.SequenceNumber
-					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'sequenceNumber'.");
-				long referenceSequenceNumber = catchupOp.ReferenceSequenceNumber
-					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'referenceSequenceNumber'.");
-				long minimumSequenceNumber = catchupOp.MinimumSequenceNumber
-					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'minimumSequenceNumber'.");
-				string clientId = catchupOp.ClientId
-					?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'clientId'.");
-
-				if (minimumSequenceNumber < target.CollabWindowMinSeq
-					|| referenceSequenceNumber < target.CollabWindowMinSeq
-					|| sequenceNumber <= target.CollabWindowMinSeq
-					|| sequenceNumber < target.CollabWindowCurrentSeq)
+				int index = 0;
+				foreach (CatchupOpDto catchupOp in snapshot.CatchupOps)
 				{
-					throw InvalidSnapshot($"Invalid SharedString catchup operation sequence numbers at index {index}.");
+					// All sequence-numbering + clientId fields are required — reject rather than
+					// default to synthetic values that would mask malformed snapshots.
+					long sequenceNumber = catchupOp.SequenceNumber
+						?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'sequenceNumber'.");
+					long referenceSequenceNumber = catchupOp.ReferenceSequenceNumber
+						?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'referenceSequenceNumber'.");
+					long minimumSequenceNumber = catchupOp.MinimumSequenceNumber
+						?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'minimumSequenceNumber'.");
+					string clientId = catchupOp.ClientId
+						?? throw InvalidSnapshot($"SharedString catchup operation at index {index} is missing 'clientId'.");
+
+					if (minimumSequenceNumber < target.CollabWindowMinSeq
+						|| referenceSequenceNumber < target.CollabWindowMinSeq
+						|| sequenceNumber <= target.CollabWindowMinSeq
+						|| sequenceNumber < target.CollabWindowCurrentSeq)
+					{
+						throw InvalidSnapshot($"Invalid SharedString catchup operation sequence numbers at index {index}.");
+					}
+
+					MergeTree.IMergeTreeOp op = SharedStringOpSerializer.Deserialize(catchupOp.OpJson, registry);
+					target.ApplyOp(
+						op,
+						seq: sequenceNumber,
+						refSeq: referenceSequenceNumber,
+						clientId: clientId);
+
+					if (minimumSequenceNumber > target.CollabWindowMinSeq)
+					{
+						target.SetCollaborationWindow(minimumSequenceNumber, target.CollabWindowCurrentSeq, runZamboni: false);
+					}
+
+					index++;
 				}
-
-				MergeTree.IMergeTreeOp op = SharedStringOpSerializer.Deserialize(catchupOp.OpJson, registry);
-				target.ApplyOp(
-					op,
-					seq: sequenceNumber,
-					refSeq: referenceSequenceNumber,
-					clientId: clientId);
-
-				if (minimumSequenceNumber > target.CollabWindowMinSeq)
-				{
-					target.SetCollaborationWindow(minimumSequenceNumber, target.CollabWindowCurrentSeq, runZamboni: false);
-				}
-
-				index++;
+			}
+			catch (Exception error)
+			{
+				logger?.SendErrorEvent(
+					new FluidTelemetryEvent { EventName = "CatchupOpsLoadFailure" },
+					error);
+				throw;
 			}
 		}
 

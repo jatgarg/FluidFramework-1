@@ -390,18 +390,37 @@ Tag range + `LogCategory` selection are wordfluidcsharp's concern.
 
 ### 10.4 Named events
 
-Zero named events emitted from the port today. Constructor wiring is
-"logger present for future use" — the 7 named events from Fluid JS
-land in a follow-up PR without further plumbing.
+The port emits **3 named events** — matching Fluid JS event names + payload
+shapes verbatim so Kusto queries can be shared across JS and C#.
 
-Planned events (TS parallels):
-- `LocalOpReentry` (rate-limited to 3/process) — from `sequence.ts`
-- `SequenceLoadFailed` — snapshot load catch
-- `LocalEditsInProcessGCData` — merge-tree GC invariant
-- `MergeTreeLegacySummarizeSegmentCount` (0.5% sample) — legacy snapshot
-- `SegmentsTotalLengthMismatch` — legacy snapshot invariant
-- `MergeTreeV1SummarizeSegmentCount` (0.5% sample) — V1 snapshot
-- `CatchupOpsLoadFailure` — catchup load catch
+| Event | Trigger | Payload | Sampling / rate-limit |
+|---|---|---|---|
+| `LocalOpReentry` | Reentrancy detected in `EnterLocalMutation`. Emitted alongside the throw. | `{ depth: int }` + attached `LoggingError("Reentrancy detected in sequence local ops")` | Rate-limited to first 3 per process (static counter, matches TS `let totalReentrancyLogs = 3`) |
+| `SequenceLoadFailed` | Exception during `SharedString.LoadFromSnapshot` | Attached exception via `SendErrorEvent` | error, no sampling |
+| `CatchupOpsLoadFailure` | Exception during `SharedStringSnapshotLoader.ApplyCatchupOps` (inner catch, before `SequenceLoadFailed` surfaces from the outer scope) | Attached exception via `SendErrorEvent` | error, no sampling |
+
+**Not ported** — TS emits these but the port doesn't have the code paths:
+
+- `LocalEditsInProcessGCData` — port has no ProcessGCData path
+- `MergeTreeLegacySummarizeSegmentCount` — port has no snapshot writer
+- `SegmentsTotalLengthMismatch` — port has no snapshot writer
+- `MergeTreeV1SummarizeSegmentCount` — port has no snapshot writer
+
+The port only implements snapshot **loading**, not writing. If a future
+scenario needs a port-side snapshot writer, the summarize/mismatch
+events should be added at that time using the same `_logger` field
+already threaded through `SharedString` and `Client`.
+
+**Divergence from TS:** `LocalOpReentry` is emitted alongside the throw
+in the port. TS emits it only in log-mode (opt-in via
+`sharedStringPreventReentrancy: false`); the port only implements
+throw-mode. Firing the event alongside the throw preserves the
+observability signal without changing behavior.
+
+**Testing:** `SharedString.Tests/SharedStringTelemetryTests.cs` covers
+all three events + the rate-limit contract. The
+`SharedString.ResetLocalOpReentryLogCountForTests()` internal method
+lets tests reset the process-lifetime counter between runs.
 
 ---
 

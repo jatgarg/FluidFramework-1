@@ -12,6 +12,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading;
 
 using Microsoft.Office.Web.Fluid.Intervals;
 using Microsoft.Office.Web.Fluid.MergeTree;
@@ -100,6 +101,17 @@ namespace Microsoft.Office.Web.Fluid
 		private readonly HashSet<IntervalCollection> _intervalCollectionsWithOutboundHandlers = new();
 		private List<IMergeTreeOp>? _batchOps;
 		private int _localMutationDepth;
+
+		// Process-lifetime counter for LocalOpReentry telemetry rate-limit.
+		// TS parallel: sequence.ts `let totalReentrancyLogs = 3`. Emits at
+		// most 3 LocalOpReentry events per process to avoid log flooding.
+		private static int _totalReentrancyLogs = 3;
+
+		/// <summary>Test-only reset for the reentrancy log counter.</summary>
+		internal static void ResetLocalOpReentryLogCountForTests()
+		{
+			_totalReentrancyLogs = 3;
+		}
 
 		public SharedString(string? id = null, IFluidDataObjectSender? sender = null, IFluidDataObjectRegistry? registry = null, IFluidLogger? logger = null)
 		{
@@ -652,9 +664,19 @@ namespace Microsoft.Office.Web.Fluid
 				throw new ArgumentNullException(nameof(snapshot));
 			}
 
-			lock (_lock)
+			try
 			{
-				SharedStringSnapshotLoader.PopulateFromSnapshot(_client, snapshot, _registry);
+				lock (_lock)
+				{
+					SharedStringSnapshotLoader.PopulateFromSnapshot(_client, snapshot, _registry, _logger);
+				}
+			}
+			catch (Exception error)
+			{
+				_logger.SendErrorEvent(
+					new FluidTelemetryEvent { EventName = "SequenceLoadFailed" },
+					error);
+				throw;
 			}
 		}
 
@@ -1117,10 +1139,26 @@ namespace Microsoft.Office.Web.Fluid
 
 		private IDisposable EnterLocalMutation()
 		{
+			int depth;
 			lock (_lock)
 			{
-				if (_localMutationDepth > 0)
+				depth = _localMutationDepth;
+				if (depth > 0)
 				{
+					// Fire LocalOpReentry telemetry with rate-limit, then
+					// throw. Port addition: TS emits this event only in
+					// log-mode (sharedStringPreventReentrancy: false); the
+					// port only implements throw-mode. Firing alongside the
+					// throw preserves the observability signal.
+					if (Interlocked.Decrement(ref _totalReentrancyLogs) >= 0)
+					{
+						_logger.SendTelemetryEvent(new FluidTelemetryEvent
+						{
+							EventName = "LocalOpReentry",
+							Properties = new Dictionary<string, object?> { ["depth"] = depth },
+						}, new LoggingError("Reentrancy detected in sequence local ops"));
+					}
+
 					throw new LoggingError("Reentrancy detected in sequence local ops");
 				}
 
