@@ -431,11 +431,14 @@ Tag range + `LogCategory` selection are wordfluidcsharp's concern.
 
 ### 10.4 Named events
 
-Zero named events emitted from the port today. Constructor wiring is
-"logger present for future use" — TS-side SharedDirectory (`directory.ts`)
-threads `mc.logger` through subdirectories but doesn't emit any named
-events, so the port's parity story is complete without additional
-event ports.
+**Zero named events.** TS-side SharedDirectory (`directory.ts`) threads
+`mc.logger` through subdirectories but has zero `sendTelemetryEvent`,
+`sendErrorEvent`, or `sendPerformanceEvent` call sites. Port parity is
+complete without any event ports.
+
+The `_logger` field is threaded into `SharedDirectory` and accessible
+to `SubDirectory` via the internal `SharedDirectory.Logger` property
+for consistency with the SharedString port and future extension.
 
 ---
 

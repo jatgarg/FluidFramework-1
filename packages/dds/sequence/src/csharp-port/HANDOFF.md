@@ -390,32 +390,44 @@ Tag range + `LogCategory` selection are wordfluidcsharp's concern.
 
 ### 10.4 Named events
 
-The port emits **3 named events** — matching Fluid JS event names + payload
-shapes verbatim so Kusto queries can be shared across JS and C#.
+The port emits **3 of the 7 named events** that exist in Fluid JS's
+sequence + merge-tree TS code — the subset whose underlying code paths
+exist in the port. Event names + payload shapes match TS verbatim so
+Kusto queries can be shared across JS and C#.
 
-| Event | Trigger | Payload | Sampling / rate-limit |
-|---|---|---|---|
-| `LocalOpReentry` | Reentrancy detected in `EnterLocalMutation`. Emitted alongside the throw. | `{ depth: int }` + attached `LoggingError("Reentrancy detected in sequence local ops")` | Rate-limited to first 3 per process (static counter, matches TS `let totalReentrancyLogs = 3`) |
-| `SequenceLoadFailed` | Exception during `SharedString.LoadFromSnapshot` | Attached exception via `SendErrorEvent` | error, no sampling |
-| `CatchupOpsLoadFailure` | Exception during `SharedStringSnapshotLoader.ApplyCatchupOps` (inner catch, before `SequenceLoadFailed` surfaces from the outer scope) | Attached exception via `SendErrorEvent` | error, no sampling |
+**Ported (3):**
 
-**Not ported** — TS emits these but the port doesn't have the code paths:
+| Event | Kind | Trigger | Payload | Sampling / rate-limit | TS ref |
+|---|---|---|---|---|---|
+| `LocalOpReentry` | `SendTelemetryEvent` | Reentrancy detected in `EnterLocalMutation`. Emitted alongside the throw. | `{ depth: int }` + attached `LoggingError("Reentrancy detected in sequence local ops")` | First 3 per process (static counter — matches TS `let totalReentrancyLogs = 3`) | `sequence.ts:506` |
+| `SequenceLoadFailed` | `SendErrorEvent` | Exception during `SharedString.LoadFromSnapshot` outer try/catch | Attached exception | none | `sequence.ts:865` |
+| `CatchupOpsLoadFailure` | `SendErrorEvent` | Exception during `SharedStringSnapshotLoader.ApplyCatchupOps` inner try/catch (before `SequenceLoadFailed` surfaces at the outer scope) | Attached exception | none | `snapshotLoader.ts:70` |
 
-- `LocalEditsInProcessGCData` — port has no ProcessGCData path
-- `MergeTreeLegacySummarizeSegmentCount` — port has no snapshot writer
-- `SegmentsTotalLengthMismatch` — port has no snapshot writer
-- `MergeTreeV1SummarizeSegmentCount` — port has no snapshot writer
+**Not ported (4)** — TS emits these but the port doesn't have the
+underlying code path. Skipping them is faithful to the port's
+current surface, not a workstream gap:
 
-The port only implements snapshot **loading**, not writing. If a future
-scenario needs a port-side snapshot writer, the summarize/mismatch
-events should be added at that time using the same `_logger` field
-already threaded through `SharedString` and `Client`.
+| Event | Kind | Why skipped |
+|---|---|---|
+| `LocalEditsInProcessGCData` | `SendErrorEvent` | No `Client.ProcessGCData()` — Fluid runtime GC not ported (Word Native manages memory separately) |
+| `MergeTreeLegacySummarizeSegmentCount` | `SendTelemetryEvent` | No snapshot writer — the port only implements snapshot **loading** |
+| `SegmentsTotalLengthMismatch` | `SendErrorEvent` | Same |
+| `MergeTreeV1SummarizeSegmentCount` | `SendTelemetryEvent` | Same |
 
-**Divergence from TS:** `LocalOpReentry` is emitted alongside the throw
-in the port. TS emits it only in log-mode (opt-in via
+If Word later needs port-side GC or snapshot writing, the 4 skipped
+events attach naturally via the `_logger` field already threaded
+through `SharedString` + `Client` (constructor injection).
+
+**Performance events (`SendPerformanceEvent`): none.** TS's sequence +
+merge-tree + map packages have zero `sendPerformanceEvent` /
+`PerformanceEvent` call sites. There's nothing to port here; the
+interface method exists on `IFluidLogger` for future use.
+
+**Divergence from TS:** `LocalOpReentry` is emitted alongside the
+throw. TS emits it only in log-mode (opt-in via
 `sharedStringPreventReentrancy: false`); the port only implements
-throw-mode. Firing the event alongside the throw preserves the
-observability signal without changing behavior.
+throw-mode. Firing alongside the throw preserves the observability
+signal without changing behavior.
 
 **Testing:** `SharedString.Tests/SharedStringTelemetryTests.cs` covers
 all three events + the rate-limit contract. The
