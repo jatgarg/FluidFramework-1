@@ -338,7 +338,108 @@ Full rationale in `README.md` (§ "Open questions", all four resolved).
 
 ---
 
-## 10. Test coverage (78 tests, 6 files)
+## 10. Error handling & telemetry
+
+The port defines its own error hierarchy and logging interface in
+`csharp-port-common` — mirrored 1:1 with Fluid JS shapes but decoupled
+from Word server infra so the port stays runnable in isolation
+(parity tests, CLI harnesses, out-of-server runs).
+
+### 10.1 Exception hierarchy
+
+All types in namespace `Microsoft.Office.Web.Fluid`:
+
+- `LoggingError` — base for port invariant / assert failures.
+  Implements `ILoggingError` so a telemetry consumer can merge its
+  `GetTelemetryProperties()` payload into the enclosing event.
+  Auto-includes `message`, `stack`, and `errorInstanceId` (UUID) in
+  the payload. All wire-drift errors (unknown op types, malformed
+  op fields), sequence-integrity invariants, and snapshot invariants
+  in the SharedDirectory port throw `LoggingError`.
+- `UsageError : LoggingError` — public-API contract violations. Not
+  currently thrown from the SharedDirectory port (TS side doesn't
+  either — SharedMap/SharedDirectory validation goes through internal
+  invariants), but part of the shared hierarchy.
+- `FluidAssert.That(cond, msg)` — the port's `assert()`. Throws
+  `LoggingError` on failure.
+- `Argument*Exception` / `ArgumentNullException.ThrowIfNull` kept
+  intact — idiomatic C# null/range guards.
+
+### 10.2 Logging interface
+
+- `IFluidLogger` — event sink. Never called directly by port code;
+  always constructor-injected via the `logger` param on
+  `SharedDirectory` (defaults to `NullLogger.Instance`).
+- `SubDirectory` accesses the same logger via the internal
+  `SharedDirectory.Logger` property (matches TS pattern where the
+  whole subdirectory tree shares the root's `MonitoringContext`).
+- `FluidLogLevel` — enum matching TS `LogLevel` (Verbose=10, Info=20,
+  Essential=30). Kept as a port-internal enum so the port isn't tied
+  to `Microsoft.Office.Web.Common.Log.Level`.
+- `FluidTelemetryEvent` — POCO carrying `EventName` + optional
+  `Properties` dict.
+- `NullLogger.Instance` — no-op default.
+- `NamespacedLogger` — helper used by `CreateChildLogger` to prepend
+  `"{namespace}.{eventName}"` to events.
+
+### 10.3 Bridge implementation guidance (waccobalt)
+
+Word implements `IFluidLogger` and forwards to `Log.TraceTag`. Wiring
+is via the `logger` param on `SharedDirectory` constructor.
+
+**Serialization convention: bracket-KV, not JSON.**
+
+Word's ULS + Kusto pipeline uses `[Key: Value]` bracket pairs
+(grep-able, no JSON quoting collisions, correlates with `tag_XXXX`
+diagnostic ids). The bridge iterates `FluidTelemetryEvent.Properties`
+and formats each pair as ` [{key}: {value}]` appended to the event
+name string.
+
+Sub-conventions:
+- Prefix: event name first, then bracket pairs
+- Missing values: literal `"N/A"` (not empty string)
+- Nested: space-separated inside a single bracket, or one `TraceTag`
+  per row for correlation
+- Culture: `CultureInfo.InvariantCulture` always
+- Exceptions: `[Exception: {ex.ToString()}]` (full string + stack)
+- Enums: `.ToString()` (renders by name)
+- Hot-path gating: `Log.ShouldTrace(cat, level)` before expensive
+  prop formatting
+
+Sketch (bridge implementation, not shipped with the port):
+
+```csharp
+public void SendTelemetryEvent(FluidTelemetryEvent evt, Exception? error = null, FluidLogLevel? level = null)
+{
+    var sb = new StringBuilder(evt.EventName);
+    if (evt.Properties != null)
+    {
+        foreach (var (k, v) in evt.Properties)
+        {
+            sb.AppendFormat(CultureInfo.InvariantCulture, " [{0}: {1}]", k, v?.ToString() ?? "N/A");
+        }
+    }
+    if (error != null)
+    {
+        sb.AppendFormat(CultureInfo.InvariantCulture, " [Exception: {0}]", error);
+    }
+    Log.TraceTag(WordFluidTags.PortTelemetry, LogCategory.WordFluid, Map(level), sb.ToString());
+}
+```
+
+Tag range + `LogCategory` selection are wordfluidcsharp's concern.
+
+### 10.4 Named events
+
+Zero named events emitted from the port today. Constructor wiring is
+"logger present for future use" — TS-side SharedDirectory (`directory.ts`)
+threads `mc.logger` through subdirectories but doesn't emit any named
+events, so the port's parity story is complete without additional
+event ports.
+
+---
+
+## 11. Test coverage (78 tests, 6 files)
 
 | Test file | Focus | Count |
 |---|---|---|
@@ -351,7 +452,7 @@ Full rationale in `README.md` (§ "Open questions", all four resolved).
 
 ---
 
-## 11. Support / questions
+## 12. Support / questions
 
 - **Design questions:** see `README.md`. All four open questions (Q1-Q4) are
   now marked **RESOLVED** with the answer inline.

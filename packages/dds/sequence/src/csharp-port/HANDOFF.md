@@ -297,7 +297,115 @@ Full rationale in `README.md` + `PARITY-AUDIT.md` + session `plan.md`.
 
 ---
 
-## 10. Test coverage (494 tests, ~46 files)
+## 10. Error handling & telemetry
+
+The port defines its own error hierarchy and logging interface in
+`csharp-port-common` — mirrored 1:1 with Fluid JS shapes but decoupled
+from Word server infra so the port stays runnable in isolation
+(parity tests, CLI harnesses, out-of-server runs).
+
+### 10.1 Exception hierarchy
+
+All types in namespace `Microsoft.Office.Web.Fluid`:
+
+- `LoggingError` — base for port invariant / assert failures.
+  Implements `ILoggingError` so a telemetry consumer can merge its
+  `GetTelemetryProperties()` payload into the enclosing event.
+  Auto-includes `message`, `stack`, and `errorInstanceId` (UUID) in
+  the payload. Prefer over `InvalidOperationException` for invariants
+  the port itself enforces.
+- `UsageError : LoggingError` — public-API contract violations
+  (`AnnotateRange` bounds, `Change()` argument shape, endpoint order,
+  `referenceRangeLabels` mutation). Auto-adds `usageError = true` to
+  payload. Use wherever TS uses `throw new UsageError(...)`.
+- `FluidAssert.That(cond, msg)` — the port's `assert()`. Throws
+  `LoggingError` on failure. Uses `[DoesNotReturnIf(false)]` for C#
+  nullability narrowing (matches TS `asserts condition`).
+- `Argument*Exception` / `ArgumentNullException.ThrowIfNull` kept
+  intact — idiomatic C# null/range guards; TS's `assert()` for null
+  checks maps naturally to these.
+
+### 10.2 Logging interface
+
+- `IFluidLogger` — event sink. Never called directly by port code;
+  always constructor-injected via the `logger` param on `SharedString`
+  (defaults to `NullLogger.Instance`). Creates a child logger with
+  namespace `SharedSegmentSequence.MergeTreeClient` for the merge-tree
+  `Client` — matches TS `sequence.ts` shape.
+- `FluidLogLevel` — enum matching TS `LogLevel` (Verbose=10, Info=20,
+  Essential=30). Kept as a port-internal enum so the port isn't tied
+  to `Microsoft.Office.Web.Common.Log.Level`.
+- `FluidTelemetryEvent` — POCO carrying `EventName` + optional
+  `Properties` dict.
+- `NullLogger.Instance` — no-op default.
+- `NamespacedLogger` — helper used by `CreateChildLogger` to prepend
+  `"{namespace}.{eventName}"` to events (matches TS child-logger).
+
+### 10.3 Bridge implementation guidance (waccobalt)
+
+Word implements `IFluidLogger` and forwards to `Log.TraceTag`. Wiring
+is via the `logger` param on `SharedString` constructor.
+
+**Serialization convention: bracket-KV, not JSON.**
+
+Word's ULS + Kusto pipeline uses `[Key: Value]` bracket pairs
+(grep-able, no JSON quoting collisions, correlates with `tag_XXXX`
+diagnostic ids). The bridge iterates `FluidTelemetryEvent.Properties`
+and formats each pair as ` [{key}: {value}]` appended to the event
+name string.
+
+Sub-conventions:
+- Prefix: event name first, then bracket pairs
+- Missing values: literal `"N/A"` (not empty string)
+- Nested: space-separated inside a single bracket, or one `TraceTag`
+  per row for correlation
+- Culture: `CultureInfo.InvariantCulture` always
+- Exceptions: `[Exception: {ex.ToString()}]` (full string + stack)
+- Enums: `.ToString()` (renders by name)
+- Hot-path gating: `Log.ShouldTrace(cat, level)` before expensive
+  prop formatting
+
+Sketch (bridge implementation, not shipped with the port):
+
+```csharp
+public void SendTelemetryEvent(FluidTelemetryEvent evt, Exception? error = null, FluidLogLevel? level = null)
+{
+    var sb = new StringBuilder(evt.EventName);
+    if (evt.Properties != null)
+    {
+        foreach (var (k, v) in evt.Properties)
+        {
+            sb.AppendFormat(CultureInfo.InvariantCulture, " [{0}: {1}]", k, v?.ToString() ?? "N/A");
+        }
+    }
+    if (error != null)
+    {
+        sb.AppendFormat(CultureInfo.InvariantCulture, " [Exception: {0}]", error);
+    }
+    Log.TraceTag(WordFluidTags.PortTelemetry, LogCategory.WordFluid, Map(level), sb.ToString());
+}
+```
+
+Tag range + `LogCategory` selection are wordfluidcsharp's concern.
+
+### 10.4 Named events
+
+Zero named events emitted from the port today. Constructor wiring is
+"logger present for future use" — the 7 named events from Fluid JS
+land in a follow-up PR without further plumbing.
+
+Planned events (TS parallels):
+- `LocalOpReentry` (rate-limited to 3/process) — from `sequence.ts`
+- `SequenceLoadFailed` — snapshot load catch
+- `LocalEditsInProcessGCData` — merge-tree GC invariant
+- `MergeTreeLegacySummarizeSegmentCount` (0.5% sample) — legacy snapshot
+- `SegmentsTotalLengthMismatch` — legacy snapshot invariant
+- `MergeTreeV1SummarizeSegmentCount` (0.5% sample) — V1 snapshot
+- `CatchupOpsLoadFailure` — catchup load catch
+
+---
+
+## 11. Test coverage (494 tests, ~46 files)
 
 Bucketed roughly (some tests span buckets):
 
@@ -322,7 +430,7 @@ Every audit-closed bug has at least one regression test that would fail if the f
 
 ---
 
-## 11. Support / questions
+## 12. Support / questions
 
 - **Design questions:** `README.md` + `PARITY-AUDIT.md` (findings + remediation status)
 - **Code questions:** each ported file has a header comment citing its TS source. `directory.ts` → `MergeTree.cs`, `client.ts` → `Client.cs`, etc.
@@ -331,11 +439,11 @@ Every audit-closed bug has at least one regression test that would fail if the f
 
 ---
 
-## 12. Documented deviations from TS
+## 13. Documented deviations from TS
 
-An independent SharedString correctness audit surfaced 30 findings. Twenty-nine were fixed. One remains as a deliberate Word rendering constraint (§12.2), listed here so future audits don't re-flag it.
+An independent SharedString correctness audit surfaced 30 findings. Twenty-nine were fixed. One remains as a deliberate Word rendering constraint (§13.2), listed here so future audits don't re-flag it.
 
-### 12.1 (RESOLVED) Sided-interval endpoint-side query edge cases
+### 13.1 (RESOLVED) Sided-interval endpoint-side query edge cases
 
 **Status:** Fixed. All four range indexes (`OverlappingIntervalsIndex`, `StartpointInRangeIndex`, `EndpointInRangeIndex`, `EndpointIndex`) now apply the endpoint `Side` at boundary comparisons, matching TS's `compareReferencePositions` semantics at same-position boundaries.
 
@@ -343,7 +451,7 @@ At a same-position boundary, `Side.Before` sorts before `Side.After` — so an i
 
 Note: the shared comparator tie-break (originally part of this cluster) was also fixed — `SequenceInterval.CompareStart`/`CompareEnd` now return 0 when the named endpoint matches, matching TS.
 
-### 12.2 Marker-aware text encoding
+### 13.2 Marker-aware text encoding
 
 `SharedString.GetText()` on a range containing markers emits U+200E (left-to-right mark) where TS's `getText` emits `"M" + markerId`. This is a Word rendering constraint, not a bug.
 
@@ -351,7 +459,7 @@ Note: the shared comparator tie-break (originally part of this cluster) was also
 - **Effort to change:** Trivial (one string concatenation) but would break Word's text-rendering pipeline.
 - **Consumer impact:** A consumer expecting TS-format inline marker IDs would see U+200E instead. No known Word consumers depend on the TS shape.
 
-### 12.3 (RESOLVED) Tombstone position returns -1
+### 13.3 (RESOLVED) Tombstone position returns -1
 
 **Status:** Fixed. `MergeTree.GetPositionOfSegment` now returns the collapsed tree position for a tombstoned (still-attached-but-removed) segment — the sum of preceding visible lengths at the boundary where the removed segment used to sit. Matches TS's `client.getPosition` semantics (see `packages/dds/merge-tree/src/test/client.getPosition.spec.ts` "Deleted Segment"). `DetachedReferencePosition` (-1) is now reserved for the truly-detached case (segment zamboni'd out).
 
