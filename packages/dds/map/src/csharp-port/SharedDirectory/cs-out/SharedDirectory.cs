@@ -15,13 +15,15 @@ namespace Microsoft.Office.Web.Fluid
 		private readonly SubDirectory _root;
 		private readonly IFluidDataObjectSender? _sender;
 		private readonly IFluidDataObjectRegistry? _registry;
+		private readonly IFluidLogger _logger;
 		private readonly Dictionary<long, SubDirectory> _pendingLocalOpSubdirectories = new Dictionary<long, SubDirectory>();
 
-		public SharedDirectory(string? id = null, IFluidDataObjectSender? sender = null, IFluidDataObjectRegistry? registry = null)
+		public SharedDirectory(string? id = null, IFluidDataObjectSender? sender = null, IFluidDataObjectRegistry? registry = null, IFluidLogger? logger = null)
 		{
 			_id = id ?? FluidObjectId.CreateId();
 			_sender = sender;
 			_registry = registry;
+			_logger = logger ?? NullLogger.Instance;
 			_root = new SubDirectory(
 				this,
 				parent: null,
@@ -40,6 +42,13 @@ namespace Microsoft.Office.Web.Fluid
 		internal IFluidDataObjectSender? Sender => _sender;
 
 		internal IFluidDataObjectRegistry? Registry => _registry;
+
+		/// <summary>
+		/// Structured logger for this SharedDirectory instance. SubDirectories
+		/// access the same logger through this property (matches TS pattern:
+		/// SubDirectory reads from the root's monitoring context).
+		/// </summary>
+		internal IFluidLogger Logger => _logger;
 
 		public event ValueChangedEventHandler? OnValueChanged;
 		public event SubDirectoryEventHandler? OnSubDirectoryCreated;
