@@ -150,8 +150,8 @@ namespace Microsoft.Office.Web.Fluid.Tests
 			SequenceInterval withoutId = CloneWithId(collection.Add(1, 2, intervalId: "source"), null);
 			IdIntervalIndex index = new();
 
-			Assert.Throws<ArgumentException>(() => index.Add(withoutId));
-			Assert.Throws<ArgumentException>(() => index.Remove(withoutId));
+			Assert.Throws<LoggingError>(() => index.Add(withoutId));
+			Assert.Throws<LoggingError>(() => index.Remove(withoutId));
 		}
 
 		[Fact]

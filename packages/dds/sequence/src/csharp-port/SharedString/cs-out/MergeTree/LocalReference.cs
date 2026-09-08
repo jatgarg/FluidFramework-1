@@ -173,9 +173,8 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
             if (exclusiveCount > 1)
             {
-                throw new ArgumentException(
-                    "Reference types can only be one of Transient, SlideOnRemove, and StayOnRemove.",
-                    nameof(refType));
+                throw new UsageError(
+                    "Reference types can only be one of Transient, SlideOnRemove, and StayOnRemove");
             }
         }
     }

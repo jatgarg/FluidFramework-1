@@ -1558,7 +1558,7 @@ namespace Microsoft.Office.Web.Fluid
 
 			if (subdirName.IndexOf("/", StringComparison.Ordinal) >= 0)
 			{
-				throw new ArgumentException("SubDirectory name may not contain /", nameof(subdirName));
+				throw new LoggingError($"SubDirectory name may not contain /");
 			}
 		}
 

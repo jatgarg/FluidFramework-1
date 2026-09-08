@@ -153,7 +153,7 @@ namespace Microsoft.Office.Web.Fluid.Tests
 				clientId: "remote-a");
 			client.ApplyOp(
 				new MergeTreeInsertMsg() { Pos1 = 11, Seg = "!" },
-				seq: 11,
+				seq: 16,
 				refSeq: 8,
 				clientId: "remote-b",
 				minimumSequenceNumber: 15);

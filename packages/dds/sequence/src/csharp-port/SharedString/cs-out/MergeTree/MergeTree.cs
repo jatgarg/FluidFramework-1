@@ -320,9 +320,8 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
                     refType,
                     ReferenceType.SlideOnRemove | ReferenceType.Transient | ReferenceType.StayOnRemove))
             {
-                throw new ArgumentException(
-                    "Can only create SlideOnRemove, Transient, or StayOnRemove local reference positions on removed segments.",
-                    nameof(refType));
+                throw new UsageError(
+                    "Can only create SlideOnRemove or Transient local reference position on a removed or obliterated segment");
             }
 
             LocalReferencePosition reference = new(segment, offset, refType, slidingPreference, properties, canSlideToEndpoint);

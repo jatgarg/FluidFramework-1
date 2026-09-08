@@ -19,23 +19,15 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         public void Add(SequenceInterval interval)
         {
             ArgumentNullException.ThrowIfNull(interval);
-            if (interval.Id is null)
-            {
-                throw new ArgumentException("Interval ID must exist before adding interval to the ID index.", nameof(interval));
-            }
-
-            _byId[interval.Id] = interval;
+            FluidAssert.That(interval.Id is not null, "ID must be created before adding interval to collection");
+            _byId[interval.Id!] = interval;
         }
 
         public void Remove(SequenceInterval interval)
         {
             ArgumentNullException.ThrowIfNull(interval);
-            if (interval.Id is null)
-            {
-                throw new ArgumentException("Interval ID must exist before removing interval from the ID index.", nameof(interval));
-            }
-
-            _byId.Remove(interval.Id);
+            FluidAssert.That(interval.Id is not null, "expected id to exist on interval");
+            _byId.Remove(interval.Id!);
         }
 
         // TS ref: packages/dds/sequence/src/intervalIndex/idIntervalIndex.ts —

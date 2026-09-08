@@ -611,6 +611,12 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 				throw new ArgumentException("Client id must be provided.", nameof(clientId));
 			}
 
+			// TS parallel: client.ts updateSeqNumbers asserts min <= seq.
+			if (minimumSequenceNumber is long mSeq)
+			{
+				FluidAssert.That(mSeq <= seq, "Incoming op sequence# < minSequence#");
+			}
+
 			RecordSequence(seq);
 
 			bool clientSeqIsLocal = !clientSeq.HasValue && op.ClientSeq.HasValue;
@@ -1982,6 +1988,9 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 
 		private void RecordSequence(long seq)
 		{
+			// TS parallel: client.ts updateSeqNumbers asserts monotonic advance.
+			// Equal is fine (snapshotContent can re-record the same seq).
+			FluidAssert.That(CollabWindowCurrentSeq <= seq, "Incoming op sequence# < local collabWindow's currentSequence#");
 			if (seq > CollabWindowCurrentSeq)
 			{
 				CollabWindowCurrentSeq = seq;
