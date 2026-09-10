@@ -19,14 +19,14 @@ namespace Microsoft.Office.Web.Fluid.Intervals
         public void Add(SequenceInterval interval)
         {
             ArgumentNullException.ThrowIfNull(interval);
-            FluidAssert.That(interval.Id is not null, "ID must be created before adding interval to collection");
+            FluidAssert.That(interval.Id is not null, 0x2c0 /* ID must be created before adding interval to collection */);
             _byId[interval.Id!] = interval;
         }
 
         public void Remove(SequenceInterval interval)
         {
             ArgumentNullException.ThrowIfNull(interval);
-            FluidAssert.That(interval.Id is not null, "expected id to exist on interval");
+            FluidAssert.That(interval.Id is not null, 0x311 /* expected id to exist on interval */);
             _byId.Remove(interval.Id!);
         }
 

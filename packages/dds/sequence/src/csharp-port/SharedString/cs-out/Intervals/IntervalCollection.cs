@@ -885,7 +885,7 @@ namespace Microsoft.Office.Web.Fluid.Intervals
 
 		private void ApplyChangeOwnAckCommon(MergeTree.IntervalOpMsg op, bool hasPropertiesOnly)
 		{
-			FluidAssert.That(op.IntervalId is string, "id must exist on the interval");
+			FluidAssert.That(op.IntervalId is string, 0x3fe /* id must exist on the interval */);
 			string id = op.IntervalId!;
 
 			SequenceInterval? interval;

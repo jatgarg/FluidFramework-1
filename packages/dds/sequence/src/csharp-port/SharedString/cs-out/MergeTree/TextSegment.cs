@@ -181,7 +181,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
         /// <inheritdoc />
         public override void Append(ISegment segment)
         {
-            FluidAssert.That(segment is TextSegment, "can only append text segment");
+            FluidAssert.That(segment is TextSegment, 0x447 /* can only append text segment */);
             TextSegment textSegment = (TextSegment)segment;
 
             base.Append(segment);

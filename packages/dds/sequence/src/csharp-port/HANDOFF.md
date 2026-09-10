@@ -321,6 +321,18 @@ All types in namespace `Microsoft.Office.Web.Fluid`:
 - `FluidAssert.That(cond, msg)` — the port's `assert()`. Throws
   `LoggingError` on failure. Uses `[DoesNotReturnIf(false)]` for C#
   nullability narrowing (matches TS `asserts condition`).
+- `FluidAssert.That(cond, uint tag)` — tagged form for asserts with a
+  TS ancestor. Throws `LoggingError` with message `"0xNNN"` — exactly
+  what TS Fluid throws — so Kusto queries can correlate hits across
+  TS and C# by tag value. The human-readable description lives as a
+  source comment at the call site:
+  `FluidAssert.That(cond, 0x3fe /* description */);` — same convention
+  as TS `assert(cond, 0x3fe /* description */)`. The comment is
+  stripped by the compiler; only the hex tag reaches runtime. Tag →
+  description lookup happens out of band via TS's generated
+  `assertionShortCodesMap.ts`; there is no separate C# tool or map.
+  Rule: when porting a TS assert that already has a tag, use the
+  same tag value. New port-only asserts stay on the untagged form.
 - `Argument*Exception` / `ArgumentNullException.ThrowIfNull` kept
   intact — idiomatic C# null/range guards; TS's `assert()` for null
   checks maps naturally to these.
@@ -352,24 +364,26 @@ All types in namespace `Microsoft.Office.Web.Fluid`:
 
 Every value in a telemetry property bag is one of two shapes:
 
-- **Bare** — a primitive, string, enum, or exception. Bare values are
-  **implicitly classified `CodeArtifact`**: safe to log to shipped
-  telemetry. Producers must not put user content in bare values.
+- **Bare** — a primitive, string, or enum. Implicitly classified
+  `CodeArtifact`: safe for shipped telemetry. Producers must not put
+  user content in bare values.
 - **Wrapped** in `TaggedTelemetryValue(value, tag)` — either
   `CodeArtifact` (explicit safe classification) or `UserData` (PII;
   segment text, marker text, property values from user input, etc.).
 
+Exceptions are attached via the `error` param on `IFluidLogger`
+methods (not embedded in `Properties`) and split per § 10.3
+(`AppendException`).
+
 Bridges **must inspect the tag** and route accordingly:
-- **Local diagnostic sinks** may render every value (both tags) —
-  useful for debugging and repro.
+- **Local diagnostic sinks** may render every value.
 - **Shipped telemetry sinks** (e.g., the Kusto path via
-  `Log.TraceTag`) **must strip, hash, or redact `UserData`**. Bare
-  values and `CodeArtifact`-tagged values may be logged verbatim.
+  `Log.TraceTag`) **must strip, hash, or redact `UserData`**.
 
 The port emits only `CodeArtifact`-shaped values today (`depth`,
-event names, exception references) — nothing carries user content.
-The tagging surface exists so future events that need to attach
-document state can opt-in without changing the interface.
+event names, exception references). The tagging surface exists so
+future events that need to attach document state can opt-in without
+changing the interface.
 
 ### 10.3 Bridge implementation guidance (waccobalt)
 
@@ -406,11 +420,11 @@ Sub-conventions:
   per row for correlation
 - Culture: `CultureInfo.InvariantCulture` always
 - Exceptions: **never** `[Exception: {ex.ToString()}]` — that
-  concatenates type + message + stack into one blob. Split into three
-  bracket pairs (`[ExceptionType: ...]` `[ExceptionMessage: ...]`
-  `[ExceptionStack: ...]`), classify each per § 10.2.1
-  (type + sanitized stack = CodeArtifact; message = UserData), and
-  redact the message on the shipped-telemetry path.
+  concatenates type + message + stack into one blob. Delegate to
+  `AppendException` (below): renders `ExceptionType` (`CodeArtifact`),
+  and for `ILoggingError` merges its tagged payload (message =
+  `UserData`, stack = `CodeArtifact`); for a plain `Exception` renders
+  message (`UserData`) + stack (`CodeArtifact`) inline.
 - Enums: `.ToString()` (renders by name)
 - Hot-path gating: `Log.ShouldTrace(cat, level)` before expensive
   prop formatting
@@ -453,29 +467,30 @@ private static string RenderForTelemetry(object? value)
 
 private static void AppendException(StringBuilder sb, Exception ex)
 {
-    // Split the exception into 3 compliance buckets — never render
-    // ex.ToString() verbatim (that concatenates all three into one blob
-    // and defeats the boundary).
-    //
-    // 1. Type name → CodeArtifact (safe verbatim).
-    // 2. Message   → UserData by default (may embed interpolated user
-    //                content). Redact / hash / drop per Word policy.
-    // 3. Stack     → CodeArtifact (safe verbatim), but sanitize to strip
-    //                the leading "[TypeName]: [Message]" line so the
-    //                message doesn't slip in via the stack. Matches TS
-    //                extractLogSafeErrorProperties(sanitizeStack: true).
+    // Type name is always safe. Message + stack must respect the
+    // compliance boundary — never render ex.ToString() verbatim
+    // (concatenates all three parts and defeats the boundary).
     sb.AppendFormat(CultureInfo.InvariantCulture, " [ExceptionType: {0}]", ex.GetType().FullName);
-    sb.AppendFormat(CultureInfo.InvariantCulture, " [ExceptionMessage: {0}]", RedactUserData(ex.Message));
-    sb.AppendFormat(CultureInfo.InvariantCulture, " [ExceptionStack: {0}]", SanitizeStack(ex));
 
-    // If the exception carries structured telemetry props (ILoggingError),
-    // merge them under the same tagging contract as event Properties.
     if (ex is ILoggingError le)
     {
+        // GetTelemetryProperties() already carries message + stack
+        // wrapped in TaggedTelemetryValue with the correct compliance
+        // tags (per TS extractLogSafeErrorProperties). RenderForTelemetry
+        // will redact UserData appropriately.
         foreach (var (k, v) in le.GetTelemetryProperties())
         {
             sb.AppendFormat(CultureInfo.InvariantCulture, " [{0}: {1}]", k, RenderForTelemetry(v));
         }
+    }
+    else
+    {
+        // Plain exception — apply compliance defaults inline.
+        // message: UserData by default. Redact / hash / drop per Word policy.
+        sb.AppendFormat(CultureInfo.InvariantCulture, " [ExceptionMessage: {0}]", RedactUserData(ex.Message));
+        // stack: CodeArtifact. .NET Exception.StackTrace has no leading
+        // "Name: Message" line, so no TS-style sanitizeStack is needed.
+        sb.AppendFormat(CultureInfo.InvariantCulture, " [ExceptionStack: {0}]", ex.StackTrace ?? "N/A");
     }
 }
 ```

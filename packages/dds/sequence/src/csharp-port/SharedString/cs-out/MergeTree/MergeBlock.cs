@@ -204,7 +204,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
             string parentOrdinal,
             string? previousOrdinal)
         {
-            FluidAssert.That(maxCount <= 16 && actualCount <= maxCount, "count must be less than max, and max must be 16 or less");
+            FluidAssert.That(maxCount <= 16 && actualCount <= maxCount, 0x3f0 /* count must be less than max, and max must be 16 or less */);
             int ordinalWidth = 1 << (maxCount - actualCount);
             if (previousOrdinal is null)
             {

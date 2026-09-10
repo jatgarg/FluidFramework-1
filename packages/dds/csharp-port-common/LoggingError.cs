@@ -79,10 +79,15 @@ namespace Microsoft.Office.Web.Fluid
 
 		public IReadOnlyDictionary<string, object?> GetTelemetryProperties()
 		{
+			// message + stack follow TS extractLogSafeErrorProperties(sanitizeStack: true):
+			//  - message: UserData by default (may embed interpolated user content).
+			//  - stack: CodeArtifact after sanitization. .NET Exception.StackTrace
+			//    doesn't include a leading "Name: Message" line, so no scrubbing
+			//    is needed here — the CodeArtifact classification stands as-is.
 			Dictionary<string, object?> result = new(_properties.Count + 3)
 			{
-				["message"] = Message,
-				["stack"] = StackTrace,
+				["message"] = new TaggedTelemetryValue(Message, FluidTelemetryDataTag.UserData),
+				["stack"] = new TaggedTelemetryValue(StackTrace, FluidTelemetryDataTag.CodeArtifact),
 				["errorInstanceId"] = ErrorInstanceId,
 			};
 

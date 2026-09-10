@@ -614,7 +614,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 			// TS parallel: client.ts updateSeqNumbers asserts min <= seq.
 			if (minimumSequenceNumber is long mSeq)
 			{
-				FluidAssert.That(mSeq <= seq, "Incoming op sequence# < minSequence#");
+				FluidAssert.That(mSeq <= seq, 0x039 /* Incoming op sequence# < minSequence# */);
 			}
 
 			RecordSequence(seq);
@@ -1990,7 +1990,7 @@ namespace Microsoft.Office.Web.Fluid.MergeTree
 		{
 			// TS parallel: client.ts updateSeqNumbers asserts monotonic advance.
 			// Equal is fine (snapshotContent can re-record the same seq).
-			FluidAssert.That(CollabWindowCurrentSeq <= seq, "Incoming op sequence# < local collabWindow's currentSequence#");
+			FluidAssert.That(CollabWindowCurrentSeq <= seq, 0x038 /* Incoming op sequence# < local collabWindow's currentSequence# */);
 			if (seq > CollabWindowCurrentSeq)
 			{
 				CollabWindowCurrentSeq = seq;

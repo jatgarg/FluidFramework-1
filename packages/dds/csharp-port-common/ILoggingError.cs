@@ -14,14 +14,12 @@ namespace Microsoft.Office.Web.Fluid
 	/// </summary>
 	/// <remarks>
 	/// TS <c>ILoggingError extends Error</c>; C# equivalence relies on
-	/// implementers deriving from <see cref="System.Exception" />.
-	/// Values in the returned dictionary follow the same tagging contract
-	/// as <see cref="FluidTelemetryEvent.Properties" />: bare values are
-	/// implicitly safe by contract (must not carry user content), and
-	/// PII-bearing values must be wrapped in a
-	/// <see cref="TaggedTelemetryValue" /> with the
-	/// <see cref="FluidTelemetryDataTag.UserData" /> tag so consumers can
-	/// route them appropriately.
+	/// implementers deriving from <see cref="System.Exception" />. Values
+	/// in the returned dictionary follow the same tagging contract as
+	/// <see cref="FluidTelemetryEvent.Properties" />: bare values are
+	/// safe by producer contract, and PII-bearing values must be wrapped
+	/// in <see cref="TaggedTelemetryValue" /> with
+	/// <see cref="FluidTelemetryDataTag.UserData" />.
 	/// </remarks>
 	public interface ILoggingError
 	{

@@ -6,6 +6,7 @@
 
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 
 namespace Microsoft.Office.Web.Fluid
 {
@@ -16,7 +17,9 @@ namespace Microsoft.Office.Web.Fluid
 	/// <remarks>
 	/// Named <c>FluidAssert</c> to disambiguate from <c>Xunit.Assert</c>,
 	/// <see cref="System.Diagnostics.Debug.Assert(bool)" /> (stripped in
-	/// Release), and Word's <c>Verify</c>.
+	/// Release), and Word's <c>Verify</c>. Tagged overloads mirror TS
+	/// Fluid's build-assigned assertion tags — see
+	/// <see cref="That(bool, uint)" />.
 	/// </remarks>
 	public static class FluidAssert
 	{
@@ -51,5 +54,50 @@ namespace Microsoft.Office.Web.Fluid
 				throw new LoggingError(message, properties);
 			}
 		}
+
+		/// <summary>
+		/// Tagged form for asserts with a TS ancestor. Throws
+		/// <see cref="LoggingError" /> with message <c>"0xNNN"</c> —
+		/// matching what TS Fluid throws — so Kusto queries key on
+		/// a stable identifier across runtimes.
+		/// </summary>
+		/// <remarks>
+		/// Use the same <paramref name="tag" /> as the TS ancestor.
+		/// Description lives as a source comment at the call site
+		/// (<c>FluidAssert.That(cond, 0x3fe /* description */);</c>),
+		/// matching TS convention. Tag → description lookup happens
+		/// via TS's generated <c>assertionShortCodesMap.ts</c>.
+		/// </remarks>
+		public static void That(
+			[DoesNotReturnIf(false)] bool condition,
+			uint tag)
+		{
+			if (!condition)
+			{
+				throw new LoggingError(FormatTag(tag));
+			}
+		}
+
+		/// <summary>
+		/// As <see cref="That(bool, uint)" /> but attaches structured
+		/// payload to the thrown <see cref="LoggingError" />.
+		/// </summary>
+		public static void That(
+			[DoesNotReturnIf(false)] bool condition,
+			uint tag,
+			Dictionary<string, object?> properties)
+		{
+			if (!condition)
+			{
+				throw new LoggingError(FormatTag(tag), properties);
+			}
+		}
+
+		private static string FormatTag(uint tag)
+		{
+			// Matches TS assert.ts: `0x${tag.toString(16).padStart(3, "0")}`.
+			return "0x" + tag.ToString("x3", CultureInfo.InvariantCulture);
+		}
 	}
 }
+

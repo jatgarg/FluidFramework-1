@@ -7,16 +7,17 @@
 namespace Microsoft.Office.Web.Fluid
 {
 	/// <summary>
-	/// Compliance tag for a telemetry property value. Every value on
+	/// Compliance tag for a telemetry property value. Wrap
+	/// PII-bearing values in <see cref="TaggedTelemetryValue" /> with
+	/// <see cref="UserData" />; bare values on
 	/// <see cref="FluidTelemetryEvent.Properties" /> and
-	/// <see cref="ILoggingError.GetTelemetryProperties" /> is either wrapped
-	/// in a <see cref="TaggedTelemetryValue" /> (bearing one of these tags)
-	/// or bare (implicitly <see cref="CodeArtifact" /> — safe by contract).
+	/// <see cref="ILoggingError.GetTelemetryProperties" /> are safe by
+	/// producer contract (must not carry user content).
 	/// </summary>
 	/// <remarks>
-	/// Concrete <see cref="IFluidLogger" /> implementations must inspect the
-	/// tag and route the value appropriately: local diagnostic sinks may
-	/// render every value, shipped telemetry sinks must strip or redact
+	/// Concrete <see cref="IFluidLogger" /> implementations must inspect
+	/// the tag and route the value: local diagnostic sinks may render
+	/// everything, shipped telemetry sinks must strip or redact
 	/// <see cref="UserData" />.
 	/// </remarks>
 	public enum FluidTelemetryDataTag
