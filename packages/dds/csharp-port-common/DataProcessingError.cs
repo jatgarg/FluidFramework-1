@@ -26,7 +26,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 		}
 
-		public DataProcessingError(string message, IReadOnlyDictionary<string, object?>? properties)
+		public DataProcessingError(string message, Dictionary<string, object?>? properties)
 			: base(message, properties)
 		{
 		}
@@ -36,7 +36,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 		}
 
-		public DataProcessingError(string message, IReadOnlyDictionary<string, object?>? properties, Exception? innerException)
+		public DataProcessingError(string message, Dictionary<string, object?>? properties, Exception? innerException)
 			: base(message, properties, innerException)
 		{
 		}

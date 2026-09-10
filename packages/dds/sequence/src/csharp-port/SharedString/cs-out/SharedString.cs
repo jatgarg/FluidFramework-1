@@ -1155,7 +1155,7 @@ namespace Microsoft.Office.Web.Fluid
 						_logger.SendTelemetryEvent(new FluidTelemetryEvent
 						{
 							EventName = "LocalOpReentry",
-							Properties = new Dictionary<string, object?> { ["depth"] = depth },
+							Properties = new() { ["depth"] = depth },
 						}, new LoggingError("Reentrancy detected in sequence local ops"));
 					}
 

@@ -21,7 +21,7 @@ namespace Microsoft.Office.Web.Fluid
 		{
 		}
 
-		public UsageError(string message, IReadOnlyDictionary<string, object?>? properties)
+		public UsageError(string message, Dictionary<string, object?>? properties)
 			: base(message, PropsWithUsageFlag(properties))
 		{
 		}
@@ -31,12 +31,12 @@ namespace Microsoft.Office.Web.Fluid
 		{
 		}
 
-		public UsageError(string message, IReadOnlyDictionary<string, object?>? properties, Exception? innerException)
+		public UsageError(string message, Dictionary<string, object?>? properties, Exception? innerException)
 			: base(message, PropsWithUsageFlag(properties), innerException)
 		{
 		}
 
-		private static IReadOnlyDictionary<string, object?> PropsWithUsageFlag(IReadOnlyDictionary<string, object?>? properties)
+		private static Dictionary<string, object?> PropsWithUsageFlag(Dictionary<string, object?>? properties)
 		{
 			Dictionary<string, object?> merged = properties is null
 				? new Dictionary<string, object?>(1)

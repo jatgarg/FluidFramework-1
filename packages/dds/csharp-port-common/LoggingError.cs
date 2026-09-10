@@ -17,17 +17,25 @@ namespace Microsoft.Office.Web.Fluid
 	/// Prefer this over <see cref="InvalidOperationException" /> whenever
 	/// the throw represents an invariant the port itself enforces
 	/// (<see cref="UsageError" /> is the sibling for caller-fault throws).
+	/// <para />
+	/// The <c>properties</c> constructor parameter is typed
+	/// <see cref="Dictionary{TKey, TValue}" /> (not
+	/// <see cref="IReadOnlyDictionary{TKey, TValue}" />) so callers can
+	/// use target-typed <c>new()</c> + collection-initializer syntax at
+	/// the throw site (e.g., <c>throw new LoggingError(msg, new() { ["k"] = v })</c>).
+	/// The read-only view is preserved on the outbound side via
+	/// <see cref="GetTelemetryProperties" />.
 	/// </remarks>
 	public class LoggingError : Exception, ILoggingError
 	{
-		private readonly IReadOnlyDictionary<string, object?> _properties;
+		private readonly Dictionary<string, object?> _properties;
 
 		public LoggingError(string message)
 			: this(message, properties: null, innerException: null)
 		{
 		}
 
-		public LoggingError(string message, IReadOnlyDictionary<string, object?>? properties)
+		public LoggingError(string message, Dictionary<string, object?>? properties)
 			: this(message, properties, innerException: null)
 		{
 		}
@@ -37,10 +45,14 @@ namespace Microsoft.Office.Web.Fluid
 		{
 		}
 
-		public LoggingError(string message, IReadOnlyDictionary<string, object?>? properties, Exception? innerException)
+		public LoggingError(string message, Dictionary<string, object?>? properties, Exception? innerException)
 			: base(message, innerException)
 		{
-			_properties = properties ?? EmptyProperties;
+			// Copy the caller's dict so post-construction mutations on their
+			// side can't leak into the exception payload.
+			_properties = properties is null
+				? new Dictionary<string, object?>(0)
+				: new Dictionary<string, object?>(properties);
 			ErrorInstanceId = Guid.NewGuid().ToString("N");
 		}
 
@@ -81,8 +93,5 @@ namespace Microsoft.Office.Web.Fluid
 
 			return result;
 		}
-
-		private static readonly IReadOnlyDictionary<string, object?> EmptyProperties =
-			new Dictionary<string, object?>(0);
 	}
 }

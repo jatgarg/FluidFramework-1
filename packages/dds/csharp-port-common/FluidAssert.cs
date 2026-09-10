@@ -44,7 +44,7 @@ namespace Microsoft.Office.Web.Fluid
 		public static void That(
 			[DoesNotReturnIf(false)] bool condition,
 			string message,
-			IReadOnlyDictionary<string, object?> properties)
+			Dictionary<string, object?> properties)
 		{
 			if (!condition)
 			{

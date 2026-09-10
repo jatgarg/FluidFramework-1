@@ -337,22 +337,67 @@ All types in namespace `Microsoft.Office.Web.Fluid`:
   to `Microsoft.Office.Web.Common.Log.Level`.
 - `FluidTelemetryEvent` — POCO carrying `EventName` + optional
   `Properties` dict.
+- `FluidTelemetryDataTag` — compliance tag enum (`CodeArtifact`,
+  `UserData`). Mirrors TS `TelemetryDataTag`.
+- `TaggedTelemetryValue` — record wrapping `(object? Value,
+  FluidTelemetryDataTag Tag)`. Mirrors TS `Tagged<V, T>`. See § 10.2.1
+  for the compliance contract every property value on
+  `FluidTelemetryEvent.Properties` and
+  `ILoggingError.GetTelemetryProperties()` must follow.
 - `NullLogger.Instance` — no-op default.
 - `NamespacedLogger` — helper used by `CreateChildLogger` to prepend
-  `"{namespace}.{eventName}"` to events (matches TS child-logger).
+  `"{namespace}:{eventName}"` to events (matches TS child-logger).
+
+#### 10.2.1 Property tagging contract (compliance)
+
+Every value in a telemetry property bag is one of two shapes:
+
+- **Bare** — a primitive, string, enum, or exception. Bare values are
+  **implicitly classified `CodeArtifact`**: safe to log to shipped
+  telemetry. Producers must not put user content in bare values.
+- **Wrapped** in `TaggedTelemetryValue(value, tag)` — either
+  `CodeArtifact` (explicit safe classification) or `UserData` (PII;
+  segment text, marker text, property values from user input, etc.).
+
+Bridges **must inspect the tag** and route accordingly:
+- **Local diagnostic sinks** may render every value (both tags) —
+  useful for debugging and repro.
+- **Shipped telemetry sinks** (e.g., the Kusto path via
+  `Log.TraceTag`) **must strip, hash, or redact `UserData`**. Bare
+  values and `CodeArtifact`-tagged values may be logged verbatim.
+
+The port emits only `CodeArtifact`-shaped values today (`depth`,
+event names, exception references) — nothing carries user content.
+The tagging surface exists so future events that need to attach
+document state can opt-in without changing the interface.
 
 ### 10.3 Bridge implementation guidance (waccobalt)
 
 Word implements `IFluidLogger` and forwards to `Log.TraceTag`. Wiring
 is via the `logger` param on `SharedString` constructor.
 
+**Compliance handling first.** Before formatting any value into the
+outgoing `Log.TraceTag` message, the bridge must:
+
+1. Type-check each property value.
+2. If it's a `TaggedTelemetryValue`, inspect `.Tag`:
+   - `CodeArtifact` → unwrap and render `.Value` verbatim.
+   - `UserData` → apply Word's compliance rule (strip, hash, redact,
+     or emit to a separate PII-safe sink). Never render verbatim to
+     the shipped telemetry path.
+3. Otherwise it's a bare value → render verbatim (implicitly
+   `CodeArtifact`).
+
+Only after compliance routing does the serialization convention below
+apply.
+
 **Serialization convention: bracket-KV, not JSON.**
 
 Word's ULS + Kusto pipeline uses `[Key: Value]` bracket pairs
 (grep-able, no JSON quoting collisions, correlates with `tag_XXXX`
 diagnostic ids). The bridge iterates `FluidTelemetryEvent.Properties`
-and formats each pair as ` [{key}: {value}]` appended to the event
-name string.
+and formats each compliance-cleared pair as ` [{key}: {value}]`
+appended to the event name string.
 
 Sub-conventions:
 - Prefix: event name first, then bracket pairs
@@ -360,7 +405,12 @@ Sub-conventions:
 - Nested: space-separated inside a single bracket, or one `TraceTag`
   per row for correlation
 - Culture: `CultureInfo.InvariantCulture` always
-- Exceptions: `[Exception: {ex.ToString()}]` (full string + stack)
+- Exceptions: **never** `[Exception: {ex.ToString()}]` — that
+  concatenates type + message + stack into one blob. Split into three
+  bracket pairs (`[ExceptionType: ...]` `[ExceptionMessage: ...]`
+  `[ExceptionStack: ...]`), classify each per § 10.2.1
+  (type + sanitized stack = CodeArtifact; message = UserData), and
+  redact the message on the shipped-telemetry path.
 - Enums: `.ToString()` (renders by name)
 - Hot-path gating: `Log.ShouldTrace(cat, level)` before expensive
   prop formatting
@@ -375,18 +425,65 @@ public void SendTelemetryEvent(FluidTelemetryEvent evt, Exception? error = null,
     {
         foreach (var (k, v) in evt.Properties)
         {
-            sb.AppendFormat(CultureInfo.InvariantCulture, " [{0}: {1}]", k, v?.ToString() ?? "N/A");
+            sb.AppendFormat(CultureInfo.InvariantCulture, " [{0}: {1}]", k, RenderForTelemetry(v));
         }
     }
     if (error != null)
     {
-        sb.AppendFormat(CultureInfo.InvariantCulture, " [Exception: {0}]", error);
+        AppendException(sb, error);
     }
     Log.TraceTag(WordFluidTags.PortTelemetry, LogCategory.WordFluid, Map(level), sb.ToString());
+}
+
+private static string RenderForTelemetry(object? value)
+{
+    // Compliance step: strip UserData, render CodeArtifact / bare verbatim.
+    if (value is TaggedTelemetryValue tagged)
+    {
+        return tagged.Tag switch
+        {
+            FluidTelemetryDataTag.UserData => "[redacted]",   // or hash, or drop entirely
+            _ => tagged.Value?.ToString() ?? "N/A",           // CodeArtifact
+        };
+    }
+
+    // Bare value: implicit CodeArtifact by contract.
+    return value?.ToString() ?? "N/A";
+}
+
+private static void AppendException(StringBuilder sb, Exception ex)
+{
+    // Split the exception into 3 compliance buckets — never render
+    // ex.ToString() verbatim (that concatenates all three into one blob
+    // and defeats the boundary).
+    //
+    // 1. Type name → CodeArtifact (safe verbatim).
+    // 2. Message   → UserData by default (may embed interpolated user
+    //                content). Redact / hash / drop per Word policy.
+    // 3. Stack     → CodeArtifact (safe verbatim), but sanitize to strip
+    //                the leading "[TypeName]: [Message]" line so the
+    //                message doesn't slip in via the stack. Matches TS
+    //                extractLogSafeErrorProperties(sanitizeStack: true).
+    sb.AppendFormat(CultureInfo.InvariantCulture, " [ExceptionType: {0}]", ex.GetType().FullName);
+    sb.AppendFormat(CultureInfo.InvariantCulture, " [ExceptionMessage: {0}]", RedactUserData(ex.Message));
+    sb.AppendFormat(CultureInfo.InvariantCulture, " [ExceptionStack: {0}]", SanitizeStack(ex));
+
+    // If the exception carries structured telemetry props (ILoggingError),
+    // merge them under the same tagging contract as event Properties.
+    if (ex is ILoggingError le)
+    {
+        foreach (var (k, v) in le.GetTelemetryProperties())
+        {
+            sb.AppendFormat(CultureInfo.InvariantCulture, " [{0}: {1}]", k, RenderForTelemetry(v));
+        }
+    }
 }
 ```
 
 Tag range + `LogCategory` selection are wordfluidcsharp's concern.
+The compliance step must run before any local- or telemetry-side
+formatting, and the `UserData` handling policy (redact / hash / drop
+/ route to a PII-safe sink) is Word's call.
 
 ### 10.4 Named events
 
