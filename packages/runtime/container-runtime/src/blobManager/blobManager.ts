@@ -149,10 +149,26 @@ export type ICreateBlobResponseWithTTL = ICreateBlobResponse &
 
 /**
  * A blob tracked by BlobManager that is only available on the local client. It is not currently
- * attempting an upload.
+ * attempting an upload, and the BlobManager is not responsible for making it durable - a blob sits
+ * here when its handle was created with a pending payload but sharing has not been requested yet.
  */
 interface LocalOnlyBlob {
 	state: "localOnly";
+	blob: ArrayBufferLike;
+}
+
+/**
+ * A blob tracked by BlobManager that is only available on the local client, and which the BlobManager
+ * has taken responsibility for sharing but has not started (or has restarted) the upload for.
+ *
+ * @remarks
+ * This is distinct from {@link LocalOnlyBlob} only in intent, and that distinction is what makes the
+ * blob count as outstanding work. A blob is here either because sharing has just been requested and
+ * the upload has not been issued yet, or because it regressed from a later stage - a TTL expiry means
+ * storage may have dropped the blob, so it is local-only again and must be re-uploaded.
+ */
+interface UploadExpectedBlob {
+	state: "uploadExpected";
 	blob: ArrayBufferLike;
 }
 
@@ -201,11 +217,17 @@ interface AttachedBlob {
 /**
  * Blobs that were created locally are tracked, and may be in one of these states. When first
  * created, they are in localOnly state. The process of sharing has two steps, blob upload and
- * sending a BlobAttach op. Progress through the stages may regress back to localOnly if we
+ * sending a BlobAttach op. Progress through the stages may regress back to uploadExpected if we
  * determine the storage may have deleted the blob before we could finish attaching it.
+ *
+ * @remarks
+ * This state is also what the BlobManager's outstanding-work signal is computed from, so the
+ * distinction between localOnly and uploadExpected is load-bearing. See
+ * {@link isOutstandingBlobWork} and {@link BlobManager.hasOutstandingBlobWork}.
  */
 type LocalBlobRecord =
 	| LocalOnlyBlob
+	| UploadExpectedBlob
 	| UploadingBlob
 	| UploadedBlob
 	| AttachingBlob
@@ -231,6 +253,19 @@ export interface IPendingBlobs {
 const isTTLTooCloseToExpiry = (blobRecord: UploadedBlob | AttachingBlob): boolean =>
 	blobRecord.minTTLInSeconds !== undefined &&
 	Date.now() - blobRecord.uploadTime > (blobRecord.minTTLInSeconds / 2) * 1000;
+
+/**
+ * Whether a locally-tracked blob in the given state counts as outstanding blob work, i.e. whether the
+ * BlobManager has taken responsibility for sharing it and has not finished. See
+ * {@link BlobManager.hasOutstandingBlobWork} for what that means and why it matters.
+ *
+ * @remarks
+ * The two states that do not count are the two ends of the flow: localOnly, where sharing has not been
+ * requested, and attached, where it has completed. Everything in between does count - including
+ * uploaded, because a successful upload is not durable until the BlobAttach op is ack'd.
+ */
+const isOutstandingBlobWork = (blobRecord: LocalBlobRecord): boolean =>
+	blobRecord.state !== "localOnly" && blobRecord.state !== "attached";
 
 /**
  * Events raised by the {@link BlobManager}.
@@ -292,6 +327,10 @@ export class BlobManager {
 	/**
 	 * The localBlobCache has a dual role of caching locally-created blobs, as well as tracking their state as they
 	 * are shared. Keys are localIds.
+	 *
+	 * @remarks
+	 * Never mutate this directly - go through {@link BlobManager.setLocalBlobRecord} and
+	 * {@link BlobManager.deleteLocalBlobRecord}, which keep the outstanding blob work signal in sync with it.
 	 */
 	private readonly localBlobCache: Map<string, LocalBlobRecord> = new Map();
 	/**
@@ -305,17 +344,16 @@ export class BlobManager {
 	private readonly pendingOnlyLocalIds: Set<string> = new Set();
 
 	/**
-	 * Local IDs of the blobs that this BlobManager has taken responsibility for sharing, but which are
-	 * not shared yet. A blob is "shared" once its BlobAttach op has been ack'd, at which point storage is
-	 * guaranteed to keep it alive and all clients can resolve it.
+	 * The number of entries in the localBlobCache that currently satisfy {@link isOutstandingBlobWork}.
 	 *
 	 * @remarks
-	 * Its membership rules are deliberately narrow (see {@link BlobManager.hasOutstandingBlobWork} for the
-	 * exact begin/end semantics). A Set (rather than a boolean or a plain counter) is used so that
-	 * membership is idempotent per blob and therefore safe against the many concurrent, interleaved upload
-	 * flows a single container can have in flight at once.
+	 * This is a running count of a property of the localBlobCache rather than independent bookkeeping. It
+	 * cannot drift from the cache because every mutation of the cache goes through
+	 * {@link BlobManager.setLocalBlobRecord} or {@link BlobManager.deleteLocalBlobRecord}, which are the
+	 * only places it is updated. It exists so that reading the aggregate does not require scanning the map
+	 * on every state transition.
 	 */
-	private readonly unsharedBlobs: Set<string> = new Set();
+	private outstandingBlobWorkCount: number = 0;
 
 	private readonly sendBlobAttachMessage: (localId: string, storageId: string) => void;
 
@@ -392,24 +430,25 @@ export class BlobManager {
 					!this.redirectTable.has(localId),
 					0xc7e /* Pending blob already in redirect table */,
 				);
-				const localBlobRecord = {
-					...serializableBlobRecord,
-					blob: stringToBuffer(serializableBlobRecord.blob, "base64"),
-				};
-				this.localBlobCache.set(localId, localBlobRecord);
+				const blob = stringToBuffer(serializableBlobRecord.blob, "base64");
+				// A restored localOnly blob is one this BlobManager is responsible for re-sharing, so it
+				// enters as uploadExpected rather than localOnly. That distinction is what makes it count
+				// as outstanding work from the moment we load with it, rather than from when
+				// sharePendingBlobs() runs - otherwise we would report no outstanding work in between.
+				//
+				// The resulting outstandingBlobWorkChanged is necessarily unobservable here: the caller does
+				// not hold this instance yet, so nothing can have subscribed. This is why consumers must seed
+				// themselves from hasOutstandingBlobWork when they subscribe instead of relying on the event.
+				const localBlobRecord: LocalBlobRecord =
+					serializableBlobRecord.state === "localOnly"
+						? { state: "uploadExpected", blob }
+						: { ...serializableBlobRecord, blob };
+				this.setLocalBlobRecord(localId, localBlobRecord);
 				// Since we received these blobs from pending state, we'll assume they were only added to the
 				// pending state at generation time because their handles were attached. We add them back here
 				// in case we need to round-trip them back out again due to another getPendingBlobs() call.
 				this.pendingBlobsWithAttachedHandles.add(localId);
 				this.pendingOnlyLocalIds.add(localId);
-				// These blobs are non-durable local content that this BlobManager is responsible for sharing,
-				// starting from the moment we load with them rather than from when sharePendingBlobs() runs.
-				// Otherwise it would report no outstanding work between load and the start of sharing.
-				//
-				// The resulting outstandingBlobWorkChanged is necessarily unobservable here: the caller does
-				// not hold this instance yet, so nothing can have subscribed. This is why consumers must seed
-				// themselves from hasOutstandingBlobWork when they subscribe instead of relying on the event.
-				this.startTrackingUnsharedBlob(localId);
 			}
 		}
 	}
@@ -447,7 +486,7 @@ export class BlobManager {
 	 * but still not retained.
 	 */
 	public get hasOutstandingBlobWork(): boolean {
-		return this.unsharedBlobs.size > 0;
+		return this.outstandingBlobWorkCount > 0;
 	}
 
 	/**
@@ -461,34 +500,63 @@ export class BlobManager {
 	 * independently of one another.
 	 */
 	public get unsharedBlobCount(): number {
-		return this.unsharedBlobs.size;
+		return this.outstandingBlobWorkCount;
 	}
 
 	/**
-	 * Start counting the given blob as outstanding blob work, per the semantics on
-	 * {@link BlobManager.hasOutstandingBlobWork}. Idempotent, so it is safe for a blob that is already
-	 * counted (e.g. one restored from pending state whose sharing then starts).
+	 * Set the localBlobCache entry for the given localId, keeping the outstanding blob work signal in sync.
+	 *
+	 * @remarks
+	 * Use this rather than mutating the localBlobCache directly. A blob's contribution to outstanding work
+	 * is purely a function of its record state, so routing every write through here is what guarantees the
+	 * aggregate cannot disagree with the cache.
 	 */
-	private readonly startTrackingUnsharedBlob = (localId: string): void => {
-		const hadOutstandingWork = this.hasOutstandingBlobWork;
-		this.unsharedBlobs.add(localId);
-		if (!hadOutstandingWork && this.hasOutstandingBlobWork) {
-			this._events.emit("outstandingBlobWorkChanged");
-		}
+	private readonly setLocalBlobRecord = (localId: string, record: LocalBlobRecord): void => {
+		const previousRecord = this.localBlobCache.get(localId);
+		this.localBlobCache.set(localId, record);
+		this.updateOutstandingBlobWork(previousRecord, record);
 	};
 
 	/**
-	 * Stop counting the given blob as outstanding blob work. Idempotent, so it is safe to call from each of
-	 * the paths that can end a blob's sharing flow, and for a blob that was never counted at all (e.g. one
-	 * shared by a remote client).
+	 * Delete the localBlobCache entry for the given localId, keeping the outstanding blob work signal in
+	 * sync. See {@link BlobManager.setLocalBlobRecord}.
 	 */
-	private readonly stopTrackingUnsharedBlob = (localId: string): void => {
+	private readonly deleteLocalBlobRecord = (localId: string): void => {
+		const previousRecord = this.localBlobCache.get(localId);
+		this.localBlobCache.delete(localId);
+		this.updateOutstandingBlobWork(previousRecord, undefined);
+	};
+
+	/**
+	 * Reconcile the outstanding blob work count against a single localBlobCache entry changing from
+	 * previousRecord to newRecord, and raise `outstandingBlobWorkChanged` if the aggregate flipped.
+	 *
+	 * @param previousRecord - The entry before the change, or undefined if there was none.
+	 * @param newRecord - The entry after the change, or undefined if it was deleted.
+	 */
+	private updateOutstandingBlobWork(
+		previousRecord: LocalBlobRecord | undefined,
+		newRecord: LocalBlobRecord | undefined,
+	): void {
+		const wasOutstanding =
+			previousRecord !== undefined && isOutstandingBlobWork(previousRecord);
+		const isNowOutstanding = newRecord !== undefined && isOutstandingBlobWork(newRecord);
+		if (wasOutstanding === isNowOutstanding) {
+			// Most transitions are between two outstanding states (e.g. uploading to uploaded) and so
+			// cannot change the aggregate. Bail before touching the count at all.
+			return;
+		}
+
 		const hadOutstandingWork = this.hasOutstandingBlobWork;
-		this.unsharedBlobs.delete(localId);
-		if (hadOutstandingWork && !this.hasOutstandingBlobWork) {
+		this.outstandingBlobWorkCount += isNowOutstanding ? 1 : -1;
+		assert(
+			this.outstandingBlobWorkCount >= 0,
+			"Outstanding blob work count must never go negative",
+		);
+		if (hadOutstandingWork !== this.hasOutstandingBlobWork) {
 			this._events.emit("outstandingBlobWorkChanged");
 		}
-	};
+	}
 
 	/**
 	 * Returns whether a blob with the given localId can be retrieved by the BlobManager via getBlob().
@@ -619,14 +687,19 @@ export class BlobManager {
 			throw createAbortError();
 		}
 		const localId = uuid();
-		this.localBlobCache.set(localId, { state: "uploading", blob });
+		// Deliberately localOnly rather than uploading, even though an upload is in flight below. A
+		// detached container has no service to share with, so there is no sharing for the BlobManager to
+		// be responsible for and this must not register as outstanding blob work - see the note below on
+		// the attach-time flow being opaque to this tracking. The record exists purely so the blob is
+		// readable via getBlob() while the detached storage call is outstanding.
+		this.setLocalBlobRecord(localId, { state: "localOnly", blob });
 		// Blobs created while the container is detached are stored in IDetachedBlobStorage.
 		// The 'IContainerStorageService.createBlob()' call below will respond with a pseudo storage ID.
 		// That pseudo storage ID will be replaced with the real storage ID at attach time.
 		const { id: detachedStorageId } = await this.storage.createBlob(blob);
 		// From the perspective of the BlobManager, the blob is now fully attached. The actual
 		// upload/attach process at container attach time is treated as opaque to this tracking.
-		this.localBlobCache.set(localId, { state: "attached", blob });
+		this.setLocalBlobRecord(localId, { state: "attached", blob });
 		this.redirectTable.set(localId, detachedStorageId);
 		return this.getNonPayloadPendingBlobHandle(localId);
 	}
@@ -636,7 +709,7 @@ export class BlobManager {
 		signal?: AbortSignal,
 	): Promise<IFluidHandleInternalPayloadPending<ArrayBufferLike>> {
 		const localId = uuid();
-		this.localBlobCache.set(localId, { state: "localOnly", blob });
+		this.setLocalBlobRecord(localId, { state: "localOnly", blob });
 		await this.uploadAndAttach(localId, signal);
 		return this.getNonPayloadPendingBlobHandle(localId);
 	}
@@ -646,7 +719,10 @@ export class BlobManager {
 		signal?: AbortSignal,
 	): IFluidHandleInternalPayloadPending<ArrayBufferLike> {
 		const localId = uuid();
-		this.localBlobCache.set(localId, { state: "localOnly", blob });
+		// Stays localOnly, and so is not yet outstanding blob work: for a pending-payload handle the
+		// BlobManager does not take responsibility for sharing until sharing is actually requested, which
+		// is what promotes the record to uploadExpected in uploadAndAttach below.
+		this.setLocalBlobRecord(localId, { state: "localOnly", blob });
 
 		const blobHandle = new BlobHandle(
 			getGCNodePathFromLocalId(localId),
@@ -675,61 +751,47 @@ export class BlobManager {
 	/**
 	 * Upload and attach the localBlobCache entry for the given localId.
 	 *
-	 * Counts the blob as outstanding blob work for the duration of the flow (see
-	 * {@link BlobManager.hasOutstandingBlobWork}). The blob is not fully durable after a successful upload
-	 * because the service does not retain it until the BlobAttach op is ack'd.
+	 * This is the point at which the BlobManager takes responsibility for sharing the blob, so the record
+	 * is promoted out of localOnly here and remains outstanding blob work (see
+	 * {@link BlobManager.hasOutstandingBlobWork}) until it reaches attached state or is dropped from the
+	 * cache. Note the blob is not fully durable after a successful upload, because the service does not
+	 * retain it until the BlobAttach op is ack'd.
 	 *
-	 * Expects the localBlobCache entry for the given localId to be in either localOnly or uploaded state
-	 * when called. Returns a promise that resolves when the blob completes uploading and attaching, or else
-	 * rejects if an error is encountered or the signal is aborted.
+	 * Expects the localBlobCache entry for the given localId to be in localOnly, uploadExpected or uploaded
+	 * state when called. Returns a promise that resolves when the blob completes uploading and attaching,
+	 * or else rejects if an error is encountered or the signal is aborted.
 	 */
 	private readonly uploadAndAttach = async (
 		localId: string,
 		signal?: AbortSignal,
 	): Promise<void> => {
-		// An upload that was aborted before it began never becomes outstanding work, so don't count it at
-		// all - otherwise it would produce a spurious aggregate transition for work that never started.
-		if (signal?.aborted !== true) {
-			this.startTrackingUnsharedBlob(localId);
-		}
-		try {
-			await this.uploadAndAttachCore(localId, signal);
-		} finally {
-			// Every way out of the flow ends this BlobManager's responsibility for the blob: it either
-			// became fully shared (in which case processBlobAttachMessage already stopped tracking it, and
-			// this is a no-op), or it terminally failed/aborted and was dropped from the local cache.
-			this.stopTrackingUnsharedBlob(localId);
-		}
-	};
-
-	/**
-	 * Upload and attach the localBlobCache entry for the given localId.
-	 *
-	 * Expects the localBlobCache entry for the given localId to be in either localOnly or uploaded state
-	 * when called. Returns a promise that resolves when the blob completes uploading and attaching, or else
-	 * rejects if an error is encountered or the signal is aborted.
-	 */
-	private readonly uploadAndAttachCore = async (
-		localId: string,
-		signal?: AbortSignal,
-	): Promise<void> => {
 		if (signal?.aborted === true) {
-			this.localBlobCache.delete(localId);
+			// Aborted before sharing began, so the blob never becomes outstanding work at all - the record
+			// is still localOnly (or uploadExpected, if restored from pending state) and is dropped here.
+			this.deleteLocalBlobRecord(localId);
 			this.pendingBlobsWithAttachedHandles.delete(localId);
 			throw createAbortError();
 		}
 		const localBlobRecordInitial = this.localBlobCache.get(localId);
 		assert(
 			localBlobRecordInitial?.state === "localOnly" ||
+				localBlobRecordInitial?.state === "uploadExpected" ||
 				localBlobRecordInitial?.state === "uploaded",
-			0xc80 /* Expect uploadAndAttach to be called with either localOnly or uploaded state */,
+			0xc80 /* Expect uploadAndAttach to be called with localOnly, uploadExpected or uploaded state */,
 		);
 		const { blob } = localBlobRecordInitial;
+		if (localBlobRecordInitial.state === "localOnly") {
+			// Taking responsibility for sharing this blob is exactly what makes it outstanding work, and
+			// this transition is how that is recorded. Blobs arriving here already in uploadExpected or
+			// uploaded state (restored from pending state via sharePendingBlobs) are counted from
+			// construction and need no promotion.
+			this.setLocalBlobRecord(localId, { state: "uploadExpected", blob });
+		}
 
 		/**
-		 * Expects the localBlobCache entry for the given localId to be in either localOnly or uploaded state
-		 * when called. Returns a promise that resolves when the blob is in uploaded or attached state, or else
-		 * rejects on error during upload or if the signal is aborted.
+		 * Expects the localBlobCache entry for the given localId to be in either uploadExpected or uploaded
+		 * state when called. Returns a promise that resolves when the blob is in uploaded or attached state,
+		 * or else rejects on error during upload or if the signal is aborted.
 		 *
 		 * Most of the time this should be expected to exit in uploaded state, but if we are loading from pending
 		 * state we may see an attach message from the client that generated the pending state, which can complete the
@@ -738,17 +800,17 @@ export class BlobManager {
 		const ensureUploaded = async (): Promise<void> => {
 			const localBlobRecord = this.localBlobCache.get(localId);
 			if (localBlobRecord?.state === "uploaded") {
-				// In normal creation flows, the blob will be in localOnly state here. But in the case of loading
-				// with pending state we can call it with an uploaded-but-not-attached blob. Start the upload
-				// flow only if it's localOnly.
+				// In normal creation flows, the blob will be in uploadExpected state here. But in the case of
+				// loading with pending state we can call it with an uploaded-but-not-attached blob. Start the
+				// upload flow only if it's uploadExpected.
 				return;
 			}
 			assert(
-				localBlobRecord?.state === "localOnly",
+				localBlobRecord?.state === "uploadExpected",
 				0xc81 /* Attempting to upload from unexpected state */,
 			);
 
-			this.localBlobCache.set(localId, { state: "uploading", blob });
+			this.setLocalBlobRecord(localId, { state: "uploading", blob });
 			await new Promise<void>((resolve, reject) => {
 				// If we eventually have driver-level support for abort, then this can simplify a bit as we won't
 				// need to track upload completion and abort separately. Until then, we need to handle the case that
@@ -757,7 +819,7 @@ export class BlobManager {
 				const onSignalAbort = (): void => {
 					removeListeners();
 					uploadHasBecomeIrrelevant = true;
-					this.localBlobCache.delete(localId);
+					this.deleteLocalBlobRecord(localId);
 					this.pendingBlobsWithAttachedHandles.delete(localId);
 					reject(createAbortError());
 				};
@@ -775,12 +837,17 @@ export class BlobManager {
 				this.internalEvents.on("processedBlobAttach", onProcessedBlobAttach);
 				signal?.addEventListener("abort", onSignalAbort);
 
-				this.storage
-					.createBlob(blob)
+				// The async wrapper converts a synchronous throw from a misbehaving storage implementation
+				// into a rejection, so that the catch below always runs. With tracking derived from the
+				// cache, a record stranded in uploading state counts as outstanding blob work for the
+				// lifetime of the container, leaving it permanently dirty - so every failure path must
+				// reach the cleanup. Real storage cannot do this (ContainerStorageAdapter.createBlob is
+				// async), but the cost of this guard is one line and the cost of missing it is unbounded.
+				(async (): Promise<ICreateBlobResponseWithTTL> => this.storage.createBlob(blob))()
 					.then((createBlobResponse: ICreateBlobResponseWithTTL) => {
 						if (!uploadHasBecomeIrrelevant) {
 							removeListeners();
-							this.localBlobCache.set(localId, {
+							this.setLocalBlobRecord(localId, {
 								state: "uploaded",
 								blob,
 								storageId: createBlobResponse.id,
@@ -794,7 +861,7 @@ export class BlobManager {
 						if (!uploadHasBecomeIrrelevant) {
 							removeListeners();
 							// If the storage call errors, we can't recover. Reject to throw back to the caller.
-							this.localBlobCache.delete(localId);
+							this.deleteLocalBlobRecord(localId);
 							this.pendingBlobsWithAttachedHandles.delete(localId);
 							// eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
 							reject(error);
@@ -807,8 +874,8 @@ export class BlobManager {
 		 * Expects the localBlobCache entry for the given localId to be in uploaded or attached state when called.
 		 * Returns a promise that resolves to true if the blob is successfully attached, or false if it cannot be
 		 * attached and the upload flow needs to be restarted from the top (currently only if the TTL expires before
-		 * attach can be completed). In the latter case, the localBlobRecord will also be reset to localOnly state.
-		 * The promise rejects if the signal is aborted.
+		 * attach can be completed). In the latter case, the localBlobRecord will also be reset to uploadExpected
+		 * state. The promise rejects if the signal is aborted.
 		 */
 		const tryAttach = async (): Promise<boolean> => {
 			const localBlobRecord = this.localBlobCache.get(localId);
@@ -827,15 +894,17 @@ export class BlobManager {
 			// If we just uploaded the blob TTL really shouldn't be expired at this location. But if we loaded from
 			// pending state, the upload may have happened some time far in the past and could be expired here.
 			if (isTTLTooCloseToExpiry(localBlobRecord)) {
-				// If the TTL is expired, we assume it's gone from the storage and so is effectively localOnly again.
+				// If the TTL is expired, we assume it's gone from the storage and so needs re-uploading.
+				// uploadExpected rather than localOnly keeps it counted as outstanding blob work across the
+				// retry - the blob is still unshared and we are still responsible for it.
 				// Then when we re-enter the loop, we'll re-upload it.
-				this.localBlobCache.set(localId, { state: "localOnly", blob });
+				this.setLocalBlobRecord(localId, { state: "uploadExpected", blob });
 				// Emitting here isn't really necessary since the only listener would be attached below. Including here
 				// for completeness though, in case we add other listeners in the future.
 				this.internalEvents.emit("blobExpired", localId);
 				return false;
 			} else {
-				this.localBlobCache.set(localId, {
+				this.setLocalBlobRecord(localId, {
 					...localBlobRecord,
 					state: "attaching",
 				});
@@ -863,7 +932,7 @@ export class BlobManager {
 					};
 					const onSignalAbort = (): void => {
 						removeListeners();
-						this.localBlobCache.delete(localId);
+						this.deleteLocalBlobRecord(localId);
 						this.pendingBlobsWithAttachedHandles.delete(localId);
 						reject(createAbortError());
 					};
@@ -887,8 +956,8 @@ export class BlobManager {
 			attachCompleted = await tryAttach();
 
 			// If something stopped the attach from completing successfully (currently just TTL expiry),
-			// we expect that the blob was already updated to reflect the updated state (i.e. back to localOnly)
-			// and we'll try the loop again from the top.
+			// we expect that the blob was already updated to reflect the updated state (i.e. back to
+			// uploadExpected) and we'll try the loop again from the top.
 		}
 		// When the blob successfully attaches, the localBlobRecord will have been updated to attached state
 		// at the time we processed the op, so there's nothing else to do here.
@@ -911,9 +980,14 @@ export class BlobManager {
 		// TODO: Is it possible that we'd be asked to resubmit for a pending blob before we call sharePendingBlobs?
 		const localBlobRecord = this.localBlobCache.get(localId);
 		if (localBlobRecord?.state === "attaching") {
-			// If the TTL is expired, we assume it's gone from the storage and so is effectively localOnly again.
+			// If the TTL is expired, we assume it's gone from the storage and so needs re-uploading.
+			// uploadExpected rather than localOnly keeps it counted as outstanding blob work across the
+			// retry, matching the equivalent expiry check in tryAttach.
 			if (isTTLTooCloseToExpiry(localBlobRecord)) {
-				this.localBlobCache.set(localId, { state: "localOnly", blob: localBlobRecord.blob });
+				this.setLocalBlobRecord(localId, {
+					state: "uploadExpected",
+					blob: localBlobRecord.blob,
+				});
 				this.internalEvents.emit("blobExpired", localId);
 			} else {
 				this.sendBlobAttachMessage(localId, storageId);
@@ -927,6 +1001,15 @@ export class BlobManager {
 			0xc02 /* Expected blob metadata for a BlobAttach op */,
 		);
 		const { localId, blobId: storageId } = message.metadata;
+		// The redirectTable must be populated before the localBlobCache update below. That update
+		// transitions the blob out of outstanding blob work, which can drop the aggregate to zero and
+		// publish "no outstanding blob work" synchronously to the BlobManager's host. A host reacting to
+		// that signal may look the blob up via lookupTemporaryBlobStorageId(), so updating the cache any
+		// earlier would expose a window where the blob is reported as fully shared but is not yet
+		// resolvable to its storage ID.
+		this.redirectTable.set(localId, storageId);
+		// set identity (id -> id) entry
+		this.redirectTable.set(storageId, storageId);
 		const maybeLocalBlobRecord = this.localBlobCache.get(localId);
 		if (maybeLocalBlobRecord !== undefined) {
 			const attachedBlobRecord: AttachedBlob = {
@@ -936,26 +1019,19 @@ export class BlobManager {
 			// Processing a blob attach message is authoritative and may stomp on any existing state. Other
 			// callsites that update localBlobCache entries must take proper caution to handle the case
 			// that a blob attach message is processed concurrently.
-			this.localBlobCache.set(localId, attachedBlobRecord);
+			//
+			// The blob is fully shared now, so this stops counting it as outstanding blob work
+			// synchronously with op processing rather than waiting for the uploadAndAttach promise to
+			// settle in a later microtask. It deliberately runs before the processedBlobAttach emit below
+			// so that a throwing listener cannot leave the blob counted forever, which would strand the
+			// host as permanently dirty.
+			this.setLocalBlobRecord(localId, attachedBlobRecord);
 			// Note there may or may not be an entry in pendingBlobsWithAttachedHandles for this localId,
 			// in particular for the non-payloadPending case since we should be reaching this point
 			// before even returning a handle to the caller.
 			this.pendingBlobsWithAttachedHandles.delete(localId);
 			this.pendingOnlyLocalIds.delete(localId);
 		}
-		this.redirectTable.set(localId, storageId);
-		// set identity (id -> id) entry
-		this.redirectTable.set(storageId, storageId);
-		// The blob is fully shared now, so stop counting it synchronously with op processing rather than
-		// waiting for the uploadAndAttach promise to settle in a later microtask.
-		//
-		// This must run after the redirectTable is populated: stopping can drop the aggregate to zero, which
-		// is published synchronously to the BlobManager's host, and a host reacting to that signal may look
-		// the blob up via lookupTemporaryBlobStorageId(). Stopping any earlier exposes a window where the
-		// blob is reported as fully shared but is not yet resolvable to its storage ID. It deliberately runs
-		// before the processedBlobAttach emit so that a throwing listener cannot leave the blob counted
-		// forever, which would strand the host as permanently dirty.
-		this.stopTrackingUnsharedBlob(localId);
 		this.internalEvents.emit("processedBlobAttach", localId, storageId);
 	}
 
@@ -1127,13 +1203,19 @@ export class BlobManager {
 				localBlobRecord.state !== "attached",
 				0xc84 /* Pending blob must not be in attached state */,
 			);
-			// We downgrade uploading blobs to localOnly, and attaching blobs to uploaded. In the case of
-			// uploading blobs, we don't have a way to retrieve the eventual storageId so the upload will
-			// need to be restarted anyway. In the case of attaching blobs, we can't know whether the
+			// We downgrade uploadExpected and uploading blobs to localOnly, and attaching blobs to uploaded.
+			// In the case of uploading blobs, we don't have a way to retrieve the eventual storageId so the
+			// upload will need to be restarted anyway. In the case of attaching blobs, we can't know whether the
 			// BlobAttach message will eventually be ack'd. So we assume we'll need to send another message, but also
 			// remain prepared to handle seeing the ack of the original message after loading from pending state.
+			//
+			// uploadExpected is a live-only distinction and is not serialized. The loading BlobManager
+			// restores every pending localOnly blob as uploadExpected, because being present in pending
+			// state is itself the signal that it is expected to be uploaded.
 			pendingBlobs[localId] =
-				localBlobRecord.state === "localOnly" || localBlobRecord.state === "uploading"
+				localBlobRecord.state === "localOnly" ||
+				localBlobRecord.state === "uploadExpected" ||
+				localBlobRecord.state === "uploading"
 					? {
 							state: "localOnly",
 							blob: bufferToString(localBlobRecord.blob, "base64"),
